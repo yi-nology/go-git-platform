@@ -65,46 +65,21 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		baseURL = "https://git.code.tencent.com"
 	}
 
-	// Build a transport.Client so we can leverage the retry/hooks/auth pipeline.
-	transportClient := transport.NewClient(baseURL+"/api/v3", backendutil.Auth(cfg, transport.AuthStylePrivate))
-	transportClient.Logger = backendutil.ToTransportLogger(logger)
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	transportClient.Timeout = 30 * time.Second
-	if cfg.SkipTLS {
-		// Tencent 工蜂 requires TLS 1.2 with a specific cipher-suite
-		// allowlist, so we keep a bespoke transport here rather than using
-		// backendutil.HTTPTransport (which only flips InsecureSkipVerify).
-		transportClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				MinVersion:         tls.VersionTLS12,
-				MaxVersion:         tls.VersionTLS12,
-				CipherSuites: []uint16{
-					tls.TLS_RSA_WITH_AES_128_CBC_SHA,
-					tls.TLS_RSA_WITH_AES_256_CBC_SHA,
-					tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
-					tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
-					tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-					tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-					tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-				},
-			},
-		}
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
+	// Shared config concerns (logger/ETag/retry/hooks/auth) come from the
+	// backendutil builder; the SkipTLS transport is overridden with the
+	// platform-pinned TLS suite below. Tencent 工蜂 requires TLS 1.2 with a
+	// specific cipher-suite allowlist, so a bespoke transport is injected
+	// rather than backendutil.HTTPTransport (which only flips
+	// InsecureSkipVerify).
+	transportClient := backendutil.NewTransportClient(cfg, baseURL+"/api/v3", transport.AuthStylePrivate,
+		transport.WithTransport(tencentTLS12Transport()))
 
-	// Build an *http.Client whose Transport uses the transport layer's
-	// RoundTripper (with auth, hooks, and optional retry).
+	// The gongfeng SDK client points straight at the retrying round tripper:
+	// the pinned TLS transport lives inside the transport.Client, so the
+	// extra ChainTransport/HTTPTransport layer the other backends use would
+	// be dead weight here.
 	httpClient := &http.Client{
-		Timeout:   30 * time.Second,
+		Timeout:   transport.DefaultTimeout,
 		Transport: transportClient.NewRetryingRoundTripper(),
 	}
 
@@ -135,6 +110,35 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		logger:    logger,
 		userIDs:   backendutil.NewIDCache(5 * time.Minute),
 	}, nil
+}
+
+// tencentTLS12Transport returns the transport Tencent 工蜂 requires: TLS 1.2
+// only, with a pinned cipher-suite allowlist, plus InsecureSkipVerify when the
+// caller opts into SkipTLS.
+//
+//nolint:gosec // G402: InsecureSkipVerify is only set when the caller opts in via SkipTLS.
+func tencentTLS12Transport() *http.Transport {
+	return &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			MinVersion:         tls.VersionTLS12,
+			MaxVersion:         tls.VersionTLS12,
+			CipherSuites: []uint16{
+				tls.TLS_RSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			},
+		},
+	}
 }
 
 // Platform implements provider.Provider.

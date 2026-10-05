@@ -123,6 +123,16 @@ func (b *NativeGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string
 	return nil
 }
 
+// CheckoutDetached implements BranchOps: `git checkout --detach --force`
+// pins HEAD to ref's commit even when ref names a branch.
+func (b *NativeGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref string) error {
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"checkout", "--detach", "--force", ref}, AuthConfig{})
+	if err != nil {
+		return newGitError("CheckoutDetached", repoPath, stderr, err)
+	}
+	return nil
+}
+
 func (b *NativeGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error {
 	args := append([]string{"checkout", ref, "--"}, files...)
 	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})

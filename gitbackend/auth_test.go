@@ -53,19 +53,3 @@ func TestNewSSHKeyContentAuth(t *testing.T) {
 		t.Errorf("unexpected config: %+v", got)
 	}
 }
-
-// TestAutoDetectAuth verifies HTTP(S) URLs stay AuthNone (credentials are
-// the caller's business) and everything else — SSH URLs included — also
-// returns AuthNone, deferring full detection to pkg/credential.
-func TestAutoDetectAuth(t *testing.T) {
-	for _, url := range []string{
-		"https://github.com/owner/repo.git",
-		"http://gitea.example.com/owner/repo.git",
-		"git@gitlab.com:owner/repo.git",
-		"ssh://git@gitlab.com:22/owner/repo.git",
-	} {
-		if got := AutoDetectAuth(url); got.Type != AuthNone {
-			t.Errorf("AutoDetectAuth(%q) = %+v, want AuthNone", url, got)
-		}
-	}
-}

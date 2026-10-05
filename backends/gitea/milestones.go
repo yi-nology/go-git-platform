@@ -20,34 +20,23 @@ import (
 // ListMilestones implements provider.MilestoneManager. State filters by
 // "open"/"closed" (gitea also accepts "all"); gitea defaults to open.
 //
-// Dual-mode pagination: with opts.Page == 0 the full milestone list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages);
-// with opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
 	listOpts := gitea.ListMilestoneOption{}
 	if opts.State != "" {
 		listOpts.State = gitea.StateType(opts.State)
 	}
 	var milestones []*gitea.Milestone
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*gitea.Milestone, error) {
-			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: listPageSize}
+	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*gitea.Milestone, error) {
+			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.Repositories.ListMilestones(ctx, owner, repo, listOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitea, "ListMilestones", err)
-		}
-		milestones = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.Repositories.ListMilestones(ctx, owner, repo, listOpts)
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitea, "ListMilestones", err)
-		}
-		milestones = page1
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitea, "ListMilestones", err)
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, m := range milestones {

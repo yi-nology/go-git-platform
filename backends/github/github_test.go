@@ -412,8 +412,11 @@ func TestIsNotFound(t *testing.T) {
 func TestValidateWebhookSignature_NoSecret(t *testing.T) {
 	p := newTestProvider(t, "http://example.test/api/v3")
 	r, _ := http.NewRequest(http.MethodPost, "/hook", nil)
-	if err := p.ValidateWebhookSignature(r, ""); err != nil {
-		t.Errorf("expected no error with empty secret, got %v", err)
+	// Since v0.77.0 validation delegates to the registry validator, and an
+	// empty secret is rejected: an empty HMAC key is trivially forgeable on
+	// predictable payloads.
+	if err := p.ValidateWebhookSignature(r, ""); err == nil {
+		t.Error("expected empty secret to be rejected, got nil error")
 	}
 }
 

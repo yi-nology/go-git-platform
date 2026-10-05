@@ -2,7 +2,6 @@ package gitbackend
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -13,9 +12,9 @@ import (
 // --- Status and diff ---
 
 func (b *GoGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoStatus, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetStatus", repoPath)
 	if err != nil {
-		return nil, newGitError("GetStatus", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	status := &RepoStatus{}
@@ -58,9 +57,9 @@ func (b *GoGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoSta
 }
 
 func (b *GoGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptions) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Diff", repoPath)
 	if err != nil {
-		return "", newGitError("Diff", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 
 	// If no From/To specified, diff working tree against HEAD
@@ -156,9 +155,9 @@ func (b *GoGitBackend) DeletedFiles(ctx context.Context, repoPath, from, to stri
 // --- Revision parsing ---
 
 func (b *GoGitBackend) RevParse(ctx context.Context, repoPath, ref string) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("RevParse", repoPath)
 	if err != nil {
-		return "", newGitError("RevParse", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
@@ -168,9 +167,9 @@ func (b *GoGitBackend) RevParse(ctx context.Context, repoPath, ref string) (stri
 }
 
 func (b *GoGitBackend) MergeBase(ctx context.Context, repoPath, a, other string) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("MergeBase", repoPath)
 	if err != nil {
-		return "", newGitError("MergeBase", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 	hashA, err := resolveRev(repo, a)
 	if err != nil {

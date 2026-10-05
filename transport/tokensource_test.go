@@ -147,7 +147,7 @@ func TestUserAgentAppendsToSDKAgent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
+	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
 	hc := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		r = r.Clone(r.Context())
 		r.Header.Set("User-Agent", "go-github/v92")

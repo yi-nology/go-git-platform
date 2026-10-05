@@ -15,9 +15,9 @@ import (
 // --- Branch operations ---
 
 func (b *GoGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote string) ([]string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("ListRemoteBranches", repoPath)
 	if err != nil {
-		return nil, newGitError("ListRemoteBranches", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	remoteObj, err := repo.Remote(remote)
@@ -42,9 +42,9 @@ func (b *GoGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote 
 }
 
 func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CreateBranch", repoPath)
 	if err != nil {
-		return newGitError("CreateBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	// Resolve the start point: ref may be a branch/tag name, HEAD, or a raw
@@ -83,9 +83,9 @@ func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref s
 }
 
 func (b *GoGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("DeleteBranch", repoPath)
 	if err != nil {
-		return newGitError("DeleteBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	err = repo.Storer.RemoveReference(plumbing.ReferenceName("refs/heads/" + branch))
@@ -96,9 +96,9 @@ func (b *GoGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string
 }
 
 func (b *GoGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("RenameBranch", repoPath)
 	if err != nil {
-		return newGitError("RenameBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	oldRefName := plumbing.ReferenceName("refs/heads/" + oldName)
@@ -118,9 +118,9 @@ func (b *GoGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newN
 }
 
 func (b *GoGitBackend) Checkout(ctx context.Context, repoPath, branch string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Checkout", repoPath)
 	if err != nil {
-		return newGitError("Checkout", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	wt, err := repo.Worktree()
@@ -138,9 +138,9 @@ func (b *GoGitBackend) Checkout(ctx context.Context, repoPath, branch string) er
 }
 
 func (b *GoGitBackend) GetCurrentBranch(ctx context.Context, repoPath string) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetCurrentBranch", repoPath)
 	if err != nil {
-		return "", newGitError("GetCurrentBranch", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 
 	head, err := repo.Head()
@@ -158,9 +158,9 @@ func (b *GoGitBackend) GetCurrentBranch(ctx context.Context, repoPath string) (s
 // --- Extended branch operations ---
 
 func (b *GoGitBackend) ListLocalBranches(ctx context.Context, repoPath string) ([]string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("ListLocalBranches", repoPath)
 	if err != nil {
-		return nil, newGitError("ListLocalBranches", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 	iter, err := repo.Branches()
 	if err != nil {
@@ -178,9 +178,9 @@ func (b *GoGitBackend) ListLocalBranches(ctx context.Context, repoPath string) (
 }
 
 func (b *GoGitBackend) ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("ListBranches", repoPath)
 	if err != nil {
-		return nil, newGitError("ListBranches", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	headRef, err := repo.Head()
@@ -253,9 +253,9 @@ func (b *GoGitBackend) ListBranches(ctx context.Context, repoPath string) ([]Bra
 }
 
 func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, upstream string) (int, int, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetBranchSyncInfo", repoPath)
 	if err != nil {
-		return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return 0, 0, err
 	}
 
 	branchRef, err := repo.Reference(plumbing.ReferenceName("refs/heads/"+branch), true)

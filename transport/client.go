@@ -4,14 +4,15 @@
 // header injection, retry/backoff, request/response hooks, structured logging,
 // body capture for retry) are implemented in exactly one place.
 //
-// The package is designed to work in two ways:
+// The package is designed to work in two ways, and both share one pipeline:
 //
 //  1. Direct usage via Client. Higher-level callers build a Request and pass it
-//     to Client.Do, Client.DoJSON, or Client.DoRaw. The response body is
+//     to Client.Do, Client.DoJSON, or Client.DoRaw. Internally these go through
+//     the same RoundTripper chain described below; the response body is
 //     captured for the caller to consume.
 //
 //  2. Transparent integration with third-party SDKs via RoundTripper. The
-//     RoundTripper returned by Client.RoundTripper is a standard
+//     RoundTripper returned by Client.NewRetryingRoundTripper is a standard
 //     http.RoundTripper that performs auth/retry/hooks on every request made by
 //     any client that builds on net/http. This is how go-github, gitlab
 //     client-go, gitea-sdk, forgejo-sdk and go-gitcode are wired up so they
@@ -106,8 +107,8 @@ func (s StaticAuth) Apply(req *http.Request) {
 type Request struct {
 	// Method is the HTTP method (GET, POST, PUT, PATCH, DELETE, ...).
 	Method string
-	// Path is the request path relative to Client.BaseURL. It may include a
-	// query string; in that case Query is ignored.
+	// Path is the request path relative to the client's base URL. It may
+	// include a query string; in that case Query is ignored.
 	Path string
 	// Query holds additional query parameters. Entries with an empty value are
 	// dropped.
@@ -137,60 +138,95 @@ type Response struct {
 	Body       []byte
 }
 
-// Client is the unified transport. It is safe for concurrent use after
-// construction; do not mutate it after handing it out.
+// Client is the unified transport. It is immutable after construction: every
+// field is configured through ClientOption values passed to NewClient, so a
+// Client is safe for concurrent use as soon as it is handed out.
 type Client struct {
-	// BaseURL is the API root used to resolve Request.Path. It is trimmed of
-	// trailing slashes on construction.
-	BaseURL string
-	// Auth is applied to every request. May be nil/None for unauthenticated
-	// calls.
-	Auth AuthStrategy
-	// Retry controls exponential-backoff retry on transient failures. nil
-	// disables retry entirely.
-	Retry *RetryConfig
-	// Hooks receives every request/response for observability. nil is fine.
-	Hooks *Hooks
-	// Logger receives structured log entries. nil falls back to noopLogger.
-	Logger Logger
-	// Timeout is the per-request timeout applied when ctx has no deadline. A
-	// non-positive value falls back to DefaultTimeout.
-	Timeout time.Duration
-	// Transport is the underlying http.RoundTripper. nil falls back to
-	// http.DefaultTransport.
-	Transport http.RoundTripper
-	// Limiter provides proactive rate limiting. nil disables rate limiting.
-	Limiter *RateLimiter
-	// ETag enables conditional requests (If-None-Match / 304 replay) for
-	// GETs issued through both the Do and the RoundTripper paths. nil
-	// disables conditional requests entirely. See ETagCache.
-	ETag *ETagCache
-	// MaxBodySize limits the response body size in bytes. 0 means no limit.
-	// A value of -1 uses the default limit (10 MB). This prevents OOM from
-	// malicious or misconfigured servers.
-	MaxBodySize int64
+	baseURL     string
+	auth        AuthStrategy
+	retry       *RetryConfig
+	hooks       *Hooks
+	logger      Logger
+	timeout     time.Duration
+	transport   http.RoundTripper
+	limiter     *RateLimiter
+	etag        *ETagCache
+	maxBodySize int64
+
+	// pipelineOnce/pipeline lazily build the RoundTripper chain shared by the
+	// Do path. SDK consumers build their own chain per call via
+	// NewRetryingRoundTripper, so laziness never races configuration.
+	pipelineOnce sync.Once
+	pipeline     http.RoundTripper
 }
 
 // DefaultMaxBodySize is the default maximum response body size (10 MB).
 const DefaultMaxBodySize = 10 * 1024 * 1024
 
-// NewClient builds a Client with the given base URL and auth strategy. It is
-// the only constructor that is expected to be used in production code; the
-// zero value works but skips the baseURL trimming.
-func NewClient(baseURL string, auth AuthStrategy) *Client {
-	return &Client{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		Auth:    auth,
-		Timeout: DefaultTimeout,
-	}
+// ClientOption configures a Client at construction time. Options make the
+// Client immutable after NewClient returns, replacing the previous
+// assign-fields-after-construction pattern that invited data races.
+type ClientOption func(*Client)
+
+// WithTimeout sets the per-request timeout applied when ctx has no deadline.
+// A non-positive value falls back to DefaultTimeout.
+func WithTimeout(d time.Duration) ClientOption {
+	return func(c *Client) { c.timeout = d }
 }
 
-// NewClientWithTransport builds a Client with a custom underlying transport.
-// Useful for tests with httptest.Server backed transport, or for callers that
-// need to inject TLS / connection-pool tuning.
-func NewClientWithTransport(baseURL string, auth AuthStrategy, rt http.RoundTripper) *Client {
-	c := NewClient(baseURL, auth)
-	c.Transport = rt
+// WithTransport sets the underlying http.RoundTripper. nil falls back to
+// http.DefaultTransport.
+func WithTransport(rt http.RoundTripper) ClientOption {
+	return func(c *Client) { c.transport = rt }
+}
+
+// WithRetry sets the exponential-backoff retry policy. nil disables retry.
+func WithRetry(cfg *RetryConfig) ClientOption {
+	return func(c *Client) { c.retry = cfg }
+}
+
+// WithHooks registers request/response observability hooks. nil is fine.
+func WithHooks(h *Hooks) ClientOption {
+	return func(c *Client) { c.hooks = h }
+}
+
+// WithLogger sets the structured logger. nil falls back to a noop logger.
+func WithLogger(l Logger) ClientOption {
+	return func(c *Client) { c.logger = l }
+}
+
+// WithLimiter enables proactive rate limiting. nil disables it.
+func WithLimiter(rl *RateLimiter) ClientOption {
+	return func(c *Client) { c.limiter = rl }
+}
+
+// WithETag enables conditional requests (If-None-Match / 304 replay) for GETs
+// on both the Do and the RoundTripper paths. nil disables conditional
+// requests entirely. See ETagCache.
+func WithETag(cache *ETagCache) ClientOption {
+	return func(c *Client) { c.etag = cache }
+}
+
+// WithMaxBodySize limits the response body size in bytes. 0 means no limit;
+// -1 uses the default limit (DefaultMaxBodySize). This prevents OOM from
+// malicious or misconfigured servers.
+func WithMaxBodySize(n int64) ClientOption {
+	return func(c *Client) { c.maxBodySize = n }
+}
+
+// NewClient builds a Client with the given base URL (trimmed of trailing
+// slashes) and auth strategy, then applies the options in order.
+func NewClient(baseURL string, auth AuthStrategy, opts ...ClientOption) *Client {
+	c := &Client{
+		baseURL: strings.TrimRight(baseURL, "/"),
+		auth:    auth,
+		timeout: DefaultTimeout,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
 	return c
 }
 
@@ -219,6 +255,12 @@ func (c *Client) DoRaw(ctx context.Context, req *Request) ([]byte, error) {
 	return resp.Body, nil
 }
 
+// do runs the request through the same RoundTripper pipeline that
+// NewRetryingRoundTripper exposes to SDKs — limiter, auth, hooks, ETag and
+// retry exist in exactly one orchestration. On top of the shared pipeline it
+// adds the Do-path specifics: the per-request timeout as a context deadline,
+// response-body capture with the configured size cap, transport.Error
+// construction for 4xx/5xx, and JSON decoding.
 func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, error) {
 	if req == nil {
 		return nil, fmt.Errorf("transport: nil request")
@@ -227,33 +269,40 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return nil, fmt.Errorf("transport: empty method")
 	}
 
-	// Proactive rate limiting: wait before sending the request.
-	if c.Limiter != nil {
-		if err := c.Limiter.WaitContext(ctx); err != nil {
-			return nil, err
-		}
+	// Overall per-request bound as a context deadline, applied to the request
+	// itself (buildRequest binds it): unlike the old per-call
+	// http.Client.Timeout this also covers reading the response body, and it
+	// composes with any caller deadline (the earlier of the two wins). The
+	// stalled-header bound stays in clientRoundTripper.
+	timeout := c.timeout
+	if timeout <= 0 {
+		timeout = DefaultTimeout
 	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	httpReq, err := c.buildRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	c.ETag.applyConditional(httpReq)
 
 	start := time.Now()
-	resp, body, err := c.roundTripWithRetry(ctx, httpReq)
+	resp, err := c.sharedPipeline().RoundTrip(httpReq)
 	duration := time.Since(start)
-	if err == nil {
-		resp, body, err = c.ETag.process(httpReq, resp, body)
+	if err != nil {
+		// The RoundTripper layer has already logged the failure (with a
+		// redacted URL) and run the response hooks.
+		return nil, err
 	}
+	body, err := readAndClose(resp, c.effectiveMaxBodySize())
 	if err != nil {
 		c.log().Error("transport request failed",
 			"method", req.Method,
 			"path", req.Path,
+			"status", resp.StatusCode,
 			"duration", duration,
 			"err", err,
 		)
-		c.Hooks.ExecuteResponse(ctx, httpReq, nil, duration, err)
 		return nil, err
 	}
 
@@ -273,17 +322,10 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	}
 
 	if resp.StatusCode >= 400 {
-		c.log().Warn("transport request error",
-			"method", req.Method,
-			"path", req.Path,
-			"status", resp.StatusCode,
-			"duration", duration,
-		)
-		c.Hooks.ExecuteResponse(ctx, httpReq, resp, duration, nil)
+		// The RoundTripper layer has logged and hooked the error response;
+		// here it becomes the structured transport error for the Do caller.
 		return nil, NewStatusErrorWithHeaders(req.Method, req.Path, resp.StatusCode, body, resp.Header)
 	}
-
-	c.Hooks.ExecuteResponse(ctx, httpReq, resp, duration, nil)
 
 	out := &Response{
 		StatusCode: resp.StatusCode,
@@ -302,13 +344,17 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	return out, nil
 }
 
+// buildRequest assembles the http.Request for a transport Request: URL join,
+// query encoding, default headers, and body encoding. Authentication, the
+// User-Agent default and request hooks are applied by the RoundTripper layer
+// (clientRoundTripper) so every path applies them identically.
 func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request, error) {
 	bodyReader, contentType, err := encodeBody(req.Body)
 	if err != nil {
 		return nil, fmt.Errorf("transport: encode body: %w", err)
 	}
 
-	full := c.BaseURL + req.Path
+	full := c.baseURL + req.Path
 	if i := strings.IndexByte(req.Path, '?'); i < 0 && len(req.Query) > 0 {
 		full += "?" + req.Query.Encode()
 	}
@@ -328,28 +374,20 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 	if httpReq.Header.Get("Accept") == "" {
 		httpReq.Header.Set("Accept", "application/json")
 	}
-	if err := applyAuth(ctx, c.Auth, httpReq); err != nil {
-		return nil, fmt.Errorf("transport: auth: %w", err)
-	}
-	setUserAgentDefault(httpReq)
-
-	if err := c.Hooks.ExecuteRequest(ctx, httpReq); err != nil {
-		return nil, err
-	}
 	return httpReq, nil
 }
 
-// roundTripRequest applies hooks/auth on a request that was not built by
+// roundTripRequest applies auth/hooks on a request that was not built by
 // buildRequest. It is used by the round-tripper path so that third-party SDK
 // requests still receive auth/hooks without going through buildRequest.
 // A rejecting request hook aborts the request: the error is returned to the
 // caller (matching the Client.do path) rather than silently discarded.
 func (c *Client) roundTripRequest(req *http.Request) error {
-	if err := applyAuth(req.Context(), c.Auth, req); err != nil {
+	if err := applyAuth(req.Context(), c.auth, req); err != nil {
 		return err
 	}
 	setUserAgentDefault(req)
-	return c.Hooks.ExecuteRequest(req.Context(), req)
+	return c.Hooks().ExecuteRequest(req.Context(), req)
 }
 
 // encodeBody returns the io.Reader for the request body, the content-type
@@ -382,53 +420,27 @@ func encodeBody(body any) (io.Reader, string, error) {
 
 // Logger returns the configured logger or a noop logger when none was set.
 func (c *Client) log() Logger {
-	if c.Logger != nil {
-		return c.Logger
+	if c.logger != nil {
+		return c.logger
 	}
 	return NoopLogger()
 }
 
-// httpClient builds the per-call http.Client. A new client is created on every
-// call so that the per-request timeout always applies. The cost is one
-// allocation per request, which is acceptable for a high-level SDK.
-func (c *Client) httpClient() *http.Client {
-	timeout := c.Timeout
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-	transport := c.Transport
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-	}
-}
+// Hooks returns the configured hooks; nil-safe for the zero value.
+func (c *Client) Hooks() *Hooks { return c.hooks }
 
-// roundTripWithRetry executes the request through the configured http.Client
-// and, when a retry config is present, retries on transient failures. The
-// returned body has been fully read and the response is closed.
-func (c *Client) roundTripWithRetry(ctx context.Context, req *http.Request) (*http.Response, []byte, error) {
-	client := c.httpClient()
-	if c.Retry == nil || c.Retry.MaxAttempts <= 0 {
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, nil, err
+// sharedPipeline returns the RoundTripper chain used by the Do path:
+// retryingRoundTripper{clientRoundTripper{c}}. Built once on first use; all
+// configuration was fixed at NewClient time, so laziness cannot race.
+func (c *Client) sharedPipeline() http.RoundTripper {
+	c.pipelineOnce.Do(func() {
+		c.pipeline = &retryingRoundTripper{
+			inner:  &clientRoundTripper{client: c},
+			cfg:    c.retry,
+			logger: c.log(),
 		}
-		// Update rate limiter state from response headers.
-		if c.Limiter != nil {
-			c.Limiter.UpdateFromResponse(resp)
-		}
-		body, readErr := readAndClose(resp, c.effectiveMaxBodySize())
-		return resp, body, readErr
-	}
-	resp, body, err := c.Retry.Do(ctx, client, req, c.log(), c.effectiveMaxBodySize())
-	// Update rate limiter state from the final response.
-	if resp != nil && c.Limiter != nil {
-		c.Limiter.UpdateFromResponse(resp)
-	}
-	return resp, body, err
+	})
+	return c.pipeline
 }
 
 // RoundTripper exposes the auth/hooks/logging of this Client as a standard
@@ -448,7 +460,7 @@ func (c *Client) RoundTripper() http.RoundTripper {
 // ...) are retried exclusively on errors proving the request never reached
 // the network, unless RetryConfig.RetryWrite is set.
 func (c *Client) NewRetryingRoundTripper() http.RoundTripper {
-	return &retryingRoundTripper{inner: c.RoundTripper(), cfg: c.Retry, logger: c.log()}
+	return &retryingRoundTripper{inner: c.RoundTripper(), cfg: c.retry, logger: c.log()}
 }
 
 // clientRoundTripper adapts a Client into an http.RoundTripper. It must be
@@ -473,11 +485,14 @@ type clientRoundTripper struct {
 // Client is never mutated, so RoundTrip only reads client state.
 func (rt *clientRoundTripper) baseTransport() http.RoundTripper {
 	rt.once.Do(func() {
-		timeout := rt.client.Timeout
+		timeout := rt.client.timeout
 		if timeout <= 0 {
 			timeout = DefaultTimeout
 		}
-		tr := rt.client.httpClient().Transport
+		tr := rt.client.transport
+		if tr == nil {
+			tr = http.DefaultTransport
+		}
 		ht, ok := tr.(*http.Transport)
 		if !ok || ht.ResponseHeaderTimeout > 0 {
 			rt.transport = tr
@@ -499,13 +514,13 @@ func (rt *clientRoundTripper) baseTransport() http.RoundTripper {
 // large or slow response bodies were truncated with "context canceled" once
 // the caller read them. The header-wait stall protection now lives in
 // baseTransport (ResponseHeaderTimeout); overall request bounds remain the
-// caller's context responsibility.
+// caller's context responsibility (Client.do adds its timeout as a deadline).
 func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 	tr := rt.baseTransport()
 	// Proactive rate limiting.
-	if rt.client.Limiter != nil {
-		if err := rt.client.Limiter.WaitContext(ctx); err != nil {
+	if rt.client.limiter != nil {
+		if err := rt.client.limiter.WaitContext(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -514,19 +529,19 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		// silently swallowed (same semantics as the Client.do path).
 		return nil, err
 	}
-	rt.client.ETag.applyConditional(req)
+	rt.client.etag.applyConditional(req)
 	start := time.Now()
 	resp, err := tr.RoundTrip(req)
 	duration := time.Since(start)
 	// Update rate limiter state from the real response headers — a 304's
 	// headers describe the current quota, the replayed 200's do not.
-	if resp != nil && rt.client.Limiter != nil {
-		rt.client.Limiter.UpdateFromResponse(resp)
+	if resp != nil && rt.client.limiter != nil {
+		rt.client.limiter.UpdateFromResponse(resp)
 	}
 	if err == nil {
-		resp, err = rt.client.ETag.processRT(req, resp)
+		resp, err = rt.client.etag.processRT(req, resp)
 	}
-	rt.client.Hooks.ExecuteResponse(ctx, req, resp, duration, err)
+	rt.client.Hooks().ExecuteResponse(ctx, req, resp, duration, err)
 	if err != nil {
 		rt.client.log().Error("transport roundtrip failed",
 			"method", req.Method,
@@ -547,6 +562,11 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	return resp, nil
 }
 
+// retryingRoundTripper is the RoundTripper-shaped adapter over the single
+// retry engine (RetryConfig.retryLoop): each attempt replays auth/hooks/ETag
+// through the inner chain, responses classified as retryable have their body
+// buffered for replay, and the final upstream response — even a 5xx — is
+// returned with a nil error per the http.RoundTripper contract.
 type retryingRoundTripper struct {
 	inner  http.RoundTripper
 	cfg    *RetryConfig
@@ -559,112 +579,44 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 	if rt.cfg == nil || rt.cfg.MaxAttempts <= 0 {
 		return rt.inner.RoundTrip(req)
 	}
-
-	var bodyBytes []byte
-	if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
-		var err error
-		bodyBytes, err = io.ReadAll(req.Body)
-		if err != nil {
-			return nil, err
-		}
-		_ = req.Body.Close()
-		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
-		}
+	if err := ensureReplayable(req); err != nil {
+		return nil, err
 	}
-
-	var lastErr error
-	var lastResp *http.Response
-	var lastBody []byte
-	for attempt := 1; attempt <= rt.cfg.MaxAttempts; attempt++ {
-		if attempt > 1 {
-			delay := rt.cfg.Backoff(attempt-1, lastResp)
-			select {
-			case <-req.Context().Done():
-				if lastResp != nil {
-					_ = lastResp.Body.Close()
-				}
-				return nil, req.Context().Err()
-			case <-time.After(delay):
+	resp, _, err := rt.cfg.retryLoop(req.Context(), req, rt.logger,
+		func() (*http.Response, error) { return rt.inner.RoundTrip(req) },
+		func(resp *http.Response) (*http.Response, []byte, bool, error) {
+			// canRetryResponse adds the header-aware GitHub-style rate-limit
+			// 403 on top of the status-only canRetryStatus gate.
+			if !rt.cfg.canRetryResponse(req, resp) {
+				// Final response: leave the body live for the caller.
+				return resp, nil, false, nil
 			}
-			// Reset body for retry
-			if req.GetBody != nil {
-				body, err := req.GetBody()
-				if err != nil {
-					return nil, err
-				}
-				req.Body = body
+			// Buffer the body before closing so the final response returned to
+			// the caller still carries the upstream error payload. The previous
+			// implementation closed the body without buffering, so callers (and
+			// the SDK response decoders sitting on top of this RoundTripper)
+			// received a closed, empty body and could not see the real 5xx
+			// payload.
+			body, err := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if err != nil {
+				return nil, nil, false, err
 			}
-		}
-
-		resp, err := rt.inner.RoundTrip(req)
-		if err != nil {
-			lastErr = err
-			rt.logger.Warn("transport retry: network error",
-				"method", req.Method,
-				"url", redactURL(*req.URL),
-				"attempt", attempt,
-				"err", err,
-			)
-			if !rt.cfg.canRetryNetworkError(req, err) {
-				// Non-idempotent request whose outcome is ambiguous or already
-				// executed: replaying it could duplicate a side effect.
-				return nil, err
-			}
-			continue
-		}
-		// canRetryResponse adds the header-aware GitHub-style rate-limit 403
-		// on top of the status-only canRetryStatus gate.
-		if !rt.cfg.canRetryResponse(req, resp) {
-			return resp, nil
-		}
-		// Buffer the body before closing so the final response returned to
-		// the caller still carries the upstream error payload. The previous
-		// implementation closed the body without buffering, so callers (and
-		// the SDK response decoders sitting on top of this RoundTripper)
-		// received a closed, empty body and could not see the real 5xx
-		// payload. Per the http.RoundTripper contract a received response —
-		// even a 5xx — is returned with a nil error; HTTP status handling is
-		// the caller's responsibility.
-		body, readErr := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if readErr != nil {
-			lastErr = readErr
-			lastResp = nil
-			lastBody = nil
-			continue
-		}
-		lastResp = resp
-		lastBody = body
-		rt.logger.Warn("transport retry: retryable status",
-			"method", req.Method,
-			"url", redactURL(*req.URL),
-			"status", resp.StatusCode,
-			"attempt", attempt,
-		)
-	}
-
-	if lastResp != nil {
-		// Re-attach a fresh reader so the caller can read the final upstream
-		// response body once. No error: a received response is not a
-		// transport error.
-		lastResp.Body = io.NopCloser(bytes.NewReader(lastBody))
-		return lastResp, nil
-	}
-	return nil, lastErr
+			return resp, body, true, nil
+		})
+	return resp, err
 }
 
 // effectiveMaxBodySize returns the resolved max body size.
 // -1 means DefaultMaxBodySize, 0 means no limit, >0 is the explicit limit.
 func (c *Client) effectiveMaxBodySize() int64 {
 	switch {
-	case c.MaxBodySize < 0:
+	case c.maxBodySize < 0:
 		return DefaultMaxBodySize
-	case c.MaxBodySize == 0:
+	case c.maxBodySize == 0:
 		return 0
 	default:
-		return c.MaxBodySize
+		return c.maxBodySize
 	}
 }
 

@@ -43,7 +43,7 @@ type Options struct {
 // toolset is a named group of tools sharing one capability gate.
 type toolset struct {
 	name       string
-	enabled    func(caps provider.CapabilitySet) bool
+	enabled    func(p provider.Provider) bool
 	registered func(s *mcp.Server, st *state)
 }
 
@@ -66,7 +66,6 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	s := mcp.NewServer(&mcp.Implementation{Name: name, Version: Version()}, nil)
 
 	st := &state{p: p, readonly: opts.ReadOnly}
-	caps := p.Capabilities()
 	selected := map[string]bool{}
 	for _, t := range opts.Toolsets {
 		if !knownToolsets[t] {
@@ -77,7 +76,7 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	want := func(set string) bool { return len(selected) == 0 || selected[set] }
 
 	for _, ts := range toolsets {
-		if !want(ts.name) || !ts.enabled(caps) {
+		if !want(ts.name) || !ts.enabled(p) {
 			continue
 		}
 		ts.registered(s, st)

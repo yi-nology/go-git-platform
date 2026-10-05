@@ -24,8 +24,6 @@ package gitcode
 
 import (
 	"context"
-	"net/http"
-	"time"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -52,32 +50,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	baseURL := backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.gitcode.com/api/v5")
-	transportClient := transport.NewClient(
-		baseURL,
-		backendutil.Auth(cfg, transport.AuthStyleBearer),
-	)
-	transportClient.Logger = logger
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	// Set TLS-skipping transport on the transport client so that all
-	// HTTP requests (including retries) honour SkipTLS.
-	if cfg.SkipTLS {
-		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
-
-	// Build an http.Client whose transport flows through the unified
-	// auth/retry/hooks pipeline, then inject it into the go-gitcode SDK
-	// via SetHTTPClient.
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: backendutil.ChainTransport(
-			backendutil.HTTPTransport(cfg.SkipTLS),
-			transportClient.NewRetryingRoundTripper(),
-		),
-	}
+	transportClient := backendutil.NewTransportClient(cfg, baseURL, transport.AuthStyleBearer)
+	httpClient := backendutil.SDKHTTPClient(transportClient, cfg.SkipTLS)
 
 	client := gitcode.NewClientWithBaseURL(baseURL, cfg.Token)
 	client.SetHTTPClient(httpClient)

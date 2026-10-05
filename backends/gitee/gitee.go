@@ -29,9 +29,7 @@ package gitee
 
 import (
 	"context"
-	"net/http"
 	"strings"
-	"time"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -64,26 +62,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	// The new SDK expects a trailing slash on the base URL.
 	sdkBaseURL := baseURL + "/"
 
-	// The transport client exists to provide the auth/retry/hooks pipeline.
-	transportClient := transport.NewClient(baseURL, backendutil.Auth(cfg, transport.AuthStyleBearer))
-	transportClient.Logger = backendutil.ToTransportLogger(logger)
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	transportClient.Timeout = 30 * time.Second
-	if cfg.SkipTLS {
-		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
-
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: backendutil.ChainTransport(
-			backendutil.HTTPTransport(cfg.SkipTLS),
-			transportClient.NewRetryingRoundTripper(),
-		),
-	}
+	transportClient := backendutil.NewTransportClient(cfg, baseURL, transport.AuthStyleBearer)
+	httpClient := backendutil.SDKHTTPClient(transportClient, cfg.SkipTLS)
 
 	// Build the new SDK client with functional options. The tokenTransport
 	// inside NewClient injects access_token as a query param automatically.

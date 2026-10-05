@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -60,17 +59,16 @@ func TestRetry_SucceedsOnFirstTry(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	resp, body, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	resp, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
-	if string(body) != "ok" {
-		t.Errorf("expected ok, got %q", body)
+	if string(resp.Body) != "ok" {
+		t.Errorf("expected ok, got %q", resp.Body)
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Errorf("expected 1 call, got %d", got)
@@ -90,17 +88,16 @@ func TestRetry_RetriesOn500(t *testing.T) {
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	resp, body, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	resp, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200 after retries, got %d", resp.StatusCode)
 	}
-	if string(body) != "ok" {
-		t.Errorf("expected ok, got %q", body)
+	if string(resp.Body) != "ok" {
+		t.Errorf("expected ok, got %q", resp.Body)
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Errorf("expected 3 calls, got %d", got)
@@ -122,13 +119,8 @@ func TestRetry_ReplaysBody(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	req, err := http.NewRequest(http.MethodPut, srv.URL+"/x", bytes.NewReader([]byte(`{"k":"v"}`)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _, _ = c.roundTripWithRetry(context.Background(), req)
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	_, _ = c.Do(context.Background(), &Request{Method: http.MethodPut, Path: "/x", Body: []byte(`{"k":"v"}`)})
 	if len(bodies) != 2 {
 		t.Fatalf("expected 2 attempts, got %d", len(bodies))
 	}
@@ -158,12 +150,10 @@ func TestRetry_ContextCancelAbortsBackoff(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 5, BaseDelay: 200 * time.Millisecond, MaxDelay: time.Second}
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 5, BaseDelay: 200 * time.Millisecond, MaxDelay: time.Second}))
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, _, err := c.roundTripWithRetry(ctx, mustReq(t, srv.URL+"/x"))
-	if err == nil {
+	if _, err := c.Do(ctx, &Request{Method: http.MethodGet, Path: "/x"}); err == nil {
 		t.Fatal("expected error from cancelled context")
 	}
 }
@@ -175,27 +165,18 @@ func TestRetry_ExhaustsAttempts(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
-	if err != nil {
-		t.Fatal(err)
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	_, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
+	if err == nil {
+		t.Fatal("expected the final 502 as transport error")
 	}
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected last 502, got %d", resp.StatusCode)
+	var terr *Error
+	if !errors.As(err, &terr) || terr.StatusCode() != http.StatusBadGateway {
+		t.Fatalf("expected transport error with status 502, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Errorf("expected 3 calls, got %d", got)
 	}
-}
-
-func mustReq(t *testing.T, url string) *http.Request {
-	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return req
 }
 
 // --- Fix: Retry-After must be capped and must support HTTP-date form ---
@@ -292,21 +273,17 @@ func TestRetry_PostNotRetriedOnRetryableStatus(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/items", strings.NewReader(`{"k":"v"}`))
-	if err != nil {
-		t.Fatal(err)
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	_, err := c.Do(context.Background(), &Request{Method: http.MethodPost, Path: "/items", Body: []byte(`{"k":"v"}`)})
+	if err == nil {
+		t.Fatal("expected the 502 to surface as a transport error")
 	}
-	resp, _, err := c.roundTripWithRetry(context.Background(), req)
-	if err != nil {
-		t.Fatal(err)
+	var terr *Error
+	if !errors.As(err, &terr) || terr.StatusCode() != http.StatusBadGateway {
+		t.Fatalf("expected transport error with status 502, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Errorf("POST executed-but-502 must not be replayed: expected 1 attempt, got %d", got)
-	}
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected the 502 response to be returned, got %d", resp.StatusCode)
 	}
 }
 
@@ -317,11 +294,9 @@ func TestRetry_GetRetriedOnRetryableStatus(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	_, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
-	if err != nil {
-		t.Fatal(err)
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}))
+	if _, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"}); err == nil {
+		t.Fatal("expected the final 502 as transport error")
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Errorf("GET is idempotent: expected 3 attempts, got %d", got)
@@ -335,17 +310,12 @@ func TestRetry_RetryWriteOptsStatusRetriesForPost(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{
+	c := NewClient(srv.URL, None{}, WithRetry(&RetryConfig{
 		MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond,
 		RetryWrite: true, // explicit opt-in to write retries
-	}
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/items", strings.NewReader(`{"k":"v"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := c.roundTripWithRetry(context.Background(), req); err != nil {
-		t.Fatal(err)
+	}))
+	if _, err := c.Do(context.Background(), &Request{Method: http.MethodPost, Path: "/items", Body: []byte(`{"k":"v"}`)}); err == nil {
+		t.Fatal("expected the final 502 as transport error")
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Errorf("RetryWrite=true: expected POST to be retried 3 times, got %d attempts", got)
@@ -468,16 +438,16 @@ func TestRetry_RateLimit403RetriesUntilSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	resp, body, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	c.retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	resp, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if resp.StatusCode != 200 {
 		t.Errorf("expected 200 after retries, got %d", resp.StatusCode)
 	}
-	if string(body) != "ok" {
-		t.Errorf("expected ok, got %q", body)
+	if string(resp.Body) != "ok" {
+		t.Errorf("expected ok, got %q", resp.Body)
 	}
 	if got := atomic.LoadInt32(&calls); got != 3 {
 		t.Errorf("expected 3 calls (2 throttled 403 + success), got %d", got)
@@ -496,16 +466,17 @@ func TestRetry_Bare403NotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
-	if err != nil {
-		t.Fatal(err)
+	c.retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	_, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
+	if err == nil {
+		t.Fatal("expected the 403 as transport error")
+	}
+	var terr *Error
+	if !errors.As(err, &terr) || terr.StatusCode() != http.StatusForbidden {
+		t.Fatalf("expected transport error with status 403, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Errorf("bare 403 must not be retried: expected 1 attempt, got %d", got)
-	}
-	if resp.StatusCode != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", resp.StatusCode)
 	}
 }
 
@@ -521,10 +492,9 @@ func TestRetry_RateLimit403WithRemainingNonZeroNotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	_, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
-	if err != nil {
-		t.Fatal(err)
+	c.retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	if _, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"}); err == nil {
+		t.Fatal("expected the 403 as transport error")
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Errorf("403 with non-zero remaining is not throttling: expected 1 attempt, got %d", got)
@@ -546,9 +516,9 @@ func TestRetry_RateLimit403RetryAfterZeroRetriesImmediately(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: 100 * time.Millisecond, MaxDelay: time.Second}
+	c.retry = &RetryConfig{MaxAttempts: 3, BaseDelay: 100 * time.Millisecond, MaxDelay: time.Second}
 	start := time.Now()
-	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	resp, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -580,9 +550,9 @@ func TestRetry_RateLimit403RetryAfterHonored(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 50 * time.Millisecond}
+	c.retry = &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 50 * time.Millisecond}
 	start := time.Now()
-	resp, _, err := c.roundTripWithRetry(context.Background(), mustReq(t, srv.URL+"/x"))
+	resp, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -607,20 +577,17 @@ func TestRetry_RateLimit403PostNotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/items", strings.NewReader(`{"k":"v"}`))
-	if err != nil {
-		t.Fatal(err)
+	c.retry = &RetryConfig{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	_, err := c.Do(context.Background(), &Request{Method: http.MethodPost, Path: "/items", Body: []byte(`{"k":"v"}`)})
+	if err == nil {
+		t.Fatal("expected the 403 as transport error")
 	}
-	resp, _, err := c.roundTripWithRetry(context.Background(), req)
-	if err != nil {
-		t.Fatal(err)
+	var terr *Error
+	if !errors.As(err, &terr) || terr.StatusCode() != http.StatusForbidden {
+		t.Fatalf("expected transport error with status 403, got %v", err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Errorf("POST rate-limited 403 must not be replayed: expected 1 attempt, got %d", got)
-	}
-	if resp.StatusCode != http.StatusForbidden {
-		t.Errorf("expected the 403 response, got %d", resp.StatusCode)
 	}
 }
 

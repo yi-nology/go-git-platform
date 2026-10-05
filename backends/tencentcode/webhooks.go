@@ -3,7 +3,6 @@ package tencentcode
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,20 +73,13 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	return result, nil
 }
 
-// ValidateWebhookSignature implements provider.WebhookManager. Tencent 工蜂
-// uses a static token comparison against the X-Token header.
+// ValidateWebhookSignature implements provider.WebhookManager. It
+// delegates to the platform's registered validator so the signature
+// scheme has exactly one implementation (shared with contracttest);
+// notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if secret == "" {
-		return nil
-	}
-	token := r.Header.Get("X-Token")
-	if token == "" {
-		return provider.Wrapf(provider.PlatformTencentCode, "ValidateWebhookSignature",
-			"%w: missing X-Token header", provider.ErrWebhookValidation)
-	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
-		return provider.Wrapf(provider.PlatformTencentCode, "ValidateWebhookSignature",
-			"%w: invalid Tencent Code webhook token", provider.ErrWebhookValidation)
+	if err := provider.ValidateWebhookWithRegistry(provider.PlatformTencentCode, r, secret); err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "ValidateWebhookSignature", err)
 	}
 	return nil
 }

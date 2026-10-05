@@ -27,7 +27,6 @@ import (
 	"context"
 	"fmt"
 
-	"net/http"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -59,29 +58,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if cfg.TokenStyle == "bearer" {
 		style = transport.AuthStyleBearer
 	}
-	transportClient := transport.NewClient(
-		backendutil.DefaultBaseURL(cfg.BaseURL, "https://gitlab.com/api/v4"),
-		backendutil.Auth(cfg, style),
-	)
-	transportClient.Logger = logger
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	// Set TLS-skipping transport on the transport client so that all
-	// HTTP requests (including retries) honour SkipTLS.
-	if cfg.SkipTLS {
-		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
-
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: backendutil.ChainTransport(
-			backendutil.HTTPTransport(cfg.SkipTLS),
-			transportClient.NewRetryingRoundTripper(),
-		),
-	}
+	transportClient := backendutil.NewTransportClient(cfg, backendutil.DefaultBaseURL(cfg.BaseURL, "https://gitlab.com/api/v4"), style)
+	httpClient := backendutil.SDKHTTPClient(transportClient, cfg.SkipTLS)
 
 	opts := []gitlab.ClientOptionFunc{gitlab.WithHTTPClient(httpClient)}
 	if cfg.BaseURL != "" {

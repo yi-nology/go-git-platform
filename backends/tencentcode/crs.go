@@ -44,9 +44,9 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 
 // ListCRs implements provider.ChangeRequestManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
-// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
-// single page and the caller drives pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
 	pid := opts.Owner + "/" + opts.Repo
 	buildOpts := func(page, perPage int) *gongfeng.ListMergeRequestsOptions {

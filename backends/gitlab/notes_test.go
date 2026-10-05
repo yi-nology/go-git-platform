@@ -1,6 +1,5 @@
 package gitlab_test
 
-
 import (
 	"context"
 	"io"

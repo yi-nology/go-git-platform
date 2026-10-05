@@ -20,34 +20,19 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 
 // ListCommits implements provider.CommitManager.
 //
-// Dual-mode pagination: with opts.Page == 0 the full commit history is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages);
-// with opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
-	var commits []*forgejo.Commit
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.Commit, error) {
+	commits, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.Commit, error) {
 			list, _, err := p.client.ListRepoCommits(owner, repo, forgejo.ListCommitOptions{
-				ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
+				ListOptions: forgejo.ListOptions{Page: page, PageSize: perPage},
 			})
 			return list, err
 		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListCommits", err)
-		}
-		commits = full
-	} else {
-		listOpts := forgejo.ListCommitOptions{ListOptions: forgejo.ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
-		listOpts.Page, listOpts.PageSize = provider.NormalizePageOpts(listOpts.Page, listOpts.PageSize)
-		page1, _, err := p.client.ListRepoCommits(owner, repo, listOpts)
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListCommits", err)
-		}
-		commits = page1
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "ListCommits", err)
 	}
 	result := make([]*provider.CommitInfo, 0, len(commits))
 	for _, c := range commits {

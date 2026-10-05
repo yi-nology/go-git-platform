@@ -302,6 +302,32 @@ func signRequest(req *http.Request, v provider.WebhookValidator, body []byte, se
 	}
 }
 
+// ParseSigned signs req with the platform's registered webhook validator and
+// secret, then parses the event through p.ParseWebhookEvent. Backend unit
+// tests use it to exercise payload mapping without hand-rolling per-platform
+// signature code — and since v0.77.0 an empty secret is rejected by every
+// validator, so unsigned fixture requests no longer pass validation.
+func ParseSigned(t testing.TB, p provider.Provider, req *http.Request, secret string) *provider.NormalizedEvent {
+	t.Helper()
+	v := provider.DefaultWebhookRegistry().Get(p.Platform())
+	if v == nil {
+		t.Fatalf("no webhook validator registered for %s", p.Platform())
+	}
+	body, err := provider.ReadAndRestoreBody(req)
+	if err != nil {
+		t.Fatalf("read webhook body: %v", err)
+	}
+	signRequest(req, v, body, secret)
+	if err := v.Validate(req, body, secret); err != nil {
+		t.Fatalf("sign-and-validate webhook for %s: %v", p.Platform(), err)
+	}
+	ne, err := p.ParseWebhookEvent(req, secret)
+	if err != nil {
+		t.Fatalf("ParseWebhookEvent for %s: %v", p.Platform(), err)
+	}
+	return ne
+}
+
 func testContextCancel(t *testing.T, h Harness) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {

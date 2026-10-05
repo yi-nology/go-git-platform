@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+
 	"github.com/yi-nology/go-git-platform/backends/gitlab"
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -255,10 +257,7 @@ func TestParseWebhookEvent_MergeRequest(t *testing.T) {
 	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"id":99,"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","description":"d","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://gitlab.com/owner/repo/-/merge_requests/7","merge_commit_sha":"mcSHA","work_in_progress":true,"last_commit":{"id":"abc"},"diff_refs":{"base_sha":"bSHA","start_sha":"sSHA","head_sha":"hSHA"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "cr.opened" {
 		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
@@ -293,10 +292,7 @@ func TestParseWebhookEvent_MergeRequest_NoDiffRefs(t *testing.T) {
 	body := `{"object_kind":"merge_request","user":{"id":1,"username":"dev","name":"Dev"},"project":{"id":99,"path_with_namespace":"owner/repo"},"object_attributes":{"iid":7,"title":"t","state":"opened","source_branch":"f","target_branch":"main","action":"open","merge_status":"can_be_merged","url":"https://gitlab.com/owner/repo/-/merge_requests/7","last_commit":{"id":"abcOnly"},"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.CR.HeadSHA != "abcOnly" {
 		t.Errorf("expected head SHA to fall back to last_commit abcOnly, got %q", ne.CR.HeadSHA)
 	}
@@ -315,10 +311,7 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	body := `{"object_kind":"push","user":{"id":1,"username":"dev","name":"Dev"},"project":{"path_with_namespace":"owner/repo"},"ref":"refs/heads/main","after":"abc123"}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "push" {
 		t.Errorf("expected push, got %s", ne.Type)
 	}

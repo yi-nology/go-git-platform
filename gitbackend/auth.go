@@ -1,9 +1,5 @@
 package gitbackend
 
-import (
-	"strings"
-)
-
 // NewTokenAuth builds an AuthConfig for HTTPS token authentication.
 //
 // When authenticating against git hosting platforms (GitHub, GitLab, Gitea,
@@ -58,17 +54,4 @@ func NewSSHKeyContentAuth(keyContent, passphrase string) AuthConfig {
 		SSHKeyContent: keyContent,
 		Passphrase:    passphrase,
 	}
-}
-
-// AutoDetectAuth attempts to detect the appropriate AuthConfig for a given URL.
-// For SSH URLs, it tries common key file locations and the SSH agent.
-// For HTTP(S) URLs, it returns AuthNone (caller should provide token/password).
-func AutoDetectAuth(urlStr string) AuthConfig {
-	if strings.HasPrefix(urlStr, "https://") || strings.HasPrefix(urlStr, "http://") {
-		return AuthConfig{Type: AuthNone}
-	}
-
-	// For SSH URLs, we can't auto-detect without the credential package.
-	// Callers should use pkg/credential.SSHKeyHelper for full auto-detection.
-	return AuthConfig{Type: AuthNone}
 }

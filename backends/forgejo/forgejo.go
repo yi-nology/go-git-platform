@@ -26,7 +26,6 @@ package forgejo
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
@@ -58,26 +57,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	baseURL := backendutil.NormalizeBaseURL(backendutil.DefaultBaseURL(cfg.BaseURL, "https://codeberg.org"))
 
-	transportClient := transport.NewClient(baseURL, backendutil.Auth(cfg, transport.AuthStyleToken))
-	transportClient.Logger = logger
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	// Set TLS-skipping transport on the transport client so that all
-	// HTTP requests (including retries) honour SkipTLS.
-	if cfg.SkipTLS {
-		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
-
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: backendutil.ChainTransport(
-			backendutil.HTTPTransport(cfg.SkipTLS),
-			transportClient.NewRetryingRoundTripper(),
-		),
-	}
+	transportClient := backendutil.NewTransportClient(cfg, baseURL, transport.AuthStyleToken)
+	httpClient := backendutil.SDKHTTPClient(transportClient, cfg.SkipTLS)
 
 	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(cfg.Token), forgejo.SetHTTPClient(httpClient))
 	if err != nil {

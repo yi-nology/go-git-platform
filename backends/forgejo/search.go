@@ -31,13 +31,9 @@ import (
 
 // SearchRepos implements provider.SearchManager.
 //
-// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
-// by exhausting the endpoint's pagination (backendutil.AllPages); with
-// opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	baseOpts := forgejo.SearchRepoOptions{
 		Keyword: opts.Query,
@@ -45,24 +41,14 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		Order:   opts.Order,
 	}
 	var repos []*forgejo.Repository
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.Repository, error) {
-			baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	repos, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.Repository, error) {
+			baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.SearchRepos(baseOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchRepos", err)
-		}
-		repos = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.SearchRepos(baseOpts)
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchRepos", err)
-		}
-		repos = page1
+	if err != nil {
+		return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchRepos", err)
 	}
 	out := make([]*provider.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
@@ -83,13 +69,9 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 // server-side repo-scoped listing (ListRepoIssues); without it the global
 // keyword search runs.
 //
-// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
-// by exhausting the endpoint's pagination (backendutil.AllPages); with
-// opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	listOpts := forgejo.ListIssueOption{
 		KeyWord: opts.Query,
@@ -111,24 +93,13 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		list, _, err := p.client.ListIssues(listOpts)
 		return list, err
 	}
-	var issues []*forgejo.Issue
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.Issue, error) {
-			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	issues, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.Issue, error) {
+			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			return fetch()
 		})
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchIssues", err)
-		}
-		issues = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, err := fetch()
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchIssues", err)
-		}
-		issues = page1
+	if err != nil {
+		return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchIssues", err)
 	}
 	out := make([]*provider.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
@@ -152,34 +123,20 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 
 // SearchUsers implements provider.SearchManager.
 //
-// Dual-mode pagination: with opts.Page == 0 the full result set is fetched
-// by exhausting the endpoint's pagination (backendutil.AllPages); with
-// opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	baseOpts := forgejo.SearchUsersOption{KeyWord: opts.Query}
 	var users []*forgejo.User
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.User, error) {
-			baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	users, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.User, error) {
+			baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.SearchUsers(baseOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchUsers", err)
-		}
-		users = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		baseOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.SearchUsers(baseOpts)
-		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchUsers", err)
-		}
-		users = page1
+	if err != nil {
+		return nil, nil, provider.Wrap(provider.PlatformForgejo, "SearchUsers", err)
 	}
 	out := make([]*provider.SearchUserResult, 0, len(users))
 	for _, u := range users {

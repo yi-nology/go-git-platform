@@ -26,34 +26,20 @@ func buildListNotificationOptions(opts provider.ListNotificationsOptions) forgej
 
 // ListNotifications implements provider.NotificationManager.
 //
-// Dual-mode pagination: with opts.Page == 0 the full notification list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages);
-// with opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	listOpts := buildListNotificationOptions(opts)
 	var threads []*forgejo.NotificationThread
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.NotificationThread, error) {
-			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	threads, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.NotificationThread, error) {
+			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.ListNotifications(listOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListNotifications", err)
-		}
-		threads = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.ListNotifications(listOpts)
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListNotifications", err)
-		}
-		threads = page1
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "ListNotifications", err)
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {
@@ -64,34 +50,20 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 
 // ListRepoNotifications implements provider.NotificationManager.
 //
-// Dual-mode pagination: with opts.Page == 0 the full notification list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages);
-// with opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	listOpts := buildListNotificationOptions(opts)
 	var threads []*forgejo.NotificationThread
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.NotificationThread, error) {
-			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	threads, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.NotificationThread, error) {
+			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.ListRepoNotifications(owner, repo, listOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListRepoNotifications", err)
-		}
-		threads = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.ListRepoNotifications(owner, repo, listOpts)
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListRepoNotifications", err)
-		}
-		threads = page1
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "ListRepoNotifications", err)
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {

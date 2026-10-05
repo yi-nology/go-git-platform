@@ -19,9 +19,9 @@ func searchPerPage(perPage int) int {
 
 // SearchRepos implements provider.SearchManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages;
-// opts.Page > 0 returns exactly that single page and the caller drives
-// pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchRepositoriesOptions {
 		return gitcode.SearchRepositoriesOptions{
@@ -63,8 +63,9 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 
 // SearchIssues implements provider.SearchManager.
 //
-// Dual-mode pagination, mirroring SearchRepos: opts.Page == 0 fetches every
-// page via AllPages; opts.Page > 0 returns exactly that single page.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchIssuesOptions {
 		return gitcode.SearchIssuesOptions{
@@ -113,8 +114,9 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 
 // SearchUsers implements provider.SearchManager.
 //
-// Dual-mode pagination, mirroring SearchRepos: opts.Page == 0 fetches every
-// page via AllPages; opts.Page > 0 returns exactly that single page.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchUsersOptions {
 		return gitcode.SearchUsersOptions{

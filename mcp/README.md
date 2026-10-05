@@ -9,7 +9,7 @@ AI agent 可直接调用的工具面。
 
 ## 工具面
 
-按 toolset 分组,构造时按 provider 的 `Capabilities()` 声明做能力门控——
+按 toolset 分组,构造时按 provider 的能力接口断言做门控(`Capabilities()` 声明与接口实现的双向一致性由 contracttest 保证)——
 平台不支持的工具根本不会注册,模型永远看不到注定失败的调用:
 
 | Toolset | 工具 |

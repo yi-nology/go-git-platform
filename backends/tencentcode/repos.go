@@ -11,12 +11,9 @@ import (
 
 // ListRepos implements provider.RepoManager.
 //
-// Dual-mode pagination on the authenticated-user project list: opts.Page
-// == 0 fetches every page via AllPages (工蜂's page-size ceiling is 100);
-// opts.Page > 0 returns exactly that single page and the caller drives
-// pagination itself. The Owner branch is unaffected — it resolves the
-// group's projects through GetGroup, whose response embeds the project
-// list without pagination.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
 	if opts.Owner != "" {
 		// Get group projects via GetGroup (which returns embedded projects).
@@ -37,24 +34,13 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		}
 	}
 	var projects []*gongfeng.Project
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if projects, _, err = p.client.Projects.ListProjects(ctx, buildOpts(opts.Page, perPage)); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
-		}
-	} else {
-		var err error
-		if projects, err = backendutil.AllPages(func(page int) ([]*gongfeng.Project, error) {
-			list, _, err := p.client.Projects.ListProjects(ctx, buildOpts(page, provider.MaxPerPage))
+	projects, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gongfeng.Project, error) {
+			list, _, err := p.client.Projects.ListProjects(ctx, buildOpts(page, perPage))
 			return list, err
-		}); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
-		}
+		})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
 	}
 	repos := make([]*provider.PlatformRepo, 0, len(projects))
 	for _, proj := range projects {

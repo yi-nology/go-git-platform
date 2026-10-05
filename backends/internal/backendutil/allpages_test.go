@@ -3,7 +3,10 @@ package backendutil
 import (
 	"errors"
 	"slices"
+
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestAllPagesMergesUntilEmpty verifies the loop advances pages and stops
@@ -75,14 +78,27 @@ func TestAllPagesStopsAtCapWhenPageParamIgnored(t *testing.T) {
 		}
 		return []string{item}, nil // server that never advances pagination
 	}
+	// Since v0.77.0 AllPages delegates to the provider iterator and a budget
+	// overrun is an error wrapping provider.ErrPageBudgetExceeded — silent
+	// truncation is gone, so a platform pagination bug fails loudly.
+	_, err := AllPages(fetch)
+	if !errors.Is(err, provider.ErrPageBudgetExceeded) {
+		t.Fatalf("expected ErrPageBudgetExceeded from a page-ignoring server, got %v", err)
+	}
+}
+
+func TestAllPagesCollectsUntilEmptyPage(t *testing.T) {
+	fetch := func(page int) ([]string, error) {
+		if page < 3 {
+			return []string{"a", "b"}, nil
+		}
+		return []string{}, nil
+	}
 	got, err := AllPages(fetch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) == 0 {
-		t.Fatal("expected non-empty result")
-	}
-	if len(got) > maxAllPages {
-		t.Fatalf("expected cap of %d items, got %d", maxAllPages, len(got))
+	if len(got) != 4 {
+		t.Fatalf("expected 4 items across 2 non-empty pages, got %d", len(got))
 	}
 }

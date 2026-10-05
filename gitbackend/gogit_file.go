@@ -20,9 +20,9 @@ import (
 // --- File operations ---
 
 func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetFileAtRevision", repoPath)
 	if err != nil {
-		return nil, newGitError("GetFileAtRevision", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	var hash plumbing.Hash
@@ -59,9 +59,9 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 }
 
 func (b *GoGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetFileHistory", repoPath)
 	if err != nil {
-		return nil, newGitError("GetFileHistory", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	head, err := repo.Head()
@@ -102,9 +102,9 @@ func (b *GoGitBackend) GetFileHistory(ctx context.Context, repoPath, path string
 // --- Tree and blob queries ---
 
 func (b *GoGitBackend) GetTree(ctx context.Context, repoPath, ref, dirPath string, recursive bool) ([]TreeEntry, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetTree", repoPath)
 	if err != nil {
-		return nil, newGitError("GetTree", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	var hash plumbing.Hash
@@ -179,9 +179,9 @@ func (b *GoGitBackend) GetTree(ctx context.Context, repoPath, ref, dirPath strin
 }
 
 func (b *GoGitBackend) GetBlob(ctx context.Context, repoPath, ref, filePath string) (*BlobContent, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetBlob", repoPath)
 	if err != nil {
-		return nil, newGitError("GetBlob", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	var hash plumbing.Hash
@@ -306,9 +306,9 @@ func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemod
 // detached. CheckoutRef used to detach unconditionally, silently drifting
 // from the native backend's attached semantics for branch names.
 func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CheckoutRef", repoPath)
 	if err != nil {
-		return newGitError("CheckoutRef", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	hash, err := resolveRev(repo, ref)
 	if err != nil {
@@ -331,11 +331,11 @@ func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) er
 
 // CheckoutDetached force-checks out ref in detached HEAD state, even when the
 // ref names a branch. Use it when the caller explicitly wants to pin HEAD to
-// a commit rather than follow a branch.
+// a commit rather than follow a branch (CheckoutRef attaches for branches).
 func (b *GoGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CheckoutDetached", repoPath)
 	if err != nil {
-		return newGitError("CheckoutDetached", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	hash, err := resolveRev(repo, ref)
 	if err != nil {
@@ -349,9 +349,9 @@ func (b *GoGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref strin
 }
 
 func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CheckoutFiles", repoPath)
 	if err != nil {
-		return newGitError("CheckoutFiles", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
 	if err != nil {
@@ -399,9 +399,9 @@ func containsNullByte(data []byte) bool {
 }
 
 func (b *GoGitBackend) treeChanges(repoPath, from, to string) (object.Changes, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("treeChanges", repoPath)
 	if err != nil {
-		return nil, newGitError("treeChanges", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 	commitFromHash, err := resolveRev(repo, from)
 	if err != nil {

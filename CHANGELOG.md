@@ -4,6 +4,69 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.0] - 2026-10-06
+
+### Changed
+
+高内聚低耦合·强设计模式重构——"一个关注点只留一个实现"(勘察与决策记录见
+`docs/superpowers/specs/2026-10-06-cohesion-patterns-refactor-design.md`):
+
+- **transport 单一重试引擎**(原两套近乎复制的循环): `RetryConfig.retryLoop`
+  为唯一引擎,`RetryConfig.Do`(签名不变)与 `NewRetryingRoundTripper` 退化为
+  两个薄适配器。语义统一:响应体读取失败=硬错误;backoff 期间 ctx 取消会关闭
+  最后一个响应并返回 `ctx.Err()`(原 Do 路径在此泄漏打开的 body)
+- **transport 单一请求管线**: `Client.Do/DoJSON/DoRaw` 不再有私有编排,直接
+  走与第三方 SDK 相同的 RoundTripper 链(limiter→auth→UA/hooks→ETag→retry),
+  条件请求只留 `processRT` 一个实现(缓冲变体 `process` 删除)。Do 路径整体
+  超时改为 ctx deadline(覆盖读体,等价原 `http.Client.Timeout`);每个
+  attempt 重放 auth/hooks/限流等待(原来请求 hooks 只跑一次)
+- **transport ClientOption Builder**(breaking,minor 承载): Client 的 10 个
+  公开可变字段全部转私有,`NewClient(baseURL, auth, opts...)` 变参构造
+  (WithTimeout/WithTransport/WithRetry/WithHooks/WithLogger/WithLimiter/
+  WithETag/WithMaxBodySize);删除 `NewClientWithTransport`(被 WithTransport
+  取代)。`backendutil.NewTransportClient`/`SDKHTTPClient` 一次完成后端装配
+  (原 7 个后端各 ~35 行复制粘贴);tencentcode 的 TLS 1.2 定制 transport 抽为
+  `tencentTLS12Transport` 经 extra 选项注入
+- **webhook 验签归一**(安全加固): 7 个后端 `ValidateWebhookSignature` 全部
+  委托 `provider.ValidateWebhookWithRegistry`——每个签名方案只有注册表里
+  一个实现,删除各后端内联的 HMAC/常量时间比较。**空密钥语义从"放行"改为
+  拒绝**(空 HMAC 密钥对可预测载荷可伪造;与注册表/契约测试既有断言一致);
+  github 验签收窄为 X-Hub-Signature-256(不再经 go-github 的 sha1 回退)
+- **分页迭代器收敛**: `backendutil.AllPages` 改为 `provider.CollectBounded`
+  薄适配(预算仍 50 页),**触顶从"log+静默截断"改为报错**
+  (`provider.ErrPageBudgetExceeded`)——平台分页 bug 显式失败而非悄悄丢数据;
+  新增 `backendutil.PageList` 收敛"dual-mode 分页"惯用法,迁移 25 处复制点
+  (tencentcode 需要 total-count 出参的 2 处保持显式实现)
+- **平台探测开放注册**: `provider.RegisterHostAlias(host, platform, baseURL)`
+  ——自建实例别名不再需要改 provider 核心;重复注册 panic(与 `Register`
+  同约定)
+- **gitbackend 内聚修复**: `Logger` 接口本地声明(消费方接口,删除对 provider
+  的反向依赖);Fetch 结果分类抽为 `diffFetchRefs` 单一实现(native/gogit
+  共用);gogit ~40 处 `PlainOpen`+`ErrRepoNotFound` 样板收敛为 `openRepo`
+  助手;**`CheckoutDetached` 提升进 `BranchOps` 接口**(breaking,minor 承载)
+  并补 native 实现(`git checkout --detach --force`)——修复 Repository 门面
+  "文档说 detach、实际 attach"的语义 bug;删除恒返 `AuthNone` 的死代码
+  `AutoDetectAuth`;`sshpincache.go` 更名 `sshpin.go`(名实相符,无代码变化)
+- **mcp/tools.go 拆分**(555 行 → 6 个 toolset 文件): `tools_core/crs/issues/
+  status/search/releases.go`,DTO 随各自 toolset 走;toolset 挂载门控单一化
+  为接口类型断言(不再与 CapabilitySet 标志双通道,杜绝挂载/注册判据漂移)
+
+### Fixed
+
+- mcp cmd 的 streamable HTTP server 补 `ReadHeaderTimeout`(Slowloris 加固)
+
+## [0.76.0] - 2026-10-02
+
+### Added
+
+- **NoteManager 可选接口**(provider + gitlab backend):CR(MR/PR)评论的定点
+  更新 `UpdateNote` 与全量分页列举 `ListNotes`,走 MergeRequest Notes API。
+  动机:GitLab 的 MR 与 issue 是两个 iid 命名空间,IssueManager 的评论方法
+  (Issues Notes API)对 MR 必 404——上层按评论 ID 做原地更新/扫描定位时全部
+  失效,只能每轮新建造成重复评论。GitHub/Gitea 等 issue 即 PR 的平台由
+  IssueManager 天然覆盖,无需实现本接口(与 DiffManager 同为类型断言的
+  可选能力,不进 CapabilitySet)。
+
 ## [0.75.0] - 2026-10-02
 
 ### Added
@@ -272,18 +335,6 @@ v0.71→v0.73 全量代码审查(双流合流后)发现的 8 项问题修复,两
 
 - 行内 discussion 失败留痕（`logger.Warn`），不再静默全丢。
 - `diff_refs` 降级与行内路径日志；清理编辑残渣。
-
-## [0.76.0] - 2026-10-02
-
-### Added
-
-- **NoteManager 可选接口**(provider + gitlab backend):CR(MR/PR)评论的定点
-  更新 `UpdateNote` 与全量分页列举 `ListNotes`,走 MergeRequest Notes API。
-  动机:GitLab 的 MR 与 issue 是两个 iid 命名空间,IssueManager 的评论方法
-  (Issues Notes API)对 MR 必 404——上层按评论 ID 做原地更新/扫描定位时全部
-  失效,只能每轮新建造成重复评论。GitHub/Gitea 等 issue 即 PR 的平台由
-  IssueManager 天然覆盖,无需实现本接口(与 DiffManager 同为类型断言的
-  可选能力,不进 CapabilitySet)。
 
 ## [0.64.0] - 2026-09-27
 

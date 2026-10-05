@@ -83,9 +83,10 @@ func (r *Repository) Checkout(ctx context.Context, ref string) error {
 	return r.backend.CheckoutRef(ctx, r.dir, ref)
 }
 
-// CheckoutDetached force-checks out the given ref in detached HEAD state.
+// CheckoutDetached force-checks out the given ref in detached HEAD state,
+// even when ref names a branch.
 func (r *Repository) CheckoutDetached(ctx context.Context, ref string) error {
-	return r.backend.CheckoutRef(ctx, r.dir, ref)
+	return r.backend.CheckoutDetached(ctx, r.dir, ref)
 }
 
 // RevParse resolves a ref to its full object SHA.

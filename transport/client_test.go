@@ -200,7 +200,7 @@ func TestHooks_RequestErrorShortCircuits(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Hooks = hooks
+	c.hooks = hooks
 	_, err := c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if !errors.Is(err, wantErr) {
 		t.Errorf("expected hook error, got %v", err)
@@ -220,7 +220,7 @@ func TestHooks_ResponseObserved(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Hooks = hooks
+	c.hooks = hooks
 	_, _ = c.Do(context.Background(), &Request{Method: http.MethodGet, Path: "/x"})
 	if observedStatus != http.StatusTeapot {
 		t.Errorf("expected 418 observed, got %d", observedStatus)
@@ -306,7 +306,7 @@ func TestClient_RoundTripper_ConcurrentUseDoesNotMutateClient(t *testing.T) {
 
 	base := &http.Transport{} // ResponseHeaderTimeout == 0: previously triggered the rewrite
 	c := NewClient(srv.URL, None{})
-	c.Transport = base
+	c.transport = base
 	rt := c.RoundTripper()
 	hc := &http.Client{Transport: rt}
 
@@ -331,8 +331,8 @@ func TestClient_RoundTripper_ConcurrentUseDoesNotMutateClient(t *testing.T) {
 	}
 	wg.Wait()
 
-	if c.Transport != http.RoundTripper(base) {
-		t.Fatalf("shared Client.Transport must not be mutated, got %T", c.Transport)
+	if c.transport != http.RoundTripper(base) {
+		t.Fatalf("shared Client.Transport must not be mutated, got %T", c.transport)
 	}
 	if base.ResponseHeaderTimeout != 0 {
 		t.Errorf("the caller's transport must not be mutated, got ResponseHeaderTimeout=%v", base.ResponseHeaderTimeout)
@@ -407,7 +407,7 @@ func TestClient_RoundTripper_StalledHeaderAbortsByResponseHeaderTimeout(t *testi
 	defer close(stall)
 
 	c := NewClient(srv.URL, None{})
-	c.Timeout = 150 * time.Millisecond
+	c.timeout = 150 * time.Millisecond
 	hc := &http.Client{Transport: c.RoundTripper()}
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/stall", nil)
 	if err != nil {
@@ -434,7 +434,7 @@ func TestHooks_RoundTripperRequestErrorAborts(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL, None{})
-	c.Hooks = hooks
+	c.hooks = hooks
 	hc := &http.Client{Transport: c.RoundTripper()}
 	req, err := http.NewRequest(http.MethodGet, srv.URL+"/x", nil)
 	if err != nil {

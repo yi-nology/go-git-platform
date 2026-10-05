@@ -14,9 +14,9 @@ import (
 // --- Core operations ---
 
 func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error) {
-	repo, err := git.PlainOpen(opts.RepoPath)
+	repo, err := openRepo("Fetch", opts.RepoPath)
 	if err != nil {
-		return nil, newGitError("Fetch", opts.RepoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	remote := opts.Remote
@@ -64,43 +64,22 @@ func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResu
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 
-	// Diff before/after to populate the result. The fetch refspecs map
-	// refs/heads/* onto refs/remotes/<remote>/* (see buildFetchRefSpecs) and
-	// AllTags writes refs/tags/*, so branch and tag classification key off
-	// those two namespaces.
-	remotePrefix := "refs/remotes/" + remote + "/"
-	tagsPrefix := "refs/tags/"
+	// Diff before/after through the shared classifier (one implementation
+	// for both backends). The fetch refspecs map refs/heads/* onto
+	// refs/remotes/<remote>/* (see buildFetchRefSpecs) and AllTags writes
+	// refs/tags/*, so branch and tag classification key off those two
+	// namespaces.
+	return diffFetchRefs(remote, hashRefMap(before), hashRefMap(after)), nil
+}
 
-	result := &FetchResult{}
-
-	for ref, hash := range after {
-		if oldHash, existed := before[ref]; !existed {
-			// New ref after fetch.
-			result.FetchedRefs = append(result.FetchedRefs, ref)
-			switch {
-			case strings.HasPrefix(ref, remotePrefix):
-				result.NewBranches = append(result.NewBranches, strings.TrimPrefix(ref, remotePrefix))
-			case strings.HasPrefix(ref, tagsPrefix):
-				result.NewTags = append(result.NewTags, strings.TrimPrefix(ref, tagsPrefix))
-			}
-		} else if oldHash != hash {
-			// Existing ref moved to a different commit.
-			result.FetchedRefs = append(result.FetchedRefs, ref)
-			if strings.HasPrefix(ref, remotePrefix) {
-				result.UpdatedBranch = append(result.UpdatedBranch, strings.TrimPrefix(ref, remotePrefix))
-			}
-		}
+// hashRefMap converts a plumbing.Hash ref snapshot into its string-hash form,
+// the shape the shared diffFetchRefs classifier consumes.
+func hashRefMap(m map[string]plumbing.Hash) map[string]string {
+	out := make(map[string]string, len(m))
+	for ref, h := range m {
+		out[ref] = h.String()
 	}
-
-	for ref := range before {
-		// Only remote-tracking refs can be pruned away by a fetch; tag refs
-		// are never pruned.
-		if _, exists := after[ref]; !exists && strings.HasPrefix(ref, remotePrefix) {
-			result.DeletedBranch = append(result.DeletedBranch, strings.TrimPrefix(ref, remotePrefix))
-		}
-	}
-
-	return result, nil
+	return out
 }
 
 // collectRemoteRefs populates the target map with all remote-tracking refs
@@ -137,9 +116,9 @@ func collectFetchRefs(repo *git.Repository, remote string, target map[string]plu
 }
 
 func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error) {
-	repo, err := git.PlainOpen(opts.RepoPath)
+	repo, err := openRepo("Push", opts.RepoPath)
 	if err != nil {
-		return nil, newGitError("Push", opts.RepoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	refSpecs := opts.RefSpecs
@@ -220,9 +199,9 @@ func (b *GoGitBackend) Init(ctx context.Context, repoPath string) error {
 // --- Extended core operations ---
 
 func (b *GoGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("FetchAll", repoPath)
 	if err != nil {
-		return newGitError("FetchAll", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	remotes, err := repo.Remotes()
 	if err != nil {
@@ -247,9 +226,9 @@ func (b *GoGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthC
 }
 
 func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string, auth AuthConfig) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Pull", repoPath)
 	if err != nil {
-		return newGitError("Pull", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
@@ -276,9 +255,8 @@ func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string
 // GitBackend interface; callers that need arbitrary git commands should use
 // the native backend instead.
 func (b *GoGitBackend) RunRaw(ctx context.Context, repoPath string, args []string) (string, string, error) {
-	_, err := git.PlainOpen(repoPath)
-	if err != nil {
-		return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	if _, err := openRepo("RunRaw", repoPath); err != nil {
+		return "", "", err
 	}
 	return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("RunRaw not supported in gogit backend (pure-Go); use native backend for arbitrary git commands"))
 }

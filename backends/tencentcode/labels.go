@@ -28,9 +28,9 @@ import (
 
 // ListLabels implements provider.LabelManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
-// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
-// single page and the caller drives pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
 	buildOpts := func(page, perPage int) *gongfeng.ListLabelsOptions {
 		return &gongfeng.ListLabelsOptions{
@@ -38,24 +38,13 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 		}
 	}
 	var labels []*gongfeng.Label
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if labels, _, err = p.client.Labels.ListLabels(ctx, pid(owner, repo), buildOpts(opts.Page, perPage)); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
-		}
-	} else {
-		var err error
-		if labels, err = backendutil.AllPages(func(page int) ([]*gongfeng.Label, error) {
-			list, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo), buildOpts(page, provider.MaxPerPage))
+	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gongfeng.Label, error) {
+			list, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo), buildOpts(page, perPage))
 			return list, err
-		}); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
-		}
+		})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
 	}
 	result := make([]*provider.Label, 0, len(labels))
 	for _, l := range labels {

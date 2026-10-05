@@ -13,9 +13,9 @@ import (
 // --- Remote operations ---
 
 func (b *GoGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("AddRemote", repoPath)
 	if err != nil {
-		return newGitError("AddRemote", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	_, err = repo.CreateRemote(&config.RemoteConfig{
@@ -29,9 +29,9 @@ func (b *GoGitBackend) AddRemote(ctx context.Context, repoPath, name, url string
 }
 
 func (b *GoGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("RemoveRemote", repoPath)
 	if err != nil {
-		return newGitError("RemoveRemote", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	err = repo.DeleteRemote(name)
@@ -42,9 +42,9 @@ func (b *GoGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) 
 }
 
 func (b *GoGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetRemoteURL", repoPath)
 	if err != nil {
-		return "", newGitError("GetRemoteURL", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 
 	remote, err := repo.Remote(name)
@@ -60,9 +60,9 @@ func (b *GoGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) 
 }
 
 func (b *GoGitBackend) GetRemotes(ctx context.Context, repoPath string) ([]string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetRemotes", repoPath)
 	if err != nil {
-		return nil, newGitError("GetRemotes", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 	remotes, err := repo.Remotes()
 	if err != nil {
@@ -78,9 +78,9 @@ func (b *GoGitBackend) GetRemotes(ctx context.Context, repoPath string) ([]strin
 // --- Tag operations ---
 
 func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CreateTag", repoPath)
 	if err != nil {
-		return newGitError("CreateTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	var hash plumbing.Hash
@@ -110,9 +110,9 @@ func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string
 }
 
 func (b *GoGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("DeleteTag", repoPath)
 	if err != nil {
-		return newGitError("DeleteTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	err = repo.DeleteTag(name)
@@ -123,9 +123,9 @@ func (b *GoGitBackend) DeleteTag(ctx context.Context, repoPath, name string) err
 }
 
 func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("PushTag", repoPath)
 	if err != nil {
-		return newGitError("PushTag", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	refSpec := config.RefSpec(fmt.Sprintf("refs/tags/%s:refs/tags/%s", name, name))
@@ -148,9 +148,9 @@ func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name strin
 }
 
 func (b *GoGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetTagList", repoPath)
 	if err != nil {
-		return nil, newGitError("GetTagList", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	iter, err := repo.Tags()

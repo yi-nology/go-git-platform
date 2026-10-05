@@ -222,62 +222,87 @@ func (rc *RetryConfig) Backoff(attempt int, resp *http.Response) time.Duration {
 	return time.Duration(float64(delay) * jitter)
 }
 
-// Do executes a single request through the underlying client, applying the
-// configured retry policy. The response body is fully read so it can be
-// replayed across attempts. The returned http.Response has a fresh body
-// reader attached so the caller can read it once and then receive io.EOF.
+// ensureReplayable makes req's body replayable across retry attempts: when
+// the body cannot rewind itself (no GetBody), it is buffered once and GetBody
+// is installed. Requests without a body are left untouched. Both retry
+// adapters (RetryConfig.Do and retryingRoundTripper) run this before the
+// first attempt.
+func ensureReplayable(req *http.Request) error {
+	if req.Body == nil || req.Body == http.NoBody || req.GetBody != nil {
+		return nil
+	}
+	raw, err := io.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+	_ = req.Body.Close()
+	req.Body = io.NopCloser(bytes.NewReader(raw))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(raw)), nil
+	}
+	return nil
+}
+
+// resetBody rewinds req's body for the next attempt via the GetBody hook
+// installed by ensureReplayable (or by http.NewRequest for in-memory bodies).
+func resetBody(req *http.Request) error {
+	if req.GetBody == nil {
+		return nil
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return err
+	}
+	req.Body = body
+	return nil
+}
+
+// retryLoop is the single retry engine behind both entry points
+// (RetryConfig.Do for the Client.Do path, retryingRoundTripper for SDK
+// wiring). attempt issues one attempt; classify consumes the response — it
+// decides retryability, captures the body the engine should keep for a
+// possible replay, and leaves the response in its final shape for the caller
+// when retryable is false. The loop owns backoff, body rewinding, budget
+// exhaustion, logging, and the idempotency/network-error gates.
 //
-// Retries respect the request method: see RetryConfig for the exact rules.
-func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Request, logger Logger, maxBodySize int64) (*http.Response, []byte, error) {
-	if rc == nil || rc.MaxAttempts <= 0 {
-		resp, err := client.Do(req)
-		if err != nil {
-			return nil, nil, err
-		}
-		body, readErr := readAndClose(resp, maxBodySize)
-		return resp, body, readErr
-	}
-
-	// Buffer the body so retries replay the same payload.
-	var bodyBytes []byte
-	if req.Body != nil && req.Body != http.NoBody {
-		var err error
-		bodyBytes, err = io.ReadAll(req.Body)
-		if err != nil {
-			return nil, nil, err
-		}
-		_ = req.Body.Close()
-		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
-		}
-	}
-
+// Return contract: a nil error with a non-nil resp means "final upstream
+// response, body in the shape classify left it"; a non-nil error means no
+// usable response. Context cancellation during backoff closes the last
+// response body and returns ctx.Err().
+func (rc *RetryConfig) retryLoop(
+	ctx context.Context,
+	req *http.Request,
+	logger Logger,
+	attempt func() (*http.Response, error),
+	classify func(*http.Response) (*http.Response, []byte, bool, error),
+) (*http.Response, []byte, error) {
 	var lastErr error
 	var lastResp *http.Response
 	var lastBody []byte
 
-	for attempt := 1; attempt <= rc.MaxAttempts; attempt++ {
-		if attempt > 1 {
-			delay := rc.Backoff(attempt-1, lastResp)
+	for attemptN := 1; attemptN <= rc.MaxAttempts; attemptN++ {
+		if attemptN > 1 {
+			delay := rc.Backoff(attemptN-1, lastResp)
 			select {
 			case <-ctx.Done():
 				if lastResp != nil {
 					_ = lastResp.Body.Close()
 				}
-				return lastResp, lastBody, ctx.Err()
+				return nil, nil, ctx.Err()
 			case <-time.After(delay):
 			}
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			if err := resetBody(req); err != nil {
+				return nil, nil, err
+			}
 		}
 
-		resp, err := client.Do(req)
+		resp, err := attempt()
 		if err != nil {
 			lastErr = err
 			logger.Warn("transport retry: network error",
 				"method", req.Method,
 				"url", redactURL(*req.URL),
-				"attempt", attempt,
+				"attempt", attemptN,
 				"err", err,
 			)
 			if !rc.canRetryNetworkError(req, err) {
@@ -287,26 +312,66 @@ func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Re
 			}
 			continue
 		}
-		body, readErr := readAndClose(resp, maxBodySize)
-		if readErr != nil {
-			return nil, nil, readErr
+		out, body, retryable, err := classify(resp)
+		if err != nil {
+			return nil, nil, err
 		}
-		lastResp = resp
-		lastBody = body
-		if !rc.canRetryResponse(req, resp) {
-			resp.Body = io.NopCloser(bytes.NewReader(body))
-			return resp, body, nil
+		lastResp, lastBody = out, body
+		if !retryable {
+			return out, body, nil
 		}
 		logger.Warn("transport retry: retryable status",
 			"method", req.Method,
 			"url", redactURL(*req.URL),
 			"status", resp.StatusCode,
-			"attempt", attempt,
+			"attempt", attemptN,
 		)
 	}
 
+	// Budget exhausted: hand back the final upstream response with its
+	// buffered body re-attached for one read — a received response is not a
+	// transport error. With no response ever received, the last network
+	// error is the outcome.
 	if lastResp != nil {
-		lastResp.Body = io.NopCloser(bytes.NewReader(lastBody))
+		if lastBody != nil {
+			lastResp.Body = io.NopCloser(bytes.NewReader(lastBody))
+		}
+		return lastResp, lastBody, nil
 	}
-	return lastResp, lastBody, lastErr
+	return nil, nil, lastErr
+}
+
+// Do executes a single request through the underlying client, applying the
+// configured retry policy. The response body is fully read so it can be
+// replayed across attempts. The returned http.Response has a fresh body
+// reader attached so the caller can read it once and then receive io.EOF.
+//
+// Retries respect the request method: see RetryConfig for the exact rules.
+// This is the buffered-body adapter over retryLoop (the single engine shared
+// with the RoundTripper path).
+func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Request, logger Logger, maxBodySize int64) (*http.Response, []byte, error) {
+	if rc == nil || rc.MaxAttempts <= 0 {
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		body, readErr := readAndClose(resp, maxBodySize)
+		return resp, body, readErr
+	}
+	if err := ensureReplayable(req); err != nil {
+		return nil, nil, err
+	}
+	return rc.retryLoop(ctx, req, logger,
+		func() (*http.Response, error) { return client.Do(req) },
+		func(resp *http.Response) (*http.Response, []byte, bool, error) {
+			body, err := readAndClose(resp, maxBodySize)
+			if err != nil {
+				return nil, nil, false, err
+			}
+			if !rc.canRetryResponse(req, resp) {
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return resp, body, false, nil
+			}
+			return resp, body, true, nil
+		})
 }

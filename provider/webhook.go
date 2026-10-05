@@ -389,6 +389,24 @@ func ReadAndRestoreBody(r *http.Request) ([]byte, error) {
 	return body, nil
 }
 
+// ValidateWebhookWithRegistry validates req's webhook signature with the
+// default registry entry for platform — the single implementation per
+// signature scheme (STRATEGY dispatch). The body is read and restored so
+// callers can keep parsing the payload afterwards. Platforms without a
+// registered validator yield ErrNotImplemented; an empty secret is rejected
+// (an empty HMAC key is trivially forgeable on predictable payloads).
+//
+// Backend WebhookManager implementations delegate here instead of keeping an
+// inline copy of their platform's crypto, which had already drifted from the
+// registry (empty-secret semantics) before v0.77.0.
+func ValidateWebhookWithRegistry(p Platform, r *http.Request, secret string) error {
+	body, err := ReadAndRestoreBody(r)
+	if err != nil {
+		return fmt.Errorf("%w: read body: %v", ErrWebhookValidation, err)
+	}
+	return defaultWebhookRegistry.Validate(p, r, body, secret)
+}
+
 // Pre-registered validators for the platforms the SDK ships with. These are
 // registered in init() below.
 func init() {

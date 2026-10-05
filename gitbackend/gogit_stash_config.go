@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/format/config"
 )
 
@@ -68,9 +67,9 @@ func parseConfigKey(key string) (section, subsection, option string, err error) 
 // wrapping ErrConfigKeyNotFound; a key explicitly set to the empty string
 // returns ("", nil) — the two are distinguishable.
 func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (string, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetConfig", repoPath)
 	if err != nil {
-		return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return "", err
 	}
 
 	cfg, err := repo.Config()
@@ -121,9 +120,9 @@ func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (str
 // subsection keys, matching the same format as GetConfig. The special keys
 // "user.name" and "user.email" are written via the high-level Author struct.
 func (b *GoGitBackend) SetConfig(ctx context.Context, repoPath, key, value string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("SetConfig", repoPath)
 	if err != nil {
-		return newGitError("SetConfig", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	cfg, err := repo.Config()

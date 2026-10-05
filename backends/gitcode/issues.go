@@ -15,9 +15,9 @@ import (
 
 // ListIssues implements provider.IssueManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
-// (GitCode's page-size ceiling is 100); opts.Page > 0 returns exactly that
-// single page and the caller drives pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	buildOpts := func(page, perPage int) gitcode.ListIssuesOptions {
 		listOpts := gitcode.ListIssuesOptions{
@@ -35,23 +35,12 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 		return listOpts
 	}
 	var issues []*gitcode.Issue
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if issues, err = p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(opts.Page, perPage)); err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
-		}
-	} else {
-		var err error
-		if issues, err = backendutil.AllPages(func(page int) ([]*gitcode.Issue, error) {
-			return p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(page, provider.MaxPerPage))
-		}); err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
-		}
+	issues, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitcode.Issue, error) {
+			return p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(page, perPage))
+		})
+	if err != nil {
+		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {

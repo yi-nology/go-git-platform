@@ -319,7 +319,7 @@ action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOption
 })
 ```
 
-`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, 六个 toolset(core/crs/issues/status/search/releases)按能力声明门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影与 `per_page` 分页参数、`--http` 可切换 streamable HTTP 远程部署(`/mcp` 端点 + `--http-token` Bearer 门禁)。详见 [mcp/README.md](mcp/README.md)。
+`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, 六个 toolset(core/crs/issues/status/search/releases)按能力接口断言门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影与 `per_page` 分页参数、`--http` 可切换 streamable HTTP 远程部署(`/mcp` 端点 + `--http-token` Bearer 门禁)。详见 [mcp/README.md](mcp/README.md)。
 
 ### 仓库元数据与部分克隆
 
@@ -545,7 +545,7 @@ go-git-platform/
 │   └── projection/              # 字段投影 (LLM/agent 上下文经济)
 │
 ├── mcp/                         # MCP server 独立模块 (独立 go.mod)
-│   ├── server.go / tools.go     # toolsets + 能力门控 + 读写分离
+│   ├── server.go / tools_*.go   # toolsets + 能力门控 + 读写分离
 │   └── cmd/go-git-platform-mcp/ # stdio 入口
 │
 ├── docs/

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	xhttp "github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -168,4 +169,16 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 		}
 	}
 	return specs
+}
+
+// openRepo opens the repository at repoPath, mapping go-git's not-found error
+// to the package's ErrRepoNotFound GitError tagged with op. Every gogit
+// backend method funnels its repository open through here, so the wrap
+// semantics live in exactly one place.
+func openRepo(op, repoPath string) (*git.Repository, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, newGitError(op, repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+	}
+	return repo, nil
 }

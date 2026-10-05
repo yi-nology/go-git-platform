@@ -35,7 +35,7 @@ func TestETagDoPathServes304FromCache(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 
 	resp, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"})
 	if err != nil {
@@ -73,8 +73,8 @@ func TestETagRoundTripperPathServes304FromCache(t *testing.T) {
 	srv, total, conditional := newETagServer(`{"v":2}`, nil)
 	defer srv.Close()
 
-	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
-	c.ETag = NewETagCache(0)
+	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
+	c.etag = NewETagCache(0)
 	hc := &http.Client{Transport: c.RoundTripper()}
 
 	get := func() (string, http.Header) {
@@ -114,7 +114,7 @@ func TestETagSkipsNoStore(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 	for range 3 {
 		if _, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"}); err != nil {
 			t.Fatalf("Do: %v", err)
@@ -123,8 +123,8 @@ func TestETagSkipsNoStore(t *testing.T) {
 	if got := conditional.Load(); got != 0 {
 		t.Fatalf("no-store response was cached (%d conditional requests)", got)
 	}
-	if c.ETag.Len() != 0 {
-		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	if c.etag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.etag.Len())
 	}
 }
 
@@ -133,7 +133,7 @@ func TestETagSkipsNonGET(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 	for range 2 {
 		if _, err := c.Do(t.Context(), &Request{Method: "POST", Path: "/data", Body: map[string]any{}}); err != nil {
 			t.Fatalf("Do: %v", err)
@@ -153,7 +153,7 @@ func TestETagSkipsOversizedBodies(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 	for range 2 {
 		resp, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"})
 		if err != nil {
@@ -182,14 +182,14 @@ func TestETagTokenRotationPartitionsCache(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
-	c.Auth = TokenSourceAuth{Source: StaticTokenSource("t1")}
+	c.etag = NewETagCache(0)
+	c.auth = TokenSourceAuth{Source: StaticTokenSource("t1")}
 
 	if _, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"}); err != nil {
 		t.Fatalf("Do t1: %v", err)
 	}
 	// Same URL, different token: the cached entry for t1 must not be reused.
-	c.Auth = TokenSourceAuth{Source: StaticTokenSource("t2")}
+	c.auth = TokenSourceAuth{Source: StaticTokenSource("t2")}
 	resp, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"})
 	if err != nil {
 		t.Fatalf("Do t2: %v", err)
@@ -207,8 +207,8 @@ func TestETagOversizedKnownLengthStreamsThrough(t *testing.T) {
 	srv, _, conditional := newETagServer(big, nil)
 	defer srv.Close()
 
-	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
-	c.ETag = NewETagCache(0)
+	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
+	c.etag = NewETagCache(0)
 	hc := &http.Client{Transport: c.RoundTripper()}
 
 	resp, err := hc.Get(srv.URL + "/data")
@@ -223,8 +223,8 @@ func TestETagOversizedKnownLengthStreamsThrough(t *testing.T) {
 	if n != int64(len(big)) {
 		t.Fatalf("streamed %d bytes, want %d (must not truncate or buffer-cap)", n, len(big))
 	}
-	if c.ETag.Len() != 0 {
-		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	if c.etag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.etag.Len())
 	}
 	if got := conditional.Load(); got != 0 {
 		t.Fatalf("oversized body was cached (%d conditional requests)", got)
@@ -238,8 +238,8 @@ func TestETagOversizedChunkedBodyStreamsThrough(t *testing.T) {
 	srv, _, _ := newETagServer(big, nil)
 	defer srv.Close()
 
-	c := NewClientWithTransport(srv.URL, None{}, srv.Client().Transport)
-	c.ETag = NewETagCache(0)
+	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
+	c.etag = NewETagCache(0)
 	hc := &http.Client{Transport: c.RoundTripper()}
 
 	resp, err := hc.Get(srv.URL + "/data")
@@ -254,8 +254,8 @@ func TestETagOversizedChunkedBodyStreamsThrough(t *testing.T) {
 	if n != int64(len(big)) {
 		t.Fatalf("streamed %d bytes, want %d", n, len(big))
 	}
-	if c.ETag.Len() != 0 {
-		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	if c.etag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.etag.Len())
 	}
 }
 
@@ -273,8 +273,8 @@ func TestETagMidBodyReadErrorSurfaces(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: h, Body: body, ContentLength: -1}, nil
 	})
 	c := NewClient("https://example.invalid", None{})
-	c.Transport = failing
-	c.ETag = NewETagCache(0)
+	c.transport = failing
+	c.etag = NewETagCache(0)
 	hc := &http.Client{Transport: c.RoundTripper()}
 
 	resp, err := hc.Get("https://example.invalid/data")
@@ -308,7 +308,7 @@ func TestETagNoStoreInDirectiveList(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 	for range 2 {
 		if _, err := c.Do(t.Context(), &Request{Method: "GET", Path: "/data"}); err != nil {
 			t.Fatalf("Do: %v", err)
@@ -324,7 +324,7 @@ func TestETagExplicitAcceptEncodingNotCached(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, None{})
-	c.ETag = NewETagCache(0)
+	c.etag = NewETagCache(0)
 	for range 2 {
 		if _, err := c.Do(t.Context(), &Request{
 			Method: "GET", Path: "/data",
@@ -336,8 +336,8 @@ func TestETagExplicitAcceptEncodingNotCached(t *testing.T) {
 	if got := conditional.Load(); got != 0 {
 		t.Fatalf("explicitly-encoded response was cached (%d conditional requests)", got)
 	}
-	if c.ETag.Len() != 0 {
-		t.Fatalf("cache holds %d entries, want 0", c.ETag.Len())
+	if c.etag.Len() != 0 {
+		t.Fatalf("cache holds %d entries, want 0", c.etag.Len())
 	}
 }
 
@@ -348,8 +348,5 @@ func TestETag304WithoutEntryIsAnError(t *testing.T) {
 
 	if _, err := c.processRT(req, resp); err == nil {
 		t.Fatal("304 with no cached entry must be an error, not a bodyless 200-shape passthrough")
-	}
-	if _, _, err := c.process(req, resp, nil); err == nil {
-		t.Fatal("process: 304 with no cached entry must be an error")
 	}
 }

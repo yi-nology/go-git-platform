@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 // DetectResult holds the platform, owner, repo, and base API URL extracted
@@ -142,6 +143,41 @@ var knownHostPlatforms = []struct {
 	{"gitcode.com", PlatformGitCode, "https://api.gitcode.com/api/v5"},
 }
 
+// hostAliases holds hosts registered at init time via RegisterHostAlias, so
+// a self-hosted alias (or a private deployment on a known domain shape) can
+// be classified without editing this package. Registered aliases are matched
+// before the built-in table.
+var hostMu sync.RWMutex
+var hostAliases []hostEntry
+
+type hostEntry struct {
+	host     string
+	platform Platform
+	baseURL  string
+}
+
+// RegisterHostAlias teaches DetectPlatform that host (and its subdomains)
+// identifies platform with the given base API URL — the registry extension
+// matching Register: adding a self-hosted alias no longer requires editing
+// the provider core. Panics on an empty host, an empty platform, or a
+// duplicate host (same fail-fast convention as Register).
+func RegisterHostAlias(host string, platform Platform, baseURL string) {
+	if host == "" {
+		panic("provider: RegisterHostAlias with empty host")
+	}
+	if platform == "" {
+		panic("provider: RegisterHostAlias with empty platform")
+	}
+	hostMu.Lock()
+	defer hostMu.Unlock()
+	for _, e := range hostAliases {
+		if strings.EqualFold(e.host, host) {
+			panic("provider: duplicate host alias registration for " + host)
+		}
+	}
+	hostAliases = append(hostAliases, hostEntry{host: strings.ToLower(host), platform: platform, baseURL: baseURL})
+}
+
 func classifyHost(host string) (Platform, string, error) {
 	lower := strings.ToLower(host)
 	// Strip a trailing port ("github.com:8443"); SplitHostPort also handles
@@ -149,6 +185,14 @@ func classifyHost(host string) (Platform, string, error) {
 	// are kept as-is.
 	if h, _, err := net.SplitHostPort(lower); err == nil {
 		lower = h
+	}
+	hostMu.RLock()
+	aliases := hostAliases
+	hostMu.RUnlock()
+	for _, k := range aliases {
+		if lower == k.host || strings.HasSuffix(lower, "."+k.host) {
+			return k.platform, k.baseURL, nil
+		}
 	}
 	for _, k := range knownHostPlatforms {
 		if lower == k.host || strings.HasSuffix(lower, "."+k.host) {

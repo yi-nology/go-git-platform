@@ -3,9 +3,6 @@ package gitcode
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,31 +54,13 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	return result, nil
 }
 
-// ValidateWebhookSignature implements provider.WebhookManager. GitCode uses
-// HMAC-SHA256 over the body, sent in X-Gitea-Signature or X-GitCode-Signature.
+// ValidateWebhookSignature implements provider.WebhookManager. It
+// delegates to the platform's registered validator so the signature
+// scheme has exactly one implementation (shared with contracttest);
+// notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if secret == "" {
-		return nil
-	}
-	sig := r.Header.Get("X-Gitea-Signature")
-	if sig == "" {
-		sig = r.Header.Get("X-GitCode-Signature")
-	}
-	if sig == "" {
-		return provider.Wrapf(provider.PlatformGitCode, "ValidateWebhookSignature",
-			"%w: missing webhook signature header", provider.ErrWebhookValidation)
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
+	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitCode, r, secret); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "ValidateWebhookSignature", err)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		return provider.Wrapf(provider.PlatformGitCode, "ValidateWebhookSignature",
-			"%w: invalid webhook signature", provider.ErrWebhookValidation)
 	}
 	return nil
 }

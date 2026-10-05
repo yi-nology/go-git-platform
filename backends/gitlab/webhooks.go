@@ -3,7 +3,6 @@ package gitlab
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,18 +68,13 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	return result, nil
 }
 
-// ValidateWebhookSignature implements provider.WebhookManager. GitLab uses a
-// static-token comparison against the X-Gitlab-Token header.
+// ValidateWebhookSignature implements provider.WebhookManager. It
+// delegates to the platform's registered validator so the signature
+// scheme has exactly one implementation (shared with contracttest);
+// notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if secret == "" {
-		return nil
-	}
-	token := r.Header.Get("X-Gitlab-Token")
-	if token == "" {
-		return provider.Wrapf(provider.PlatformGitLab, "ValidateWebhookSignature", "%w: missing X-Gitlab-Token header", provider.ErrWebhookValidation)
-	}
-	if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
-		return provider.Wrapf(provider.PlatformGitLab, "ValidateWebhookSignature", "%w: invalid GitLab webhook token", provider.ErrWebhookValidation)
+	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitLab, r, secret); err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "ValidateWebhookSignature", err)
 	}
 	return nil
 }

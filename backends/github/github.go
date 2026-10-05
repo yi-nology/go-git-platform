@@ -30,7 +30,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/google/go-github/v92/github"
 
@@ -60,32 +59,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		logger = provider.NewNoopLogger()
 	}
 
-	transportClient := transport.NewClient(
-		backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.github.com"),
-		backendutil.Auth(cfg, transport.AuthStyleBearer),
-	)
-	transportClient.Logger = logger
-	transportClient.ETag = backendutil.ConditionalCache(cfg)
-	// Set TLS-skipping transport on the transport client so that all
-	// HTTP requests (including retries) honour SkipTLS.
-	if cfg.SkipTLS {
-		transportClient.Transport = backendutil.HTTPTransport(cfg.SkipTLS)
-	}
-	transportClient.Retry = backendutil.MapRetryConfig(cfg.RetryConfig)
-	if cfg.Hooks != nil {
-		transportClient.Hooks = backendutil.ConvertHooks(cfg.Hooks)
-	}
-
-	// Underlying http.Client used by go-github. We wrap its transport with
-	// transport.NewRetryingRoundTripper so all SDK-issued requests flow
-	// through the auth/retry/hooks pipeline.
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: backendutil.ChainTransport(
-			backendutil.HTTPTransport(cfg.SkipTLS),
-			transportClient.NewRetryingRoundTripper(),
-		),
-	}
+	transportClient := backendutil.NewTransportClient(cfg, backendutil.DefaultBaseURL(cfg.BaseURL, "https://api.github.com"), transport.AuthStyleBearer)
+	httpClient := backendutil.SDKHTTPClient(transportClient, cfg.SkipTLS)
 
 	var ghClient *github.Client
 	if cfg.BaseURL == "" {

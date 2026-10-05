@@ -11,9 +11,9 @@ import (
 
 // ListNotifications implements provider.NotificationManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
-// (GitCode's page-size ceiling is 100); opts.Page > 0 returns exactly that
-// single page and the caller drives pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
 		return gitcode.ListNotificationsOptions{
@@ -23,23 +23,12 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 		}
 	}
 	var threads []*gitcode.NotificationThread
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if threads, err = p.client.ListNotificationsWithOptions(ctx, buildOpts(opts.Page, perPage)); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications", err)
-		}
-	} else {
-		var err error
-		if threads, err = backendutil.AllPages(func(page int) ([]*gitcode.NotificationThread, error) {
-			return p.client.ListNotificationsWithOptions(ctx, buildOpts(page, provider.MaxPerPage))
-		}); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications", err)
-		}
+	threads, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitcode.NotificationThread, error) {
+			return p.client.ListNotificationsWithOptions(ctx, buildOpts(page, perPage))
+		})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications", err)
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {
@@ -50,8 +39,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 
 // ListRepoNotifications implements provider.NotificationManager.
 //
-// Dual-mode pagination, mirroring ListNotifications: opts.Page == 0 fetches
-// every page via AllPages; opts.Page > 0 returns exactly that single page.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
 		return gitcode.ListNotificationsOptions{
@@ -61,23 +51,12 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 		}
 	}
 	var threads []*gitcode.NotificationThread
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if threads, err = p.client.ListRepoNotifications(ctx, owner, repo, buildOpts(opts.Page, perPage)); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
-		}
-	} else {
-		var err error
-		if threads, err = backendutil.AllPages(func(page int) ([]*gitcode.NotificationThread, error) {
-			return p.client.ListRepoNotifications(ctx, owner, repo, buildOpts(page, provider.MaxPerPage))
-		}); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
-		}
+	threads, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitcode.NotificationThread, error) {
+			return p.client.ListRepoNotifications(ctx, owner, repo, buildOpts(page, perPage))
+		})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
 	}
 	result := make([]*provider.Notification, 0, len(threads))
 	for _, t := range threads {

@@ -81,9 +81,8 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 	if apiBase == "" {
 		apiBase = DefaultAPIBase
 	}
-	client := transport.NewClient(strings.TrimRight(apiBase, "/"), transport.BearerToken{Token: jwt})
 	retry := transport.DefaultRetryConfig()
-	client.Retry = &retry
+	client := transport.NewClient(strings.TrimRight(apiBase, "/"), transport.BearerToken{Token: jwt}, transport.WithRetry(&retry))
 
 	resp, err := client.Do(ctx, &transport.Request{
 		Method: http.MethodPost,

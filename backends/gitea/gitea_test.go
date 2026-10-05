@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+
 	giteasdk "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/backends/gitea"
@@ -160,10 +162,7 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "cr.opened" {
 		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
@@ -196,10 +195,7 @@ func TestParseWebhookEvent_Merged(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "cr.merged" {
 		t.Errorf("expected cr.merged, got %s", ne.Type)
 	}
@@ -216,10 +212,7 @@ func TestParseWebhookEvent_PRClosed(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "cr.closed" {
 		t.Errorf("expected cr.closed, got %s", ne.Type)
 	}
@@ -233,10 +226,7 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "push")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "push" {
 		t.Errorf("expected push, got %s", ne.Type)
 	}
@@ -259,10 +249,7 @@ func TestParseWebhookEvent_BranchCreated(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "create")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "branch.created" {
 		t.Errorf("expected branch.created, got %s", ne.Type)
 	}
@@ -279,10 +266,7 @@ func TestParseWebhookEvent_BranchDeleted(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitea-Event", "delete")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "branch.deleted" {
 		t.Errorf("expected branch.deleted, got %s", ne.Type)
 	}

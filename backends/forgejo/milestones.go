@@ -20,37 +20,23 @@ import (
 // ListMilestones implements provider.MilestoneManager. State filters by
 // "open"/"closed" (forgejo also accepts "all"); forgejo defaults to open.
 //
-// Dual-mode pagination: with opts.Page == 0 the full milestone list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages);
-// with opts.Page > 0 exactly one caller-driven page is fetched (the caller
-// pages itself through NormalizePageOpts-normalized values).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
 	listOpts := forgejo.ListMilestoneOption{}
 	if opts.State != "" {
 		listOpts.State = forgejo.StateType(opts.State)
 	}
 	var milestones []*forgejo.Milestone
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*forgejo.Milestone, error) {
-			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: listPageSize}
+	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*forgejo.Milestone, error) {
+			listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.ListRepoMilestones(owner, repo, listOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListMilestones", err)
-		}
-		milestones = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = forgejo.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.ListRepoMilestones(owner, repo, listOpts)
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformForgejo, "ListMilestones", err)
-		}
-		milestones = page1
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformForgejo, "ListMilestones", err)
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, m := range milestones {

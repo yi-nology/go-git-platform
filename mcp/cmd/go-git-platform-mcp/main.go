@@ -140,7 +140,11 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 
 	log.Printf("go-git-platform-mcp %s: streamable HTTP on http://%s/mcp (auth: %s)",
 		mcpserver.Version(), addr, map[bool]string{true: "bearer token", false: "NONE — set --http-token"}[bearer != ""])
-	server := &http.Server{Addr: addr, Handler: handler}
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second, // Slowloris bound; MCP bodies are small JSON-RPC frames
+	}
 
 	// Graceful shutdown: SIGINT/SIGTERM stop accepting and give in-flight
 	// tool calls a grace window instead of dropping them mid-request.

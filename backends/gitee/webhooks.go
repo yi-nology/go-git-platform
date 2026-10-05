@@ -3,9 +3,6 @@ package gitee
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -83,29 +80,13 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	return result, nil
 }
 
-// ValidateWebhookSignature implements provider.WebhookManager.
-//
-// Gitee uses HMAC-SHA256 over the body, sent in the X-Gitee-Token header.
+// ValidateWebhookSignature implements provider.WebhookManager. It
+// delegates to the platform's registered validator so the signature
+// scheme has exactly one implementation (shared with contracttest);
+// notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if secret == "" {
-		return nil
-	}
-	sig := r.Header.Get("X-Gitee-Token")
-	if sig == "" {
-		return provider.Wrapf(provider.PlatformGitee, "ValidateWebhookSignature",
-			"%w: missing X-Gitee-Token header", provider.ErrWebhookValidation)
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
+	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitee, r, secret); err != nil {
 		return provider.Wrap(provider.PlatformGitee, "ValidateWebhookSignature", err)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		return provider.Wrapf(provider.PlatformGitee, "ValidateWebhookSignature",
-			"%w: invalid signature", provider.ErrWebhookValidation)
 	}
 	return nil
 }

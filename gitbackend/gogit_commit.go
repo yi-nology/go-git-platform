@@ -20,9 +20,9 @@ import (
 // --- Commit operations ---
 
 func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetCommitsBetween", repoPath)
 	if err != nil {
-		return nil, newGitError("GetCommitsBetween", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 
 	fromHash, err := resolveRev(repo, from)
@@ -60,9 +60,9 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 }
 
 func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("IsAncestor", repoPath)
 	if err != nil {
-		return false, newGitError("IsAncestor", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return false, err
 	}
 
 	ancestorCommit, err := repo.CommitObject(plumbing.NewHash(ancestor))
@@ -144,9 +144,9 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 }
 
 func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts MergeOptions) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Merge", repoPath)
 	if err != nil {
-		return newGitError("Merge", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	head, err := repo.Head()
@@ -272,9 +272,9 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 }
 
 func (b *GoGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CherryPick", repoPath)
 	if err != nil {
-		return newGitError("CherryPick", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	commit, err := repo.CommitObject(plumbing.NewHash(commitHash))
@@ -383,9 +383,9 @@ func (b *GoGitBackend) applyRebaseCommit(repoPath string, repo *git.Repository, 
 }
 
 func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Rebase", repoPath)
 	if err != nil {
-		return newGitError("Rebase", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	head, err := repo.Head()
@@ -458,9 +458,9 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 }
 
 func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("RebaseAbort", repoPath)
 	if err != nil {
-		return newGitError("RebaseAbort", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	dir := rebaseStateDir(repoPath)
@@ -498,9 +498,9 @@ func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
 }
 
 func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("RebaseContinue", repoPath)
 	if err != nil {
-		return newGitError("RebaseContinue", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 
 	dir := rebaseStateDir(repoPath)
@@ -584,9 +584,9 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 // --- Commit query and index operations ---
 
 func (b *GoGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) (*CommitInfo, error) {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("GetCommit", repoPath)
 	if err != nil {
-		return nil, newGitError("GetCommit", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, err
 	}
 	commit, err := repo.CommitObject(plumbing.NewHash(hashStr))
 	if err != nil {
@@ -601,9 +601,9 @@ func (b *GoGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) 
 }
 
 func (b *GoGitBackend) Add(ctx context.Context, repoPath string, files []string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("Add", repoPath)
 	if err != nil {
-		return newGitError("Add", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	wt, err := repo.Worktree()
 	if err != nil {
@@ -618,9 +618,9 @@ func (b *GoGitBackend) Add(ctx context.Context, repoPath string, files []string)
 }
 
 func (b *GoGitBackend) CommitWithIdentity(ctx context.Context, repoPath, name, email, message string) error {
-	repo, err := git.PlainOpen(repoPath)
+	repo, err := openRepo("CommitWithIdentity", repoPath)
 	if err != nil {
-		return newGitError("CommitWithIdentity", repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return err
 	}
 	wt, err := repo.Worktree()
 	if err != nil {

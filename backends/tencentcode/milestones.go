@@ -27,9 +27,9 @@ import (
 
 // ListMilestones implements provider.MilestoneManager.
 //
-// Dual-mode pagination: opts.Page == 0 fetches every page via AllPages
-// (工蜂's page-size ceiling is 100); opts.Page > 0 returns exactly that
-// single page and the caller drives pagination itself.
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
 	buildOpts := func(page, perPage int) *gongfeng.ListMilestonesOptions {
 		return &gongfeng.ListMilestonesOptions{
@@ -37,24 +37,13 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 		}
 	}
 	var milestones []*gongfeng.Milestone
-	if opts.Page > 0 {
-		// Caller-driven pagination: serve the requested page only.
-		perPage := opts.PerPage
-		if perPage <= 0 || perPage > provider.MaxPerPage {
-			perPage = provider.MaxPerPage
-		}
-		var err error
-		if milestones, _, err = p.client.Milestones.ListMilestones(ctx, pid(owner, repo), buildOpts(opts.Page, perPage)); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
-		}
-	} else {
-		var err error
-		if milestones, err = backendutil.AllPages(func(page int) ([]*gongfeng.Milestone, error) {
-			list, _, err := p.client.Milestones.ListMilestones(ctx, pid(owner, repo), buildOpts(page, provider.MaxPerPage))
+	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gongfeng.Milestone, error) {
+			list, _, err := p.client.Milestones.ListMilestones(ctx, pid(owner, repo), buildOpts(page, perPage))
 			return list, err
-		}); err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
-		}
+		})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListMilestones", err)
 	}
 	result := make([]provider.Milestone, 0, len(milestones))
 	for _, ms := range milestones {

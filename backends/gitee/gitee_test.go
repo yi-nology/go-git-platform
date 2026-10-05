@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/backends/contracttest"
+
 	"github.com/yi-nology/go-git-platform/backends/gitee"
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -535,10 +537,7 @@ func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitee-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "cr.opened" {
 		t.Errorf("expected cr.opened, got %s", ne.Type)
 	}
@@ -552,10 +551,7 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-Gitee-Event", "push")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
-	if err != nil {
-		t.Fatal(err)
-	}
+	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "push" {
 		t.Errorf("expected push, got %s", ne.Type)
 	}

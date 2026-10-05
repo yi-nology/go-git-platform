@@ -162,8 +162,12 @@ type AdvancedOps interface {
 	DiffNames(ctx context.Context, repoPath string, from string, to string) ([]string, error)
 	// DeletedFiles returns files deleted between two commits.
 	DeletedFiles(ctx context.Context, repoPath string, from string, to string) ([]string, error)
-	// CheckoutRef force-checks out an arbitrary ref in detached HEAD.
+	// CheckoutRef checks out ref: branch names attach HEAD to the branch
+	// (matching `git checkout <branch>`), anything else detaches.
 	CheckoutRef(ctx context.Context, repoPath string, ref string) error
+	// CheckoutDetached force-checks out ref in detached HEAD state, even
+	// when ref names a branch — pins HEAD to the commit.
+	CheckoutDetached(ctx context.Context, repoPath string, ref string) error
 	// CheckoutFiles restores the given files from ref into the working tree.
 	CheckoutFiles(ctx context.Context, repoPath string, ref string, files []string) error
 	// Add stages the given files into the index.

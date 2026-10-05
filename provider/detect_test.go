@@ -316,3 +316,30 @@ func TestDetectPlatform_SSH_SelfHosted_Unrecognized(t *testing.T) {
 		t.Errorf("expected ErrPlatformNotSupported, got %v", err)
 	}
 }
+
+// TestRegisterHostAlias verifies the registry extension: a self-hosted alias
+// registered at init time classifies like a built-in host, and duplicate
+// registration panics (same convention as Register).
+func TestRegisterHostAlias(t *testing.T) {
+	RegisterHostAlias("git.company.internal", PlatformGitLab, "https://git.company.internal/api/v4")
+	defer func() { hostAliases = nil }()
+
+	res, err := DetectPlatform("git@git.company.internal:team/proj.git")
+	if err != nil {
+		t.Fatalf("alias host should classify: %v", err)
+	}
+	if res.Platform != PlatformGitLab || res.BaseURL != "https://git.company.internal/api/v4" {
+		t.Errorf("unexpected classification: %+v", res)
+	}
+	// Subdomains of the alias classify too.
+	if _, err := DetectPlatform("https://team.git.company.internal/team/proj"); err != nil {
+		t.Errorf("alias subdomain should classify: %v", err)
+	}
+
+	defer func() {
+		if recover() == nil {
+			t.Error("expected duplicate registration to panic")
+		}
+	}()
+	RegisterHostAlias("git.company.internal", PlatformGitea, "https://elsewhere")
+}

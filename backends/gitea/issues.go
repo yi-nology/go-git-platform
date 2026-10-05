@@ -15,10 +15,9 @@ import (
 // ListIssues implements provider.IssueManager. The gitea SDK accepts no
 // context (same as its other services).
 //
-// Dual-mode pagination: with opts.Page == 0 the full issue list is fetched
-// by exhausting the endpoint's pagination (backendutil.AllPages); with
-// opts.Page > 0 exactly one caller-driven page is fetched (the caller pages
-// itself through NormalizePageOpts-normalized values).
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	listOpts := gitea.ListIssueOption{}
 	// Unset, the endpoint returns PRs mixed in with the issues.
@@ -33,24 +32,14 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 		listOpts.AssignedBy = opts.Assignee
 	}
 	var issues []*gitea.Issue
-	if opts.Page == 0 {
-		full, err := backendutil.AllPages(func(page int) ([]*gitea.Issue, error) {
-			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: listPageSize}
+	issues, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
+		func(page, perPage int) ([]*gitea.Issue, error) {
+			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
 			list, _, err := p.client.Issues.ListRepoIssues(ctx, opts.Owner, opts.Repo, listOpts)
 			return list, err
 		})
-		if err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformGitea, "ListIssues", err)
-		}
-		issues = full
-	} else {
-		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
-		page1, _, err := p.client.Issues.ListRepoIssues(ctx, opts.Owner, opts.Repo, listOpts)
-		if err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformGitea, "ListIssues", err)
-		}
-		issues = page1
+	if err != nil {
+		return nil, 0, provider.Wrap(provider.PlatformGitea, "ListIssues", err)
 	}
 	result := make([]*provider.Issue, 0, len(issues))
 	for _, i := range issues {
