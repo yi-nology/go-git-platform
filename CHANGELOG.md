@@ -4,6 +4,35 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.78.0] - 2026-10-06
+
+### Changed
+
+Gitea 家族合并第 1 批 + Manager 拆分（承接 v0.77.0 设计文档的后续清单,
+架构与迁移台账见
+`docs/superpowers/specs/2026-10-06-cohesion-patterns-refactor-design.md`）:
+
+- **`backends/internal/giteafamily` 家族引擎(ports & adapters)**: 勘察确认
+  forgejo SDK 是 gitea SDK 的 fork——类型逐一同构但名义类型不同。引擎零
+  SDK 依赖,自持最小线格式 DTO 与端口接口,拥有全部行为(选项构建/分页/
+  provider 转换/错误包裹/webhook 解析/分歧台账);每后端一个 `sdkPorts`
+  聚合适配器:gitea 近直接委托,forgejo 去 ctx + fork 类型逐字段转换。
+  Family 描述符携带平台名/事件 ID 前缀/事件 header(X-Gitea-Event vs
+  X-Forgejo-Event)/页大小
+- **第 1 批迁移 4 个能力**: webhooks(解析器归一化后逐字节相同,含 payload
+  结构体与事件映射)、divergence(台账文本经 displayName 参数化)、
+  deploy_keys、milestones。gitea/forgejo 两包合计净删 ~870 行;双侧
+  contracttest + webhook golden corpus 全程钉死
+- **`provider.Manager` 五职责拆分**: 泛型 `ttlCache[V]`(TTL+LRU 驱逐+
+  原子计数,getOrBuild 双检收敛并发构建)与 `janitor`(start/stop 生命
+  周期,保留 reset-before-done 重启语义)独立成件;Manager 收敛为 key
+  派生 + 工厂调用 + 委托,公开 API 不变
+
+### Fixed
+
+- forgejo/gitea 的 webhook corpus 测试改用真实构造的 provider(此前用
+  零值 `&Provider{}` 仅取解析器,引擎化后需 Family 描述符)
+
 ## [0.77.0] - 2026-10-06
 
 ### Changed

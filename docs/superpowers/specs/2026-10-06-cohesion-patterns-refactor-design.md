@@ -118,3 +118,41 @@ golden corpus）是健康的，主要病灶是**同一关注点存在两套并�
 - 总覆盖率 ≥45%（CI 地板）。
 - 7 后端 contracttest + webhook corpus 全绿 = 行为钉死。
 - CHANGELOG 补 0.76.0 缺段 + 新增 0.77.0 段；README 对齐。
+
+---
+
+## v0.78.0 追加：Gitea 家族合并（第 1 批）+ Manager 拆分
+
+### Cluster A 架构定型：ports & adapters
+
+勘察确认 forgejo SDK 是 gitea SDK 的 fork：类型字段/JSON tag 逐一同构但
+名义类型不同（无别名可用）；22 个能力文件归一化后差异 0–60 行，主要残留
+是 SDK 调用形态（forgejo 无 ctx、方法命名空间扁平）。据此定型：
+
+- **引擎** `backends/internal/giteafamily`：零 SDK 依赖，自持最小线格式
+  DTO（Hook/DeployKey/Milestone…）与端口接口（HookPort/DeployKeyPort/
+  MilestonePort），拥有全部行为——选项构建、分页、provider 类型转换、
+  错误包裹、webhook 解析、分歧台账。
+- **适配器**：每后端一个 `sdkPorts` 聚合结构实现全部端口。gitea 近直接
+  委托（上游方言）；forgejo 去 ctx + fork 类型逐字段转换。
+- **Family 描述符**：平台名、事件 ID 前缀、事件 header
+  （X-Gitea-Event vs X-Forgejo-Event——归一化 diff 曾掩盖此差异，实考
+  发现）、页大小。
+
+**第 1 批已迁移**（双侧 contracttest + webhook corpus 钉死）：
+webhooks、divergence、deploy_keys、milestones。webhook 解析器归一化后
+逐字节相同；deploy_keys/milestones 仅 SDK 调用形态不同。
+
+**后续批次（按类型面从小到大）**：labels、notifications、search、
+branches、collaborators、branch_protection、repo_stats、repos、files、
+commits、releases、reactions、diffs、reviews、types（convertPR 的
+Reviewers/Draft 差异经 Family 参数化）、crs、issues。大体量类型
+（PullRequest 30+ 字段）的转换必须逐字段核验——漏转=静默丢数据，
+契约 fixture 未必覆盖全部字段，故每能力独立落地。
+
+### F10：Manager 五职责拆分
+
+`provider.Manager`（缓存+LRU 驱逐+统计+jonitor 生命周期+key 派生）拆为：
+泛型 `ttlCache[V]`（TTL+LRU+原子计数，含 getOrBuild 双检）、`janitor`
+（start/stop 生命周期，保留 reset-before-done 重启语义）；Manager 收敛为
+key 派生 + 工厂调用 + 委托。公开 API 不变。

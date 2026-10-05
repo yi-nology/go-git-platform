@@ -31,6 +31,7 @@ import (
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -40,6 +41,11 @@ type Provider struct {
 	client   *forgejo.Client
 	logger   provider.Logger
 	labelIDs *backendutil.IDCache
+	// family/ports feed the shared Gitea-family engine (giteafamily): the
+	// declarative per-platform bits and the SDK adapter implementing the
+	// family ports for the capabilities already migrated.
+	family giteafamily.Family
+	ports  sdkPorts
 }
 
 // listPageSize is the per-page size used by AllPages-driven list fetches in
@@ -64,7 +70,13 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("forgejo: failed to create client: %w", err)
 	}
-	return &Provider{client: client, logger: logger, labelIDs: backendutil.NewIDCache(5 * time.Minute)}, nil
+	return &Provider{
+		client:   client,
+		logger:   logger,
+		labelIDs: backendutil.NewIDCache(5 * time.Minute),
+		family:   giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt", EventHeader: "X-Forgejo-Event", PageSize: listPageSize},
+		ports:    sdkPorts{c: client},
+	}, nil
 }
 
 // Platform implements provider.Provider.

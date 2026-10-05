@@ -16,10 +16,10 @@ func TestStartJanitor_RestartAfterContextCancel(t *testing.T) {
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	m.StartJanitor(ctx1, time.Hour) // interval never fires; lifecycle only
 
-	m.janitorMu.Lock()
-	done1 := m.janitorDone
-	stop1 := m.janitorStop
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	done1 := m.jan.done
+	stop1 := m.jan.stop
+	m.jan.mu.Unlock()
 	if stop1 == nil || done1 == nil {
 		t.Fatal("expected janitor state to be set while running")
 	}
@@ -33,10 +33,10 @@ func TestStartJanitor_RestartAfterContextCancel(t *testing.T) {
 	}
 
 	// Exit must have reset the state (before closing done).
-	m.janitorMu.Lock()
-	stopAfter := m.janitorStop
-	doneAfter := m.janitorDone
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	stopAfter := m.jan.stop
+	doneAfter := m.jan.done
+	m.jan.mu.Unlock()
 	if stopAfter != nil || doneAfter != nil {
 		t.Errorf("expected janitor state reset after exit, stop=%v done=%v", stopAfter, doneAfter)
 	}
@@ -46,10 +46,10 @@ func TestStartJanitor_RestartAfterContextCancel(t *testing.T) {
 	defer cancel2()
 	m.StartJanitor(ctx2, time.Hour)
 
-	m.janitorMu.Lock()
-	stop2 := m.janitorStop
-	done2 := m.janitorDone
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	stop2 := m.jan.stop
+	done2 := m.jan.done
+	m.jan.mu.Unlock()
 	if stop2 == nil || done2 == nil {
 		t.Fatal("expected StartJanitor to relaunch after a ctx-cancelled run")
 	}
@@ -60,10 +60,10 @@ func TestStartJanitor_RestartAfterContextCancel(t *testing.T) {
 	// Stop must work on the restarted janitor, be idempotent, and leave no
 	// stale state behind.
 	m.Stop()
-	m.janitorMu.Lock()
-	stopFinal := m.janitorStop
-	doneFinal := m.janitorDone
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	stopFinal := m.jan.stop
+	doneFinal := m.jan.done
+	m.jan.mu.Unlock()
 	if stopFinal != nil || doneFinal != nil {
 		t.Errorf("expected Stop to clear janitor state, stop=%v done=%v", stopFinal, doneFinal)
 	}
@@ -73,13 +73,13 @@ func TestStartJanitor_RestartAfterContextCancel(t *testing.T) {
 	ctx3, cancel3 := context.WithCancel(context.Background())
 	defer cancel3()
 	m.StartJanitor(ctx3, time.Hour)
-	m.janitorMu.Lock()
-	done3 := m.janitorDone
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	done3 := m.jan.done
+	m.jan.mu.Unlock()
 	m.StartJanitor(ctx3, time.Hour)
-	m.janitorMu.Lock()
-	done3b := m.janitorDone
-	m.janitorMu.Unlock()
+	m.jan.mu.Lock()
+	done3b := m.jan.done
+	m.jan.mu.Unlock()
 	if done3b != done3 {
 		t.Error("second StartJanitor while running must not replace the goroutine")
 	}
@@ -107,9 +107,9 @@ func TestStopJanitor_ConcurrentWithContextCancel(t *testing.T) {
 		ctx2, cancel2 := context.WithCancel(context.Background())
 		defer cancel2()
 		m.StartJanitor(ctx2, time.Hour)
-		m.janitorMu.Lock()
-		running := m.janitorStop != nil
-		m.janitorMu.Unlock()
+		m.jan.mu.Lock()
+		running := m.jan.stop != nil
+		m.jan.mu.Unlock()
 		if !running {
 			t.Fatal("expected janitor to be running after restart")
 		}

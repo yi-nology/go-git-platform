@@ -5,16 +5,28 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"sync"
-	"sync/atomic"
 	"time"
-
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-type cachedProvider struct {
-	provider  Provider
-	createdAt time.Time
+// Manager caches Provider instances keyed by configuration so repeated
+// constructions of the same (platform, baseURL, token) reuse the underlying
+// HTTP client pools instead of leaking a fresh one per call.
+//
+// It automatically detects the platform from clone URLs and reuses existing
+// Provider instances within the TTL window. The cache key is derived from
+// platform + baseURL + a SHA-256 hash of the token, so different tokens map
+// to different entries without leaking the token itself in logs or memory
+// dumps.
+//
+// The type is deliberately thin: the cache mechanics (TTL, LRU capacity
+// eviction, counters) live in ttlCache and the background-cleanup lifecycle
+// in janitor, leaving Manager exactly key derivation + factory call.
+type Manager struct {
+	cache  *ttlCache[Provider]
+	ttl    time.Duration
+	hasher func(token string) string
+
+	jan janitor
 }
 
 // Stats reports cache hit/miss counters and the current size. Counters are
@@ -26,48 +38,13 @@ type Stats struct {
 	Size      int
 }
 
-// Manager provides a caching layer over Provider creation.
-//
-// It automatically detects the platform from clone URLs and reuses existing
-// Provider instances within the TTL window. The cache key is derived from
-// platform + baseURL + a SHA-256 hash of the token, so different tokens map
-// to different entries without leaking the token itself in logs or memory
-// dumps.
-type Manager struct {
-	providers map[string]cachedProvider
-	mu        sync.RWMutex
-	ttl       time.Duration
-	maxSize   int // 0 = unlimited
-
-	// order tracks access recency for capacity eviction and is non-nil only
-	// when maxSize > 0. Values mirror providers' key set; the LRU list is the
-	// single source of "least recently used" so eviction targets real usage
-	// (hits refresh recency), not creation time.
-	order *lru.Cache[string, struct{}]
-
-	// stats counters (atomic)
-	hits      atomic.Int64
-	misses    atomic.Int64
-	evictions atomic.Int64
-
-	// hasher produces the token portion of the cache key. Defaults to a
-	// trimmed SHA-256 hash. Override via WithHasher for testing or for
-	// integrating with an external secret manager.
-	hasher func(token string) string
-
-	// janitor state (protected by janitorMu)
-	janitorMu   sync.Mutex
-	janitorStop chan struct{}
-	janitorDone chan struct{} // closed when goroutine exits
-}
-
 // ManagerOption configures a Manager at construction time.
 type ManagerOption func(*Manager)
 
 // WithMaxSize caps the cache at n entries. When the cap is reached, the least
 // recently used entry is evicted before a new one is inserted.
 func WithMaxSize(n int) ManagerOption {
-	return func(m *Manager) { m.maxSize = n }
+	return func(m *Manager) { m.cache = newTTLCache[Provider](m.ttl, n) }
 }
 
 // WithHasher overrides the default SHA-256 token hasher. Useful for tests
@@ -80,19 +57,12 @@ func WithHasher(h func(token string) string) ManagerOption {
 // A TTL of 0 means providers never expire (until the process exits).
 func NewManager(ttl time.Duration, opts ...ManagerOption) *Manager {
 	m := &Manager{
-		providers: make(map[string]cachedProvider),
-		ttl:       ttl,
-		hasher:    defaultHasher,
+		cache:  newTTLCache[Provider](ttl, 0),
+		ttl:    ttl,
+		hasher: defaultHasher,
 	}
 	for _, opt := range opts {
 		opt(m)
-	}
-	if m.maxSize > 0 {
-		order, err := lru.New[string, struct{}](m.maxSize)
-		if err != nil {
-			panic(fmt.Sprintf("provider: NewManager: %v", err))
-		}
-		m.order = order
 	}
 	return m
 }
@@ -136,122 +106,47 @@ func (m *Manager) GetByURL(cloneURL, token string) (Provider, error) {
 // baseURL) with a different token gets a distinct entry.
 func (m *Manager) Get(cfg Config) (Provider, error) {
 	key := m.buildKey(cfg)
-
-	m.mu.RLock()
-	cp, ok := m.providers[key]
-	fresh := ok && (m.ttl == 0 || time.Since(cp.createdAt) < m.ttl)
-	m.mu.RUnlock()
-	if fresh {
-		// Refresh access recency on its own internal lock; lru.Cache is
-		// thread-safe, so hits stay independent of the providers map lock.
-		if m.order != nil {
-			m.order.Get(key)
-		}
-		m.hits.Add(1)
-		return cp.provider, nil
-	}
-
-	m.misses.Add(1)
-	p, err := NewProvider(cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now()
-	m.mu.Lock()
-	// Check again under write lock in case another goroutine raced ahead.
-	if cp, ok := m.providers[key]; ok && (m.ttl == 0 || time.Since(cp.createdAt) < m.ttl) {
-		m.mu.Unlock()
-		return cp.provider, nil
-	}
-	// Enforce max size by evicting the least recently used tracked entry.
-	if m.order != nil {
-		for m.order.Len() >= m.maxSize {
-			evKey, _, _ := m.order.RemoveOldest()
-			if _, stillCached := m.providers[evKey]; stillCached {
-				delete(m.providers, evKey)
-				m.evictions.Add(1)
-			}
-			if evKey == key {
-				break // re-inserting an existing key; nothing else to evict
-			}
-		}
-		m.order.Add(key, struct{}{})
-	}
-	m.providers[key] = cachedProvider{provider: p, createdAt: now}
-	m.mu.Unlock()
-
-	return p, nil
+	return m.cache.getOrBuild(key, func() (Provider, error) { return NewProvider(cfg) })
 }
 
 // Remove removes a cached Provider by config.
 func (m *Manager) Remove(cfg Config) {
-	key := m.buildKey(cfg)
-	m.mu.Lock()
-	delete(m.providers, key)
-	if m.order != nil {
-		m.order.Remove(key)
-	}
-	m.mu.Unlock()
+	m.cache.remove(m.buildKey(cfg))
 }
 
 // Purge removes all cached Providers.
 func (m *Manager) Purge() {
-	m.mu.Lock()
-	m.providers = make(map[string]cachedProvider)
-	if m.order != nil {
-		m.order.Purge()
-	}
-	m.mu.Unlock()
+	m.cache.purge()
 }
 
 // Len returns the number of cached Providers.
 func (m *Manager) Len() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.providers)
+	return m.cache.len()
 }
 
 // Stats returns a snapshot of cache counters. The counters continue to
 // accumulate across calls; reset them with ResetStats.
 func (m *Manager) Stats() Stats {
-	m.mu.RLock()
-	size := len(m.providers)
-	m.mu.RUnlock()
 	return Stats{
-		Hits:      m.hits.Load(),
-		Misses:    m.misses.Load(),
-		Evictions: m.evictions.Load(),
-		Size:      size,
+		Hits:      m.cache.hits.Load(),
+		Misses:    m.cache.misses.Load(),
+		Evictions: m.cache.evictions.Load(),
+		Size:      m.cache.len(),
 	}
 }
 
 // ResetStats zeroes the hit/miss/eviction counters. Cache entries are not
 // affected.
 func (m *Manager) ResetStats() {
-	m.hits.Store(0)
-	m.misses.Store(0)
-	m.evictions.Store(0)
+	m.cache.hits.Store(0)
+	m.cache.misses.Store(0)
+	m.cache.evictions.Store(0)
 }
 
 // Cleanup removes expired entries from the cache. Safe to call manually; also
 // invoked periodically by StartJanitor.
 func (m *Manager) Cleanup() {
-	if m.ttl == 0 {
-		return
-	}
-	m.mu.Lock()
-	cutoff := time.Now().Add(-m.ttl)
-	for k, cp := range m.providers {
-		if cp.createdAt.Before(cutoff) {
-			delete(m.providers, k)
-			if m.order != nil {
-				m.order.Remove(k)
-			}
-			m.evictions.Add(1)
-		}
-	}
-	m.mu.Unlock()
+	m.cache.cleanup()
 }
 
 // StartJanitor launches a background goroutine that calls Cleanup every
@@ -262,67 +157,13 @@ func (m *Manager) Cleanup() {
 // subsequent StartJanitor with a fresh ctx launches a new goroutine instead
 // of being mistaken for "already running".
 func (m *Manager) StartJanitor(ctx context.Context, interval time.Duration) {
-	if interval <= 0 {
-		return
-	}
-	m.janitorMu.Lock()
-	defer m.janitorMu.Unlock()
-	if m.janitorStop != nil {
-		return // already running
-	}
-	stopCh := make(chan struct{})
-	doneCh := make(chan struct{})
-	m.janitorStop = stopCh
-	m.janitorDone = doneCh
-	go func(stop, done chan struct{}) {
-		defer close(done)
-		// Reset the janitor state before signalling exit so StartJanitor can
-		// relaunch after this goroutine dies (e.g. via ctx cancellation).
-		// Runs before close(done): once done is closed, the state is already
-		// cleared. Stop() may have cleared the fields already; the identity
-		// checks keep that case a no-op.
-		defer func() {
-			m.janitorMu.Lock()
-			defer m.janitorMu.Unlock()
-			if m.janitorStop == stop {
-				m.janitorStop = nil
-			}
-			if m.janitorDone == done {
-				m.janitorDone = nil
-			}
-		}()
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-stop:
-				return
-			case <-ticker.C:
-				m.Cleanup()
-			}
-		}
-	}(stopCh, doneCh)
+	m.jan.cleanup = m.Cleanup
+	m.jan.start(ctx, interval)
 }
 
 // Stop halts the background janitor and blocks until it has exited.
 func (m *Manager) Stop() {
-	m.janitorMu.Lock()
-	if m.janitorStop == nil {
-		m.janitorMu.Unlock()
-		return
-	}
-	close(m.janitorStop)
-	m.janitorStop = nil
-	done := m.janitorDone
-	m.janitorMu.Unlock()
-	if done != nil {
-		<-done
-	}
-	m.janitorMu.Lock()
-	m.janitorDone = nil
-	m.janitorMu.Unlock()
+	m.jan.stopAndWait()
 }
 
 // buildKey derives a stable cache key from the config. The token is passed

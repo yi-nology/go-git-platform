@@ -1,6 +1,8 @@
 package forgejo_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
@@ -96,5 +98,9 @@ func TestForgejo_Contract(t *testing.T) {
 }
 
 func TestForgejo_WebhookCorpus(t *testing.T) {
-	contracttest.RunWebhookCorpus(t, provider.PlatformForgejo, &forgejo.Provider{}, "testdata/webhooks")
+	// The webhook parser now reads the family descriptor set at construction
+	// (platform, event header), so the corpus runs against a real provider
+	// rather than a zero-value struct.
+	p := newTestProvider(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
+	contracttest.RunWebhookCorpus(t, provider.PlatformForgejo, p, "testdata/webhooks")
 }

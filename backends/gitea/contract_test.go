@@ -1,6 +1,8 @@
 package gitea_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
@@ -103,5 +105,9 @@ func TestGitea_Contract(t *testing.T) {
 }
 
 func TestGitea_WebhookCorpus(t *testing.T) {
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitea, &gitea.Provider{}, "testdata/webhooks")
+	// The webhook parser now reads the family descriptor set at construction
+	// (platform, event header), so the corpus runs against a real provider
+	// rather than a zero-value struct.
+	p := newTestProvider(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
+	contracttest.RunWebhookCorpus(t, provider.PlatformGitea, p, "testdata/webhooks")
 }

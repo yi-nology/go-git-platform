@@ -89,17 +89,6 @@ func convertBranch(b *gitea.Branch) *provider.PlatformBranch {
 	return &provider.PlatformBranch{Name: b.Name}
 }
 
-func convertHook(h *gitea.Hook) *provider.PlatformWebhook {
-	if h == nil {
-		return nil
-	}
-	return &provider.PlatformWebhook{
-		ID:     h.ID,
-		URL:    h.Config["url"],
-		Events: h.Events,
-	}
-}
-
 func convertCommit(c *gitea.Commit) *provider.CommitInfo {
 	if c == nil {
 		return nil
