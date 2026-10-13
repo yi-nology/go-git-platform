@@ -1,15 +1,11 @@
 package tencentcode
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -85,15 +81,18 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
+// tencentEnvelope is TencentCODE's webhook dialect for the shared envelope
+// steps (dispatch rides the payload's object_kind, not an event header).
+var tencentEnvelope = provider.WebhookEnvelope{
+	Platform: provider.PlatformTencentCode,
+	IDPrefix: "tc",
+}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	if err := p.ValidateWebhookSignature(r, secret); err != nil {
+	_, body, err := tencentEnvelope.Read(r, secret)
+	if err != nil {
 		return nil, err
 	}
-	body, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ParseWebhookEvent", readErr)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var pl struct {
 		ObjectKind string `json:"object_kind"`
@@ -165,14 +164,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	er.ID = pl.Project.ID
 	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
-	event := &provider.NormalizedEvent{
-		ID:         fmt.Sprintf("tc-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
-		Source:     p.Platform(),
-		Timestamp:  time.Now(),
-		Actor:      actor,
-		Repo:       er,
-		RawPayload: json.RawMessage(body),
-	}
+	event := tencentEnvelope.NewEvent(int64(pl.ObjectAttributes.IID), body)
+	event.Actor = actor
+	event.Repo = er
 
 	switch pl.ObjectKind {
 	case "merge_request":

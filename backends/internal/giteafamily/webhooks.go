@@ -22,7 +22,6 @@ package giteafamily
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -164,17 +163,15 @@ func convertHook(h *Hook) *provider.PlatformWebhook {
 // validator and maps the (byte-identical across the family) Gitea-style
 // payload onto a NormalizedEvent.
 func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	if err := provider.ValidateWebhookWithRegistry(f.Platform, r, secret); err != nil {
-		// Wrapped under the ValidateWebhookSignature op: the backends'
-		// ParseWebhookEvent has always run signature validation first.
-		return nil, provider.Wrap(f.Platform, "ValidateWebhookSignature", err)
+	env := provider.WebhookEnvelope{
+		Platform:     f.Platform,
+		EventHeaders: []string{f.EventHeader},
+		IDPrefix:     f.EventIDPrefix,
 	}
-	body, readErr := provider.ReadAndRestoreBody(r)
-	if readErr != nil {
-		return nil, provider.Wrap(f.Platform, "ParseWebhookEvent", readErr)
+	eventType, body, err := env.Read(r, secret)
+	if err != nil {
+		return nil, err
 	}
-
-	eventType := r.Header.Get(f.EventHeader)
 	var pl struct {
 		Action string `json:"action"`
 		Sender struct {
@@ -228,14 +225,9 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 	er.ID = pl.Repository.ID
 	actor := &provider.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
-	event := &provider.NormalizedEvent{
-		ID:         fmt.Sprintf("%s-%d-%d", f.EventIDPrefix, time.Now().UnixNano(), pl.Number),
-		Source:     f.Platform,
-		Timestamp:  time.Now(),
-		Actor:      actor,
-		Repo:       er,
-		RawPayload: json.RawMessage(body),
-	}
+	event := env.NewEvent(int64(pl.Number), body)
+	event.Actor = actor
+	event.Repo = er
 
 	switch eventType {
 	case "pull_request":

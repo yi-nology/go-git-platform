@@ -1,11 +1,8 @@
 package gitee
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -92,15 +89,18 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
+// giteeEnvelope is Gitee's webhook dialect for the shared envelope steps.
+var giteeEnvelope = provider.WebhookEnvelope{
+	Platform:     provider.PlatformGitee,
+	EventHeaders: []string{"X-Gitee-Event"},
+	IDPrefix:     "ge",
+}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	if err := p.ValidateWebhookSignature(r, secret); err != nil {
+	eventType, body, err := giteeEnvelope.Read(r, secret)
+	if err != nil {
 		return nil, err
 	}
-	body, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ParseWebhookEvent", readErr)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var pl struct {
 		Action       string `json:"action"`
@@ -146,20 +146,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		return nil, provider.Wrap(provider.PlatformGitee, "ParseWebhookEvent", err)
 	}
 
-	hookName := r.Header.Get("X-Gitee-Event")
 	er := provider.BuildEventRepo(pl.Repository.FullName)
 	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Login, Name: pl.User.Name}
 
-	event := &provider.NormalizedEvent{
-		ID:         fmt.Sprintf("ge-%d-%d", time.Now().UnixNano(), pl.Number),
-		Source:     p.Platform(),
-		Timestamp:  time.Now(),
-		Actor:      actor,
-		Repo:       er,
-		RawPayload: json.RawMessage(body),
-	}
+	event := giteeEnvelope.NewEvent(int64(pl.Number), body)
+	event.Actor = actor
+	event.Repo = er
 
-	switch hookName {
+	switch eventType {
 	case "pull_request":
 		action := provider.NormalizeCRAction(pl.Action, pl.State == "merged")
 		event.Type = provider.EventTypeCR + action

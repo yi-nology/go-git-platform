@@ -2,10 +2,8 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v92/github"
 
@@ -76,6 +74,11 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
+// githubEnvelope is GitHub's webhook dialect for the shared envelope steps.
+// The event header and payload decoding stay on the go-github library's
+// path; GitHub never set an event ID, so the prefix stays empty.
+var githubEnvelope = provider.WebhookEnvelope{Platform: provider.PlatformGitHub}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
 	payload, err := github.ValidatePayload(r, []byte(secret))
 	if err != nil {
@@ -87,11 +90,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 
-	ne := &provider.NormalizedEvent{
-		Source:     p.Platform(),
-		Timestamp:  time.Now(),
-		RawPayload: json.RawMessage(payload),
-	}
+	ne := githubEnvelope.NewEvent(0, payload)
 
 	switch e := event.(type) {
 	case *github.PullRequestEvent:

@@ -1,11 +1,8 @@
 package gitlab
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -80,15 +77,18 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
+// gitlabEnvelope is GitLab's webhook dialect for the shared envelope steps
+// (dispatch rides the payload's object_kind, not an event header).
+var gitlabEnvelope = provider.WebhookEnvelope{
+	Platform: provider.PlatformGitLab,
+	IDPrefix: "gl",
+}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	if err := p.ValidateWebhookSignature(r, secret); err != nil {
+	_, body, err := gitlabEnvelope.Read(r, secret)
+	if err != nil {
 		return nil, err
 	}
-	body, readErr := io.ReadAll(r.Body)
-	if readErr != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ParseWebhookEvent", readErr)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var pl struct {
 		ObjectKind string `json:"object_kind"`
@@ -151,14 +151,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	er.ID = pl.Project.ID
 	actor := &provider.CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
 
-	event := &provider.NormalizedEvent{
-		ID:         fmt.Sprintf("gl-%d-%d", time.Now().UnixNano(), pl.ObjectAttributes.IID),
-		RawPayload: json.RawMessage(body),
-		Source:     p.Platform(),
-		Timestamp:  time.Now(),
-		Actor:      actor,
-		Repo:       er,
-	}
+	event := gitlabEnvelope.NewEvent(pl.ObjectAttributes.IID, body)
+	event.Actor = actor
+	event.Repo = er
 
 	switch pl.ObjectKind {
 	case "merge_request":

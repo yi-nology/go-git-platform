@@ -166,3 +166,18 @@ key 派生 + 工厂调用 + 委托。公开 API 不变。
 两端 ports.go。types.go 整体删除(转换器全进引擎 Family 线格式)。
 第 3/4 批新提炼的 Family 方言参数:CRPointersHaveReviewers、
 PRWireHasDraft(reactions 的分页差异不进 Family,收进端口"全量"语义)。
+
+---
+
+## v0.83.0 追加:F12/F9/F13/F11 台账全清
+
+- F9: provider.DeriveCapabilities 单通道(类型断言=唯一事实来源)
+- F12: ListCRs total → *int(nil=平台无权威总数)
+- F13: provider.WebhookEnvelope 信封骨架,6 处接入,payload 解码与事件
+  分派保持平台方言(表驱动会以 Go 类型安全换取弱类型注册,净损失)
+- F11: RegisterStatusExtractor 逐后端 errors.As 提取器替代 reflect 字段
+  扫描 + 错误消息数字解析(已删)。gitea/forgejo 错误不携带 status,
+  走 *Response 状态保真的既有路径
+
+台账剩余可选项(非本轮承诺): F10 Manager 已于 v0.78 完成;
+Cluster A 已于 v0.78–v0.81 完成。

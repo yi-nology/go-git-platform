@@ -191,8 +191,19 @@ func TestWrap_PreservesOriginalCause(t *testing.T) {
 }
 
 func TestWrap_PreservesOriginalCause_5xx(t *testing.T) {
+	// Classification runs through a registered StatusExtractor (the
+	// reflection-over-fields fallback was removed in v0.83). A throwaway
+	// platform value keeps the registry clean for other tests.
+	const tp Platform = "test-wrap-extractor"
+	RegisterStatusExtractor(tp, func(err error) (int, bool) {
+		var se *sdkStatusError
+		if errors.As(err, &se) {
+			return se.StatusCode, true
+		}
+		return 0, false
+	})
 	orig := fmt.Errorf("connection reset by peer mid-response")
-	err := Wrap(PlatformGitHub, "ListRepos", &sdkStatusError{StatusCode: 502, msg: "upstream blew up", inner: orig})
+	err := Wrap(tp, "ListRepos", &sdkStatusError{StatusCode: 502, msg: "upstream blew up", inner: orig})
 
 	var pe *ProviderError
 	if !errors.As(err, &pe) {
@@ -210,9 +221,9 @@ func TestWrap_PreservesOriginalCause_5xx(t *testing.T) {
 }
 
 // sdkStatusError mimics a third-party SDK error: no StatusCode method, only
-// an exported StatusCode int field plus a nested cause, so it exercises the
-// reflection path in Wrap (same shape as e.g. gitlab client-go's
-// ErrorResponse).
+// an exported StatusCode int field plus a nested cause (same shape as e.g.
+// gitlab client-go's ErrorResponse). Wrap classifies it only through a
+// registered StatusExtractor — the reflection-over-fields fallback is gone.
 type sdkStatusError struct {
 	StatusCode int
 	msg        string
@@ -250,33 +261,24 @@ func TestWrap_StringMessage_NotMistakenForStatus(t *testing.T) {
 	}
 }
 
-func TestParseStatusFromString(t *testing.T) {
-	tests := []struct {
-		msg  string
-		code int
-		ok   bool
-	}{
-		{"returned 404", 404, true},
-		{"Returned 404 Not Found", 404, true}, // case-insensitive
-		{"HTTP 502 Bad Gateway", 502, true},
-		{"status 422 Unprocessable", 422, true},
-		{"request failed: returned 503", 503, true},
-		// Whitelist: only classifiable codes are extracted.
-		{"returned 200", 0, false},
-		{"status 302 Found", 0, false},
-		{"returned 100", 0, false},
-		{"returned 599", 0, false},
-		// "with " prefix removed: prose must not yield a status.
-		{"merge with 500 files", 0, false},
-		{"with 404 items", 0, false},
-		{"Merge conflict: branch contains with 429 commits", 0, false},
-		{"nothing here at all", 0, false},
-		{"", 0, false},
-	}
-	for _, tc := range tests {
-		code, ok := parseStatusFromString(tc.msg)
-		if code != tc.code || ok != tc.ok {
-			t.Errorf("parseStatusFromString(%q) = (%d, %v), want (%d, %v)", tc.msg, code, ok, tc.code, tc.ok)
+func TestWrap_StatusInMessageIsNeverParsed(t *testing.T) {
+	// The pre-0.83 error-message parsing ("returned 404" / "HTTP 502" /
+	// "status 422") is gone: a bare error whose text merely contains a
+	// status number classifies as no-status. Platforms classify their SDK
+	// errors through registered StatusExtractors instead.
+	for _, msg := range []string{
+		"returned 404",
+		"HTTP 502 Bad Gateway",
+		"status 422 Unprocessable",
+		"request failed: returned 503",
+	} {
+		err := Wrap(PlatformGitHub, "TestOp", errors.New(msg))
+		var pe *ProviderError
+		if !errors.As(err, &pe) {
+			t.Fatalf("expected *ProviderError for %q", msg)
+		}
+		if pe.StatusCode != 0 {
+			t.Errorf("message %q classified as %d; status-in-message parsing must not resurrect", msg, pe.StatusCode)
 		}
 	}
 }
@@ -380,8 +382,9 @@ func TestStatusError_ImplementsStatusCoder(t *testing.T) {
 }
 
 func TestWrap_NonStructError_DoesNotPanic(t *testing.T) {
-	// url.EscapeError is a string-kind error value; the reflection fallback
-	// in httpStatusFromError used to call NumField on it and panic.
+	// url.EscapeError is a string-kind error value; this is a regression
+	// guard for the pre-0.83 reflection fallback, which panicked on
+	// non-struct kinds (the reflection path no longer exists).
 	err := url.EscapeError("invalid%escape")
 
 	got := Wrap(PlatformGitHub, "TestOp", err)

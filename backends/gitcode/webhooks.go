@@ -1,15 +1,12 @@
 package gitcode
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -66,26 +63,21 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
+// gitcodeEnvelope is GitCode's webhook dialect for the shared envelope
+// steps: GitCode brands both the Gitea event header and its own, so the
+// dialect lists the fallback chain; it never set an event ID (no prefix).
+var gitcodeEnvelope = provider.WebhookEnvelope{
+	Platform:     provider.PlatformGitCode,
+	EventHeaders: []string{"X-Gitea-Event", "X-GitCode-Event"},
+}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	if err := p.ValidateWebhookSignature(r, secret); err != nil {
+	eventType, body, err := gitcodeEnvelope.Read(r, secret)
+	if err != nil {
 		return nil, err
 	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
-	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
 
-	eventType := r.Header.Get("X-Gitea-Event")
-	if eventType == "" {
-		eventType = r.Header.Get("X-GitCode-Event")
-	}
-
-	ne := &provider.NormalizedEvent{
-		Source:     p.Platform(),
-		Timestamp:  time.Now(),
-		RawPayload: json.RawMessage(body),
-	}
+	ne := gitcodeEnvelope.NewEvent(0, body)
 
 	switch eventType {
 	case "pull_request":

@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -405,6 +406,66 @@ func ValidateWebhookWithRegistry(p Platform, r *http.Request, secret string) err
 		return fmt.Errorf("%w: read body: %v", ErrWebhookValidation, err)
 	}
 	return defaultWebhookRegistry.Validate(p, r, body, secret)
+}
+
+// WebhookEnvelope carries one platform's webhook dialect for the shared
+// envelope steps every ParseWebhookEvent must run before its payload switch
+// (validate → read/restore body → event header → event skeleton). Payload
+// decoding and the event-type switch stay per-platform: those are the
+// dialect, not the envelope.
+type WebhookEnvelope struct {
+	// Platform selects the registered signature validator.
+	Platform Platform
+	// EventHeaders are checked in order for the event-type header; the first
+	// non-empty value wins (multi-header dialects list fallbacks). Leave
+	// empty when the platform dispatches on a payload field (e.g. GitLab's
+	// object_kind) instead of a header.
+	EventHeaders []string
+	// IDPrefix prefixes generated event IDs ("<prefix>-<unixnano>-<key>").
+	// Empty skips the ID (platforms whose go-github/library path never set
+	// one keep that behavior).
+	IDPrefix string
+}
+
+// Read validates the signature via the platform's registered validator,
+// restores the body for downstream parsing, and returns the event-type
+// header ("" when EventHeaders is empty or unmatched) plus the raw payload.
+// Error ops mirror the historical hand-written sequence: body-read failures
+// surface under ParseWebhookEvent, validation failures under
+// ValidateWebhookSignature.
+func (e WebhookEnvelope) Read(r *http.Request, secret string) (string, []byte, error) {
+	body, err := ReadAndRestoreBody(r)
+	if err != nil {
+		// Historical ops: the body is read as part of validation, so a read
+		// failure surfaces under ValidateWebhookSignature.
+		return "", nil, Wrap(e.Platform, "ValidateWebhookSignature", err)
+	}
+	if err := defaultWebhookRegistry.Validate(e.Platform, r, body, secret); err != nil {
+		return "", nil, Wrap(e.Platform, "ValidateWebhookSignature", err)
+	}
+	for _, h := range e.EventHeaders {
+		if v := r.Header.Get(h); v != "" {
+			return v, body, nil
+		}
+	}
+	return "", body, nil
+}
+
+// NewEvent builds the event skeleton: Source, Timestamp, RawPayload — plus
+// ID "<IDPrefix>-<unixnano>-<idKey>" when IDPrefix is set. idKey is the
+// platform's payload identifier for the event (issue number, MR IID, ...).
+// Actor/Repo remain the caller's: they come from the payload the mapper
+// decodes.
+func (e WebhookEnvelope) NewEvent(idKey int64, body []byte) *NormalizedEvent {
+	ev := &NormalizedEvent{
+		Source:     e.Platform,
+		Timestamp:  time.Now(),
+		RawPayload: json.RawMessage(body),
+	}
+	if e.IDPrefix != "" {
+		ev.ID = fmt.Sprintf("%s-%d-%d", e.IDPrefix, time.Now().UnixNano(), idKey)
+	}
+	return ev
 }
 
 // Pre-registered validators for the platforms the SDK ships with. These are

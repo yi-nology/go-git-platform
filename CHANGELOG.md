@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.83.0] - 2026-10-13
+
+### Changed
+
+设计台账 F13 + F11（`docs/superpowers/specs/2026-10-06-cohesion-patterns-
+refactor-design.md`）:
+
+- **F13 webhook 信封骨架**: 新增 `provider.WebhookEnvelope`——平台方言
+  描述符(EventHeaders 有序头链/IDPrefix)+ `Read`(验签→读体→事件头,错误
+  op 与手写路径逐一对齐)+ `NewEvent`(Source/Timestamp/RawPayload 骨架 +
+  `<prefix>-<nano>-<key>` ID)。6 处接入:gitlab/gitee/gitcode/
+  tencentcode/github + giteafamily 引擎——各平台 ParseWebhookEvent 只留
+  payload 解码与事件分派(平台方言),7 平台 35 个 golden corpus 逐字节通过
+- **F11 错误分类去 reflection**(breaking 面,minor 承载):
+  `provider.RegisterStatusExtractor(platform, fn)`——每后端注册一个基于
+  `errors.As` 的 SDK 错误类型提取器(github 5 类型/gitlab 1/gitee 3/
+  gitcode 7(gotcha:wrapper 无 Unwrap 须逐个断言)/tencentcode 1);
+  Wrap 分类链收敛为 statusCoder 接口 → 平台注册 extractor。
+  **删除** `httpStatusFromError`(reflect 字段/方法扫描)与
+  `parseStatusFromString`(错误消息数字解析)+ 9 码白名单。gitea/forgejo
+  的 SDK 错误不携带 status(平台限制),不注册——其 404 分类经既有的
+  *Response 状态保真路径(statusCoder 快路径)
+
+### Fixed
+
+- provider 单测改写到新契约: 5xx 原因保留经注册 extractor 路径;
+  "错误消息含状态数字不再分类"新增负向回归测试
+
 ## [0.82.0] - 2026-10-13
 
 ### Changed

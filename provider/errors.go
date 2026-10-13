@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
+	"sync"
 	"time"
 )
 
@@ -100,8 +100,10 @@ func Wrap(platform Platform, op string, err error) error {
 		return pe
 	}
 	pe := &ProviderError{Platform: platform, Op: op, Cause: err}
-	// Walk the cause chain looking for an HTTP status code. The check order
-	// prioritizes cheap interface checks before falling back to reflection.
+	// Walk the cause chain looking for an HTTP status code: the statusCoder
+	// interface first (*StatusError, transport.Error), then the platform's
+	// registered StatusExtractor over its SDK error types. Errors with
+	// neither carry no status (classify explicitly at the call site).
 	for cur := err; cur != nil; {
 		// Fast path: anything implementing StatusCode() int. Covers
 		// *StatusError in this package and transport.Error.
@@ -111,9 +113,11 @@ func Wrap(platform Platform, op string, err error) error {
 			copyRateLimitHints(pe, cur)
 			break
 		}
-		// Slow path: reflection-based detection for third-party SDK errors
-		// (StatusCode / *http.Response fields, then message parsing).
-		if code, ok := httpStatusFromError(cur); ok {
+		// Platform extractor: an explicit, type-safe lookup each backend
+		// registers for its SDK's error types (the pre-0.83 reflection over
+		// StatusCode/*http.Response fields and error-message parsing are gone
+		// — see RegisterStatusExtractor).
+		if code, ok := statusExtractorFor(platform, cur); ok {
 			pe.StatusCode = code
 			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(code), err)
 			copyRateLimitHints(pe, cur)
@@ -196,161 +200,50 @@ type statusCoder interface {
 	StatusCode() int
 }
 
-// httpStatusFromError inspects err for an HTTP status code. The lookup order
-// is designed for performance: cheap interface checks first, reflection only
-// as a last resort for third-party SDK errors.
-//
-// Priority order:
-//  1. statusCoder interface (*StatusError, transport.Error)
-//  2. Reflection: StatusCode() method on the concrete type
-//  3. Reflection: StatusCode int field (gitlab client-go ErrorResponse,
-//     transport.Error's field)
-//  4. Reflection: *http.Response field (go-github ErrorResponse)
-//  5. String parsing: "returned NNN", "HTTP NNN", "status NNN" restricted
-//     to classifiableStatuses
-//
-// Backends should prefer WrapStatusError or Wrap/New with explicit status
-// codes over relying on the reflection path.
-func httpStatusFromError(err error) (int, bool) {
-	if err == nil {
-		return 0, false
+// StatusExtractor reports the HTTP status carried by one of a platform's
+// SDK error types. It is called per link of the chain Wrap walks, so the
+// extractor only needs to handle its own error values (the chain walk
+// handles wrapping).
+type StatusExtractor func(err error) (int, bool)
+
+// statusExtractors maps each platform to its SDK error extractor. Written
+// from backend init() (single-goroutine startup), read from Wrap on any
+// goroutine; the RWMutex mirrors the provider registry's discipline.
+var (
+	statusMu         sync.RWMutex
+	statusExtractors = map[Platform]StatusExtractor{}
+)
+
+// RegisterStatusExtractor teaches Wrap how to read the HTTP status out of the
+// named platform's SDK error values — the explicit, type-safe replacement for
+// the old reflection + error-message-parsing fallback. Backends register one
+// extractor at init covering their SDK's error types via errors.As; a nil
+// extractor (or no registration) means the platform's errors carry no status
+// on the error value itself (use WrapStatusError / New at the call site, or
+// thread the *Response status through the port as the family backends do).
+// Panics on duplicate registration (same convention as Register).
+func RegisterStatusExtractor(p Platform, fn StatusExtractor) {
+	if fn == nil {
+		panic("provider: RegisterStatusExtractor with nil extractor")
 	}
-	v := reflect.ValueOf(err)
-	if v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return 0, false
-		}
-		v = v.Elem()
+	statusMu.Lock()
+	defer statusMu.Unlock()
+	if _, dup := statusExtractors[p]; dup {
+		panic("provider: duplicate status extractor for " + string(p))
 	}
-	if !v.IsValid() {
-		return 0, false
-	}
-	// Method first (cheaper than field iteration).
-	if c, ok := statusCodeFromMethod(v); ok {
-		return c, true
-	}
-	// Non-struct error values (e.g. url.EscapeError, a string kind) have no
-	// fields; NumField panics on non-struct kinds, so fall through to
-	// message parsing.
-	if v.Kind() != reflect.Struct {
-		return parseStatusFromString(err.Error())
-	}
-	// Fields.
-	for i := 0; i < v.NumField(); i++ {
-		f := v.Field(i)
-		if !f.CanInterface() {
-			continue
-		}
-		if resp, ok := f.Interface().(*http.Response); ok && resp != nil {
-			return resp.StatusCode, true
-		}
-		// Named "StatusCode" of kind int, treated as a direct status code.
-		name := v.Type().Field(i).Name
-		if name == "StatusCode" {
-			if c, ok := f.Interface().(int); ok && c > 0 {
-				return c, true
-			}
-		}
-	}
-	// Last resort: scan the error message for "returned NNN" or "HTTP NNN".
-	return parseStatusFromString(err.Error())
+	statusExtractors[p] = fn
 }
 
-// statusCodeFromMethod reports the result of calling a value method named
-// "StatusCode" that returns a single int, when v has one.
-func statusCodeFromMethod(v reflect.Value) (int, bool) {
-	m := v.MethodByName("StatusCode")
-	if !m.IsValid() {
+// statusExtractorFor returns the platform's registered extractor's verdict
+// for err.
+func statusExtractorFor(p Platform, err error) (int, bool) {
+	statusMu.RLock()
+	fn := statusExtractors[p]
+	statusMu.RUnlock()
+	if fn == nil {
 		return 0, false
 	}
-	out := m.Call(nil)
-	if len(out) != 1 {
-		return 0, false
-	}
-	c, ok := out[0].Interface().(int)
-	return c, ok
-}
-
-// parseStatusFromString extracts an HTTP status code from an error message.
-// Recognizes the patterns:
-//   - "returned 404"
-//   - "HTTP 404"
-//   - "status 404"
-//
-// There is deliberately no "with " prefix, and only codes in
-// classifiableStatuses are accepted: free-form text such as "merge with 500
-// files" or "merged 200 commits" must not be mistaken for an HTTP status.
-//
-// Returns (0, false) when no status code is found.
-func parseStatusFromString(msg string) (int, bool) {
-	for _, prefix := range []string{"returned ", "HTTP ", "status "} {
-		idx := indexOfCaseInsensitive(msg, prefix)
-		if idx < 0 {
-			continue
-		}
-		rest := msg[idx+len(prefix):]
-		// Read up to 3 consecutive digits.
-		var num int
-		var found bool
-		for i := 0; i < len(rest) && i < 3; i++ {
-			c := rest[i]
-			if c < '0' || c > '9' {
-				break
-			}
-			num = num*10 + int(c-'0')
-			found = true
-		}
-		if found && classifiableStatus(num) {
-			return num, true
-		}
-	}
-	return 0, false
-}
-
-// classifiableStatuses are the only codes trusted when recovered from
-// free-form error text via parseStatusFromString. Codes recovered
-// structurally (statusCoder interface, reflection on fields, *http.Response)
-// are not restricted by this set.
-var classifiableStatuses = map[int]bool{
-	http.StatusUnauthorized:        true, // 401
-	http.StatusForbidden:           true, // 403
-	http.StatusNotFound:            true, // 404
-	http.StatusConflict:            true, // 409
-	http.StatusUnprocessableEntity: true, // 422
-	http.StatusTooManyRequests:     true, // 429
-	http.StatusInternalServerError: true, // 500
-	http.StatusBadGateway:          true, // 502
-	http.StatusServiceUnavailable:  true, // 503
-	http.StatusGatewayTimeout:      true, // 504
-}
-
-func classifiableStatus(code int) bool { return classifiableStatuses[code] }
-
-func indexOfCaseInsensitive(s, sub string) int {
-	if sub == "" {
-		return 0
-	}
-	for i := 0; i+len(sub) <= len(s); i++ {
-		match := true
-		for j := 0; j < len(sub); j++ {
-			a := s[i+j]
-			b := sub[j]
-			if a >= 'A' && a <= 'Z' {
-				a += 32
-			}
-			if b >= 'A' && b <= 'Z' {
-				b += 32
-			}
-			if a != b {
-				match = false
-				break
-			}
-		}
-		if match {
-			return i
-		}
-	}
-	return -1
+	return fn(err)
 }
 
 // ClassifyStatus maps an HTTP status code to a sentinel error. Exposed so
