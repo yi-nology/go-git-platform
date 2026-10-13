@@ -124,14 +124,21 @@ func registerCore(s *mcp.Server, st *state) {
 		if err != nil {
 			return listCRsOut{}, err
 		}
+		// total is nil when the platform reported no authoritative count;
+		// the tool surface renders that as 0 (combined with len(crs) the
+		// model can tell a full page from an unknown total).
+		totalCount := 0
+		if total != nil {
+			totalCount = *total
+		}
 		if len(in.Fields) == 0 {
-			return listCRsOut{Total: total, CRs: crs}, nil
+			return listCRsOut{Total: totalCount, CRs: crs}, nil
 		}
 		trimmed, err := projection.ProjectList(crs, in.Fields...)
 		if err != nil {
 			return listCRsOut{}, err
 		}
-		return listCRsOut{Total: total, Projected: trimmed}, nil
+		return listCRsOut{Total: totalCount, Projected: trimmed}, nil
 	})
 
 	add(s, st, "get_cr", "Get change request", "Fetch one pull/merge request with its full metadata.", false, func(ctx context.Context, in getCRIn) (*provider.ChangeRequest, error) {

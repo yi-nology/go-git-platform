@@ -45,7 +45,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListProjectMergeRequestsOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
@@ -61,11 +61,14 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	mrs, resp, err := p.client.MergeRequests.ListProjectMergeRequests(pidOf(opts.Owner, opts.Repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitLab, "ListCRs", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitLab, "ListCRs", err)
 	}
-	total := len(mrs)
+	// X-Total is authoritative when present; otherwise the count is unknown
+	// (nil), never the page length.
+	var total *int
 	if resp != nil && resp.TotalItems > 0 {
-		total = int(resp.TotalItems)
+		t := int(resp.TotalItems)
+		total = &t
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(mrs))
 	for _, mr := range mrs {

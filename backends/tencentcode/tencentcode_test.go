@@ -152,8 +152,12 @@ func TestListCRs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 2 {
-		t.Errorf("expected total 2, got %d", total)
+	totalVal := 0
+	if total != nil {
+		totalVal = *total
+	}
+	if totalVal != 2 {
+		t.Errorf("expected total 2, got %d", totalVal)
 	}
 	if crs[1].State != provider.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)

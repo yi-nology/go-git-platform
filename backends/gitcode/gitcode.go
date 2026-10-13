@@ -67,7 +67,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitCod
 // MilestoneManager interfaces (see issues.go, search.go, labels.go,
 // reviews.go, milestones.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Issues: true, Search: true, Labels: true, Reviews: true, Milestones: true, CommitStatuses: true, Notifications: true, Reactions: true, BranchProtections: true, Collaborators: true, DeployKeys: true, RepoStats: true}
+	return provider.DeriveCapabilities(p)
 }
 
 // TestConnection implements provider.Provider.

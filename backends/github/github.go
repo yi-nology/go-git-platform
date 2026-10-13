@@ -101,7 +101,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitHub
 // GistManager (gists.go), StarredManager (starred.go), MigrationManager
 // (migrations.go), and ReleaseAssetManager (release_assets.go).
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true, Notifications: true, Reactions: true, BranchProtections: true, Collaborators: true, DeployKeys: true, RepoStats: true, Gists: true, Starred: true, Migrations: true, ReleaseAssets: true}
+	return provider.DeriveCapabilities(p)
 }
 
 // TestConnection implements provider.Provider.

@@ -47,7 +47,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	pid := opts.Owner + "/" + opts.Repo
 	buildOpts := func(page, perPage int) *gongfeng.ListMergeRequestsOptions {
 		listOpts := &gongfeng.ListMergeRequestsOptions{
@@ -72,7 +72,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		}
 		list, r, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(opts.Page, perPage))
 		if err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+			return nil, nil, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
 		}
 		mrs, resp = list, r
 	} else {
@@ -82,7 +82,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 			list, _, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(page, provider.MaxPerPage))
 			return list, err
 		}); err != nil {
-			return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+			return nil, nil, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
 		}
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(mrs))
@@ -90,11 +90,18 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		crs = append(crs, convertMR(mr))
 	}
 	if allPages {
-		// Merged pages carry no single authoritative total; the merged
-		// size is the complete count by construction.
-		return crs, len(crs), nil
+		// Merged pages carry no single platform total; the walk merged every
+		// page, so the merged size IS the complete count by construction.
+		total := len(crs)
+		return crs, &total, nil
 	}
-	return crs, extractTotalCount(resp, len(crs)), nil
+	// The platform's X-Total is authoritative when present; otherwise the
+	// count is unknown (nil) rather than the page length.
+	var total *int
+	if resp != nil && resp.TotalItems > 0 {
+		total = &resp.TotalItems
+	}
+	return crs, total, nil
 }
 
 // MergeCR implements provider.ChangeRequestManager.

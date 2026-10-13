@@ -39,7 +39,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.PullRequestListOptions{
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
@@ -55,17 +55,20 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	prs, resp, err := p.client.PullRequests.List(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "ListCRs", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitHub, "ListCRs", err)
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		crs = append(crs, convertPR(pr))
 	}
-	var total int
+	// GitHub exposes the total only through the Link header's last page;
+	// without it the count is unknown (nil) rather than guessed from the
+	// page length. LastPage*PerPage is an upper-bound approximation of the
+	// platform's own metadata.
+	var total *int
 	if resp != nil && resp.LastPage > 0 {
-		total = resp.LastPage * listOpts.PerPage
-	} else {
-		total = len(crs)
+		t := resp.LastPage * listOpts.PerPage
+		total = &t
 	}
 	return crs, total, nil
 }

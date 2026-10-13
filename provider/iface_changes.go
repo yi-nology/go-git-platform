@@ -9,7 +9,11 @@ import "context"
 type ChangeRequestManager interface {
 	CreateCR(ctx context.Context, opts CreateCROptions) (*ChangeRequest, error)
 	GetCR(ctx context.Context, owner, repo, number string) (*ChangeRequest, error)
-	ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, int, error)
+	// ListCRs lists change requests. total is nil when the platform
+	// provided no authoritative total for the page (an unknown count is
+	// reported as unknown, never as the page length); a non-nil total is
+	// the platform's own metadata (exact or header-derived).
+	ListCRs(ctx context.Context, opts ListCROptions) ([]*ChangeRequest, *int, error)
 	MergeCR(ctx context.Context, owner, repo, number string, opts MergeCROptions) (*ChangeRequest, error)
 	CloseCR(ctx context.Context, owner, repo, number string) (*ChangeRequest, error)
 	ReopenCR(ctx context.Context, owner, repo, number string) (*ChangeRequest, error)

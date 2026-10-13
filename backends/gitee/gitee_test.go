@@ -241,8 +241,12 @@ func TestListCRs_SDKQueryAndTotal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(crs) != 0 || total != 42 {
-		t.Errorf("expected 0 CRs / total 42, got %d/%d", len(crs), total)
+	crTotal := 0
+	if total != nil {
+		crTotal = *total
+	}
+	if len(crs) != 0 || crTotal != 42 {
+		t.Errorf("expected 0 CRs / total 42, got %d/%d", len(crs), crTotal)
 	}
 	if len(got) != 1 || got[0].path != "/api/v5/repos/owner/repo/pulls" {
 		t.Fatalf("unexpected request: %+v", got)

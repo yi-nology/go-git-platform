@@ -88,7 +88,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitea 
 // ReviewManager (see reviews.go), and SearchManager (see search.go)
 // interfaces.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{Labels: true, Issues: true, Reviews: true, Milestones: true, Search: true, CommitStatuses: true, Notifications: true, Reactions: true, BranchProtections: true, Collaborators: true, DeployKeys: true, RepoStats: true}
+	return provider.DeriveCapabilities(p)
 }
 
 // TestConnection implements provider.Provider.

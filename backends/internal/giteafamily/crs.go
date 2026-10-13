@@ -119,7 +119,7 @@ func GetCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) 
 // open/closed vocabulary; when the backend's dialect parameter reports the
 // narrow vocabulary (Forgejo) the engine maps the provider-uniform state
 // onto it, otherwise it passes the provider state through.
-func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	// The family's list endpoint filters by its open/closed vocabulary; both
 	// forks reject unknown values ("opened") by returning ALL pull requests,
@@ -130,16 +130,20 @@ func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROption
 		ListOptions: ListOptions{Page: opts.Page, PageSize: opts.PerPage},
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(f.Platform, "ListCRs", err)
+		return nil, nil, provider.Wrap(f.Platform, "ListCRs", err)
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		crs = append(crs, ConvertPR(pr, f))
 	}
-	if total < len(crs) {
-		total = len(crs)
+	// The family's list endpoints carry the total only in X-Total-Count;
+	// without the header the count is unknown and reported as nil rather
+	// than guessed from the page length.
+	var out *int
+	if total > 0 {
+		out = &total
 	}
-	return crs, total, nil
+	return crs, out, nil
 }
 
 // mapListState normalizes the provider-uniform CR state ("opened"/"closed"/

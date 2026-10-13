@@ -41,7 +41,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitee.PullRequestListOptions{
 		State:   gitee.String(mapCRStateForGitee(opts.State)),
@@ -56,13 +56,18 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	prs, resp, err := p.client.PullRequests.List(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitee, "ListCRs", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitee, "ListCRs", err)
 	}
 	result := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		result = append(result, convertPullRequest(pr))
 	}
-	total := provider.ParseTotalCountHeader(resp.Header, len(result))
+	// X-Total-Count is authoritative when present; without it the count is
+	// unknown (nil) rather than the page length.
+	var total *int
+	if t := provider.ParseTotalCountHeader(resp.Header, 0); t > 0 {
+		total = &t
+	}
 	return result, total, nil
 }
 

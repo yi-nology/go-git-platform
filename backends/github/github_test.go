@@ -140,8 +140,10 @@ func TestListCRs_MergedDetected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if total != 2 {
-		t.Errorf("expected total 2, got %d", total)
+	// The mock sends no Link header, so GitHub reports no last page: the
+	// total is unknown (nil) rather than faked from the page length.
+	if total != nil {
+		t.Errorf("expected nil total (no Link header in mock), got %d", *total)
 	}
 	if crs[1].State != provider.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)

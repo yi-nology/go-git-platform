@@ -37,7 +37,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	state := gitcode.PullRequestStateOpen
 	switch opts.State {
@@ -51,15 +51,16 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		State:       state,
 	})
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListCRs", err)
+		return nil, nil, provider.Wrap(provider.PlatformGitCode, "ListCRs", err)
 	}
 	result := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		result = append(result, convertPullRequest(pr))
 	}
-	// NOTE: The GitCode SDK does not expose total count from the response,
-	// so we fall back to the number of results in this page.
-	return result, len(result), nil
+	// The GitCode SDK exposes no total count from the response, so the total
+	// is reported as unknown (nil) instead of being faked from the page
+	// length.
+	return result, nil, nil
 }
 
 // MergeCR implements provider.ChangeRequestManager.

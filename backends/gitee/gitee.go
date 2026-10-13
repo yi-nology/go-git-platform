@@ -92,18 +92,7 @@ func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee 
 
 // Capabilities implements provider.Provider.
 func (p *Provider) Capabilities() provider.CapabilitySet {
-	return provider.CapabilitySet{
-		Labels:            true,
-		Issues:            true,
-		Milestones:        true,
-		Search:            true,
-		Notifications:     true,
-		BranchProtections: true,
-		Collaborators:     true,
-		DeployKeys:        true,
-		CommitStatuses:    true,
-		RepoStats:         true,
-	}
+	return provider.DeriveCapabilities(p)
 }
 
 // TestConnection implements provider.Provider.

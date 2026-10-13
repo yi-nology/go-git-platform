@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.82.0] - 2026-10-13
+
+### Changed
+
+设计台账 F9 + F12（`docs/superpowers/specs/2026-10-06-cohesion-patterns-
+refactor-design.md`）:
+
+- **F9 能力声明单通道**: 新增 `provider.DeriveCapabilities(p)`——从
+  可选 manager 接口的类型断言派生 CapabilitySet,7 个后端的
+  `Capabilities()` 从手写 12–17 bool 字面量改为一行派生。断言成为能力
+  声明的唯一事实来源,声明与实现的漂移不可能再发生(contracttest 的
+  双向校验保留,防绕过派生手写字面量)
+- **F12 ListCRs total 语义显式化**(breaking,minor 承载):
+  `ListCRs(...) ([]*ChangeRequest, *int, error)`——`total` 为 nil 表示
+  "平台未提供权威总数",非 nil 是平台自身元数据(X-Total-Count/X-Total/
+  Link header 推算)。各后端逐一对齐:gitcode 明确"SDK 无 total"从返回
+  页长改为 nil;tencentcode 全量合并模式保留 &len(合并即全量,构造即
+  精确)、单页模式 header 缺失改 nil;gitee/gitlab/github 的"页长兜底"
+  删除。mcp list_crs 的 DTO 保持 int(nil 渲染为 0)
+
 ## [0.81.0] - 2026-10-13
 
 ### Changed
