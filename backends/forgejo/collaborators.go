@@ -3,64 +3,23 @@ package forgejo
 import (
 	"context"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListCollaborators implements provider.CollaboratorManager. The provider
-// surface carries no pagination parameters, so the full collaborator list
-// is fetched by exhausting the endpoint's pagination (backendutil.AllPages).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// ListCollaborators implements provider.CollaboratorManager.
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	users, err := backendutil.AllPages(func(page int) ([]*forgejo.User, error) {
-		list, _, err := p.client.ListCollaborators(owner, repo, forgejo.ListCollaboratorsOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "ListCollaborators", err)
-	}
-	result := make([]*provider.Collaborator, 0, len(users))
-	for _, u := range users {
-		collab := &provider.Collaborator{
-			ID:       u.ID,
-			Username: u.UserName,
-		}
-		// Fetch permission for each collaborator. Forgejo's ListCollaborators
-		// returns User objects without permission info.
-		perm, _, permErr := p.client.CollaboratorPermission(owner, repo, u.UserName)
-		if permErr == nil && perm != nil {
-			collab.Permission = string(perm.Permission)
-		}
-		result = append(result, collab)
-	}
-	return result, nil
+	return giteafamily.ListCollaborators(ctx, p.family, p.ports, owner, repo)
 }
 
 // AddCollaborator implements provider.CollaboratorManager.
 func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username string, opts provider.AddCollaboratorOptions) error {
-	opt := forgejo.AddCollaboratorOption{}
-	if opts.Permission != "" {
-		perm := forgejo.AccessMode(opts.Permission)
-		opt.Permission = &perm
-	}
-	if _, err := p.client.AddCollaborator(owner, repo, username, opt); err != nil {
-		return provider.Wrap(provider.PlatformForgejo, "AddCollaborator", err)
-	}
-	return nil
+	return giteafamily.AddCollaborator(ctx, p.family, p.ports, owner, repo, username, opts)
 }
 
 // RemoveCollaborator implements provider.CollaboratorManager.
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
-	if _, err := p.client.DeleteCollaborator(owner, repo, username); err != nil {
-		return provider.Wrap(provider.PlatformForgejo, "RemoveCollaborator", err)
-	}
-	return nil
+	return giteafamily.RemoveCollaborator(ctx, p.family, p.ports, owner, repo, username)
 }
 
 var _ provider.CollaboratorManager = (*Provider)(nil)

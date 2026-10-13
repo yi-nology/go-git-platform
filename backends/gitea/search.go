@@ -2,152 +2,26 @@ package gitea
 
 import (
 	"context"
-	"strconv"
 
-	gitea "gitea.dev/sdk"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// This file implements the provider.SearchManager surface over the Gitea
-// SDK. Mappings and registrations (divergence ledger):
-//   - SearchRepos rides the global keyword repo search (/repos/search);
-//     Sort passes through in Gitea's own vocabulary (alpha/created/updated/
-//     size/id) — values from other platforms' vocabularies are ignored
-//     server-side (registered pass-through).
-//   - SearchIssues: without Repo it rides the global keyword issue search
-//     (/repos/issues/search, KeyWord param) restricted to real issues via
-//     the "issues" type filter (the endpoint also matches pull requests).
-//     With Repo set ("owner/repo") it routes to ListRepoIssues — the
-//     server-side repo-scoped listing at /repos/{owner}/{repo}/issues,
-//     which honors the same KeyWord/type/state/pagination parameters —
-//     mirroring the GitLab IssuesByProject routing, so multi-page
-//     repo-scoped results and totals stay exact (no client-side
-//     filtering). State forwards natively.
-//   - SearchUsers rides /users/search.
-//   - The SDK returns no totals (nil). The SDK
-//     takes no per-call context (as with the rest of this backend).
-
 // SearchRepos implements provider.SearchManager.
-//
-// Dual-mode pagination is handled by backendutil.PageList:
-// opts.Page == 0 walks every page (budget-capped, fails loud);
-// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
-	baseOpts := gitea.SearchRepoOptions{
-		Keyword: opts.Query,
-		Sort:    opts.Sort,
-		Order:   opts.Order,
-	}
-	var repos []*gitea.Repository
-	repos, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
-		func(page, perPage int) ([]*gitea.Repository, error) {
-			baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
-			list, _, err := p.client.Repositories.SearchRepos(ctx, baseOpts)
-			return list, err
-		})
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchRepos", err)
-	}
-	out := make([]*provider.SearchRepoResult, 0, len(repos))
-	for _, r := range repos {
-		out = append(out, &provider.SearchRepoResult{
-			FullName:      r.FullName,
-			Description:   r.Description,
-			WebURL:        r.HTMLURL,
-			Stars:         r.Stars,
-			Forks:         r.Forks,
-			DefaultBranch: r.DefaultBranch,
-			Private:       r.Private,
-		})
-	}
-	return out, nil, nil
+	return giteafamily.SearchRepos(ctx, p.family, p.ports, opts)
 }
 
 // SearchIssues implements provider.SearchManager. Repo routes to the
-// server-side repo-scoped listing (ListRepoIssues); without it the global
-// keyword search runs.
-//
-// Dual-mode pagination is handled by backendutil.PageList:
-// opts.Page == 0 walks every page (budget-capped, fails loud);
-// opts.Page > 0 returns exactly that single caller-driven page.
+// family's server-side repo-scoped listing; without it the global keyword
+// issue search runs restricted to real issues via the "issues" type filter.
 func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
-	listOpts := gitea.ListIssueOption{
-		KeyWord: opts.Query,
-		State:   gitea.StateType(opts.State),
-		Type:    gitea.IssueTypeIssue,
-	}
-	var repoOwner, repoName string
-	if opts.Repo != "" {
-		repoOwner, repoName = provider.SplitFullName(opts.Repo)
-		if repoOwner == "" || repoName == "" {
-			return nil, nil, provider.Wrapf(provider.PlatformGitea, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
-		}
-	}
-	fetch := func() ([]*gitea.Issue, error) {
-		if repoName != "" {
-			list, _, err := p.client.Issues.ListRepoIssues(ctx, repoOwner, repoName, listOpts)
-			return list, err
-		}
-		list, _, err := p.client.Issues.ListIssues(ctx, listOpts)
-		return list, err
-	}
-	issues, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
-		func(page, perPage int) ([]*gitea.Issue, error) {
-			listOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
-			return fetch()
-		})
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchIssues", err)
-	}
-	out := make([]*provider.SearchIssueResult, 0, len(issues))
-	for _, i := range issues {
-		labels := make([]string, 0, len(i.Labels))
-		for _, l := range i.Labels {
-			labels = append(labels, l.Name)
-		}
-		out = append(out, &provider.SearchIssueResult{
-			Number:    strconv.FormatInt(i.Index, 10),
-			Title:     i.Title,
-			Body:      i.Body,
-			State:     provider.IssueState(i.State),
-			WebURL:    i.HTMLURL,
-			Labels:    labels,
-			Comments:  i.Comments,
-			CreatedAt: i.Created,
-		})
-	}
-	return out, nil, nil
+	return giteafamily.SearchIssues(ctx, p.family, p.ports, opts)
 }
 
 // SearchUsers implements provider.SearchManager.
-//
-// Dual-mode pagination is handled by backendutil.PageList:
-// opts.Page == 0 walks every page (budget-capped, fails loud);
-// opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
-	baseOpts := gitea.SearchUsersOption{KeyWord: opts.Query}
-	var users []*gitea.User
-	users, err := backendutil.PageList(opts.Page, opts.PerPage, listPageSize,
-		func(page, perPage int) ([]*gitea.User, error) {
-			baseOpts.ListOptions = gitea.ListOptions{Page: page, PageSize: perPage}
-			list, _, err := p.client.Users.SearchUsers(ctx, baseOpts)
-			return list, err
-		})
-	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitea, "SearchUsers", err)
-	}
-	out := make([]*provider.SearchUserResult, 0, len(users))
-	for _, u := range users {
-		out = append(out, &provider.SearchUserResult{
-			Login:     u.UserName,
-			Name:      u.FullName,
-			AvatarURL: u.AvatarURL,
-			WebURL:    u.HTMLURL,
-		})
-	}
-	return out, nil, nil
+	return giteafamily.SearchUsers(ctx, p.family, p.ports, opts)
 }
 
 var _ provider.SearchManager = (*Provider)(nil)

@@ -4,6 +4,35 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.79.0] - 2026-10-06
+
+### Changed
+
+Gitea 家族合并第 2 批（承接 v0.78.0 的 ports & adapters 架构,台账见
+`docs/superpowers/specs/2026-10-06-cohesion-patterns-refactor-design.md`）:
+
+- **7 个能力迁入 `giteafamily` 引擎**: labels(含 name→ID 的 TTL 缓存
+  解析器,issues.go 的 assignee 编辑改共享)、branches、collaborators
+  (含每用户 CollaboratorPermission 回填)、repo_stats(forks/stargazers)、
+  notifications(read/unread/pinned 词表收编,forgejo 侧 `NotifyStatus`
+  映射)、commits(含 CreateCommitStatus/ListCommitStatuses,状态词表统一
+  到 provider 归一化)、search(全局仓库/用户 + repo 内路由 ListRepoIssues)。
+  两后端各 7 个能力文件收为对引擎的一行委托,净删 ~940 行
+- **端口扩展**: `sdkPorts` 增 7 个端口(Label/Branch/Collaborator/RepoStats/
+  Notification/Commit/Search),gitea 直接委托、forgejo 去 ctx + fork 类型
+  逐字段转换(各字段已核验;forgejo 通知词表 `NotifyStatus` 与 gitea
+  `NotificationStatus` 同值不同名,适配器归一)
+- 引擎侧新增 `ListCommitStatuses` + `ListStatuses` 端口方法(commits 能力
+  的双接口覆盖 CommitManager + CommitStatusManager)
+- gitea 适配器从已弃用的 flat `client.Xxx` 收敛到 `Repositories` 服务
+  (staticcheck SA1019)
+
+### Fixed
+
+- 引擎把 `Issue.State` 的 provider 类型对齐(`provider.IssueState`,修正
+  第 1 批遗留的 string 转换)
+- SearchIssueResult 补 Comments/CreatedAt(原实现携带,第 1 批合并遗漏)
+
 ## [0.78.0] - 2026-10-06
 
 ### Changed

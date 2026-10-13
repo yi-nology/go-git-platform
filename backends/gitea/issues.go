@@ -8,6 +8,7 @@ import (
 	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -292,7 +293,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	if err != nil {
 		return err
 	}
-	id, err := p.resolveLabelID(ctx, "RemoveIssueLabel", owner, repo, name)
+	id, err := giteafamily.ResolveLabelID(ctx, p.family, p.ports, p.labelIDs, "RemoveIssueLabel", owner, repo, name)
 	if err != nil {
 		return err
 	}
@@ -302,12 +303,13 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
-// resolveLabelIDs resolves label names to numeric IDs, one list call per
-// name (labels.go owns the single-name resolver).
+// resolveLabelIDs resolves label names to numeric IDs through the family
+// engine's cached resolver (one cached scan per repo, shared with the label
+// manager's update/delete path).
 func (p *Provider) resolveLabelIDs(ctx context.Context, op, owner, repo string, names []string) ([]int64, error) {
 	ids := make([]int64, 0, len(names))
 	for _, name := range names {
-		id, err := p.resolveLabelID(ctx, op, owner, repo, name)
+		id, err := giteafamily.ResolveLabelID(ctx, p.family, p.ports, p.labelIDs, op, owner, repo, name)
 		if err != nil {
 			return nil, err
 		}

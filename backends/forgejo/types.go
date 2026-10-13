@@ -74,34 +74,6 @@ func convertPR(pr *forgejo.PullRequest) *provider.ChangeRequest {
 	}
 }
 
-func convertBranch(b *forgejo.Branch) *provider.PlatformBranch {
-	if b == nil {
-		return nil
-	}
-	return &provider.PlatformBranch{Name: b.Name}
-}
-
-func convertCommit(c *forgejo.Commit) *provider.CommitInfo {
-	if c == nil {
-		return nil
-	}
-	sha := ""
-	if c.CommitMeta != nil {
-		sha = c.CommitMeta.SHA
-	}
-	ci := &provider.CommitInfo{SHA: sha}
-	if c.RepoCommit != nil {
-		ci.Message = c.RepoCommit.Message
-		if c.RepoCommit.Author != nil {
-			ci.Author = &provider.CRUser{Name: c.RepoCommit.Author.Name}
-		}
-	}
-	if c.CommitMeta != nil {
-		ci.CreatedAt = c.CommitMeta.Created
-	}
-	return ci
-}
-
 func convertRelease(r *forgejo.Release) *provider.ReleaseInfo {
 	if r == nil {
 		return nil
