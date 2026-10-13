@@ -2,7 +2,7 @@ module github.com/yi-nology/go-git-platform/mcp
 
 go 1.26.3
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0

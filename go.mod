@@ -2,7 +2,7 @@ module github.com/yi-nology/go-git-platform
 
 go 1.26.3
 
-toolchain go1.26.6
+toolchain go1.26.9
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0

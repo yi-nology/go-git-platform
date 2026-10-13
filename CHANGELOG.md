@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.79.1] - 2026-10-13
+
+### Fixed
+
+- **toolchain 升级 go1.26.6 → go1.26.9**(主模块 + mcp 模块): 修复标准库
+  net/http 的 3 个 HTTP/2 CVE(GO-2026-6617 HPACK encoder race、
+  GO-2026-6613、GO-2026-6612 双倍流量控制退款),CI 的 govulncheck 门禁
+  从红转绿;v0.79.0 的 Release 已发但 CI 腿红,本版为纯构建链修复,
+  无 API 变化
+
 ## [0.79.0] - 2026-10-06
 
 ### Changed
