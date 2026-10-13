@@ -3,97 +3,33 @@ package gitea
 import (
 	"context"
 
-	gitea "gitea.dev/sdk"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListBranchProtections implements provider.BranchProtectionManager. The
-// provider surface carries no pagination parameters and the SDK's
-// ListBranchProtectionsOptions embeds ListOptions, so the full list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
+// ListBranchProtections implements provider.BranchProtectionManager.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	bps, err := backendutil.AllPages(func(page int) ([]*gitea.BranchProtection, error) {
-		list, _, err := p.client.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListBranchProtections", err)
-	}
-	result := make([]*provider.BranchProtection, 0, len(bps))
-	for _, bp := range bps {
-		result = append(result, convertBranchProtection(bp))
-	}
-	return result, nil
+	return giteafamily.ListBranchProtections(ctx, p.family, p.ports, owner, repo)
 }
 
 // GetBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
-	bp, _, err := p.client.Repositories.GetBranchProtection(ctx, owner, repo, branch)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "GetBranchProtection", err)
-	}
-	return convertBranchProtection(bp), nil
+	return giteafamily.GetBranchProtection(ctx, p.family, p.ports, owner, repo, branch)
 }
 
 // CreateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	bp, _, err := p.client.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
-		BranchName:        opts.BranchName,
-		RequiredApprovals: int64(opts.RequiredApprovingReviews),
-		EnableStatusCheck: opts.RequiredStatusChecks,
-		EnablePush:        opts.AllowForcePushes,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "CreateBranchProtection", err)
-	}
-	return convertBranchProtection(bp), nil
+	return giteafamily.CreateBranchProtection(ctx, p.family, p.ports, owner, repo, opts)
 }
 
 // UpdateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	editOpts := gitea.EditBranchProtectionOption{}
-	if opts.RequiredApprovingReviews != nil {
-		v := int64(*opts.RequiredApprovingReviews)
-		editOpts.RequiredApprovals = &v
-	}
-	if opts.RequiredStatusChecks != nil {
-		editOpts.EnableStatusCheck = opts.RequiredStatusChecks
-	}
-	if opts.AllowForcePushes != nil {
-		editOpts.EnablePush = opts.AllowForcePushes
-	}
-	if opts.AllowDeletions != nil {
-		editOpts.BlockOnRejectedReviews = nil // not directly mapped
-	}
-	bp, _, err := p.client.Repositories.EditBranchProtection(ctx, owner, repo, branch, editOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "UpdateBranchProtection", err)
-	}
-	return convertBranchProtection(bp), nil
+	return giteafamily.UpdateBranchProtection(ctx, p.family, p.ports, owner, repo, branch, opts)
 }
 
 // DeleteBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
-	if _, err := p.client.Repositories.DeleteBranchProtection(ctx, owner, repo, branch); err != nil {
-		return provider.Wrap(provider.PlatformGitea, "DeleteBranchProtection", err)
-	}
-	return nil
-}
-
-// convertBranchProtection maps a gitea.BranchProtection to a
-// provider.BranchProtection.
-func convertBranchProtection(bp *gitea.BranchProtection) *provider.BranchProtection {
-	return &provider.BranchProtection{
-		BranchName:               bp.BranchName,
-		RequiredApprovingReviews: int(bp.RequiredApprovals),
-		RequiredStatusChecks:     bp.EnableStatusCheck,
-		AllowForcePushes:         bp.EnablePush,
-		AllowDeletions:           !bp.BlockOnRejectedReviews,
-	}
+	return giteafamily.DeleteBranchProtection(ctx, p.family, p.ports, owner, repo, branch)
 }
 
 var _ provider.BranchProtectionManager = (*Provider)(nil)

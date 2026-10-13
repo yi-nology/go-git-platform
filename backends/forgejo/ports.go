@@ -1048,24 +1048,247 @@ func (s sdkPorts) ListPullRequestCommits(ctx context.Context, owner, repo string
 	return out, err
 }
 
+// --- giteafamily.ReleasePort ---
+
+func (s sdkPorts) ListRepoTags(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyTag, error) {
+	_ = ctx
+	list, _, err := s.c.ListRepoTags(owner, repo, forgejo.ListRepoTagsOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	out := make([]*giteafamily.FamilyTag, 0, len(list))
+	for _, t := range list {
+		ft := &giteafamily.FamilyTag{Name: t.Name}
+		if t.Commit != nil {
+			ft.CommitSHA = t.Commit.SHA
+		}
+		out = append(out, ft)
+	}
+	return out, err
+}
+
+func (s sdkPorts) ListReleases(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyRelease, error) {
+	_ = ctx
+	list, _, err := s.c.ListReleases(owner, repo, forgejo.ListReleasesOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	return familyReleases(list), err
+}
+
+func (s sdkPorts) CreateRelease(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateReleaseOption) (*giteafamily.FamilyRelease, error) {
+	_ = ctx
+	r, _, err := s.c.CreateRelease(owner, repo, forgejo.CreateReleaseOption{
+		TagName:      opt.TagName,
+		Target:       opt.Target,
+		Title:        opt.Title,
+		Note:         opt.Note,
+		IsDraft:      opt.IsDraft,
+		IsPrerelease: opt.IsPrerelease,
+	})
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*giteafamily.FamilyRelease, error) {
+	_ = ctx
+	r, _, err := s.c.GetReleaseByTag(owner, repo, tag)
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) EditRelease(ctx context.Context, owner, repo string, id int64, opt giteafamily.FamilyEditReleaseOption) (*giteafamily.FamilyRelease, error) {
+	_ = ctx
+	r, _, err := s.c.EditRelease(owner, repo, id, forgejo.EditReleaseOption{
+		TagName:      opt.TagName,
+		Title:        opt.Title,
+		Note:         opt.Note,
+		IsDraft:      opt.IsDraft,
+		IsPrerelease: opt.IsPrerelease,
+	})
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) DeleteReleaseByTag(ctx context.Context, owner, repo, tag string) error {
+	_ = ctx
+	_, err := s.c.DeleteReleaseByTag(owner, repo, tag)
+	return err
+}
+
+func (s sdkPorts) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	_ = ctx
+	kind := forgejo.TarGZArchive
+	if format == "zip" {
+		kind = forgejo.ZipArchive
+	}
+	data, _, err := s.c.GetArchive(owner, repo, ref, kind)
+	return data, err
+}
+
+func familyRelease(r *forgejo.Release) *giteafamily.FamilyRelease {
+	if r == nil {
+		return nil
+	}
+	return &giteafamily.FamilyRelease{
+		ID:           r.ID,
+		TagName:      r.TagName,
+		Title:        r.Title,
+		Note:         r.Note,
+		URL:          r.URL,
+		IsDraft:      r.IsDraft,
+		IsPrerelease: r.IsPrerelease,
+		CreatedAt:    r.CreatedAt,
+		PublishedAt:  r.PublishedAt,
+	}
+}
+
+func familyReleases(list []*forgejo.Release) []*giteafamily.FamilyRelease {
+	out := make([]*giteafamily.FamilyRelease, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyRelease(r))
+	}
+	return out
+}
+
+// --- giteafamily.ReactionPort ---
+
+// ListIssueReactions returns the full reaction list in one call: the
+// forgejo endpoint is served unpaginated (the port's contract is "all
+// reactions"; gitea walks its pages internally).
+func (s sdkPorts) ListIssueReactions(ctx context.Context, owner, repo string, index int64) ([]*giteafamily.FamilyReaction, error) {
+	_ = ctx
+	list, _, err := s.c.GetIssueReactions(owner, repo, index)
+	return familyReactions(list), err
+}
+
+func (s sdkPorts) PostIssueReaction(ctx context.Context, owner, repo string, index int64, emoji string) (*giteafamily.FamilyReaction, error) {
+	_ = ctx
+	r, _, err := s.c.PostIssueReaction(owner, repo, index, emoji)
+	return familyReaction(r), err
+}
+
+func (s sdkPorts) DeleteIssueReaction(ctx context.Context, owner, repo string, index int64, content string) error {
+	_ = ctx
+	_, err := s.c.DeleteIssueReaction(owner, repo, index, content)
+	return err
+}
+
+func (s sdkPorts) GetIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*giteafamily.FamilyReaction, error) {
+	_ = ctx
+	list, _, err := s.c.GetIssueCommentReactions(owner, repo, commentID)
+	return familyReactions(list), err
+}
+
+func (s sdkPorts) PostIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*giteafamily.FamilyReaction, error) {
+	_ = ctx
+	r, _, err := s.c.PostIssueCommentReaction(owner, repo, commentID, emoji)
+	return familyReaction(r), err
+}
+
+func (s sdkPorts) DeleteIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, content string) error {
+	_ = ctx
+	_, err := s.c.DeleteIssueCommentReaction(owner, repo, commentID, content)
+	return err
+}
+
+func familyReaction(r *forgejo.Reaction) *giteafamily.FamilyReaction {
+	if r == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyReaction{Reaction: r.Reaction}
+	if r.User != nil {
+		out.UserID = r.User.ID
+		out.Username = r.User.UserName
+	}
+	return out
+}
+
+func familyReactions(list []*forgejo.Reaction) []*giteafamily.FamilyReaction {
+	out := make([]*giteafamily.FamilyReaction, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyReaction(r))
+	}
+	return out
+}
+
+// --- giteafamily.BranchProtectionPort ---
+
+func (s sdkPorts) ListBranchProtections(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyBranchProtection, error) {
+	_ = ctx
+	list, _, err := s.c.ListBranchProtections(owner, repo, forgejo.ListBranchProtectionsOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	out := make([]*giteafamily.FamilyBranchProtection, 0, len(list))
+	for _, bp := range list {
+		out = append(out, familyBranchProtection(bp))
+	}
+	return out, err
+}
+
+func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*giteafamily.FamilyBranchProtection, error) {
+	_ = ctx
+	bp, _, err := s.c.GetBranchProtection(owner, repo, branch)
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
+	_ = ctx
+	bp, _, err := s.c.CreateBranchProtection(owner, repo, forgejo.CreateBranchProtectionOption{
+		BranchName:        opt.BranchName,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
+		EnablePush:        opt.EnablePush,
+	})
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) EditBranchProtection(ctx context.Context, owner, repo, branch string, opt giteafamily.FamilyEditBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
+	_ = ctx
+	bp, _, err := s.c.EditBranchProtection(owner, repo, branch, forgejo.EditBranchProtectionOption{
+		RequiredApprovals:      opt.RequiredApprovals,
+		EnableStatusCheck:      opt.EnableStatusCheck,
+		EnablePush:             opt.EnablePush,
+		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+	})
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
+	_ = ctx
+	_, err := s.c.DeleteBranchProtection(owner, repo, branch)
+	return err
+}
+
+func familyBranchProtection(bp *forgejo.BranchProtection) *giteafamily.FamilyBranchProtection {
+	if bp == nil {
+		return nil
+	}
+	return &giteafamily.FamilyBranchProtection{
+		BranchName:             bp.BranchName,
+		RequiredApprovals:      bp.RequiredApprovals,
+		EnableStatusCheck:      bp.EnableStatusCheck,
+		EnablePush:             bp.EnablePush,
+		BlockOnRejectedReviews: bp.BlockOnRejectedReviews,
+	}
+}
+
 // compile-time anchors: the adapter must keep satisfying every family port.
 var (
-	_ giteafamily.HookPort         = sdkPorts{}
-	_ giteafamily.DeployKeyPort    = sdkPorts{}
-	_ giteafamily.MilestonePort    = sdkPorts{}
-	_ giteafamily.LabelPort        = sdkPorts{}
-	_ giteafamily.BranchPort       = sdkPorts{}
-	_ giteafamily.CollaboratorPort = sdkPorts{}
-	_ giteafamily.RepoStatsPort    = sdkPorts{}
-	_ giteafamily.NotificationPort = sdkPorts{}
-	_ giteafamily.CommitPort       = sdkPorts{}
-	_ giteafamily.SearchPort       = sdkPorts{}
-	_ giteafamily.ReviewPort       = sdkPorts{}
-	_ giteafamily.DiffPort         = sdkPorts{}
-	_ giteafamily.FilePort         = sdkPorts{}
-	_ giteafamily.RepoPort         = sdkPorts{}
-	_ giteafamily.IssuePort        = sdkPorts{}
-	_ giteafamily.PRPort           = sdkPorts{}
+	_ giteafamily.HookPort             = sdkPorts{}
+	_ giteafamily.DeployKeyPort        = sdkPorts{}
+	_ giteafamily.MilestonePort        = sdkPorts{}
+	_ giteafamily.LabelPort            = sdkPorts{}
+	_ giteafamily.BranchPort           = sdkPorts{}
+	_ giteafamily.CollaboratorPort     = sdkPorts{}
+	_ giteafamily.RepoStatsPort        = sdkPorts{}
+	_ giteafamily.NotificationPort     = sdkPorts{}
+	_ giteafamily.CommitPort           = sdkPorts{}
+	_ giteafamily.SearchPort           = sdkPorts{}
+	_ giteafamily.ReviewPort           = sdkPorts{}
+	_ giteafamily.DiffPort             = sdkPorts{}
+	_ giteafamily.FilePort             = sdkPorts{}
+	_ giteafamily.RepoPort             = sdkPorts{}
+	_ giteafamily.IssuePort            = sdkPorts{}
+	_ giteafamily.PRPort               = sdkPorts{}
+	_ giteafamily.ReleasePort          = sdkPorts{}
+	_ giteafamily.ReactionPort         = sdkPorts{}
+	_ giteafamily.BranchProtectionPort = sdkPorts{}
 )
 
 // splitCSV converts a comma-separated filter (the family's issue label

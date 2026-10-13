@@ -156,3 +156,13 @@ Reviewers/Draft 差异经 Family 参数化）、crs、issues。大体量类型
 泛型 `ttlCache[V]`（TTL+LRU+原子计数，含 getOrBuild 双检）、`janitor`
 （start/stop 生命周期，保留 reset-before-done 重启语义）；Manager 收敛为
 key 派生 + 工厂调用 + 委托。公开 API 不变。
+
+---
+
+## v0.81.0 追加:Cluster A 完成
+
+第 4 批(releases/reactions/branch_protection)迁入后,22 个能力文件
+全部委托化,两包归一化差异 4–26 行(注释措辞),真实平台差异只剩
+两端 ports.go。types.go 整体删除(转换器全进引擎 Family 线格式)。
+第 3/4 批新提炼的 Family 方言参数:CRPointersHaveReviewers、
+PRWireHasDraft(reactions 的分页差异不进 Family,收进端口"全量"语义)。

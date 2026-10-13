@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.81.0] - 2026-10-13
+
+### Changed
+
+Gitea 家族合并第 4 批（收尾）——**22 个能力文件全部迁入 `giteafamily`
+引擎,Cluster A 完成**:
+
+- **releases**: tags/releases 全量分页、CreateRelease 的 target_commitish
+  空串=默认分支语义、UpdateRelease 的 id 解析 + title/note 回填
+  (EditReleaseOption 无 omitempty,draft/prerelease 指针透传)、
+  GetArchive 格式映射
+- **reactions**: 端口语义统一为"全量列出"——gitea 适配器内部分页、
+  forgejo 单次不分页,差异完全留在适配器;reactionID=响应 UserID、
+  删除按 content 字符串的 N+1 扫描语义收进引擎;CR/CR-comment 级
+  不支持语义按平台名报告
+- **branch_protection**: 全字段迁移(AllowDeletions↔
+  BlockOnRejectedReviews 逆映射、AllowDeletions 无直接字段时的
+  no-op 语义原样保留)
+- **gitea/forgejo 的 `types.go` 整体删除**: 转换器(convertRepo/convertPR/
+  convertRelease/mapState/parseTotalCount/timeOrZero)全部由引擎的
+  Family 线格式转换取代
+- 两包 22 个能力文件的归一化差异收敛到 4–26 行(注释措辞),真实平台
+  差异只剩两端 ports.go 这一处(设计使然);全仓 go test 通过,覆盖率
+  48.5%,golangci-lint 主模块+mcp 0 issues
+
 ## [0.80.0] - 2026-10-13
 
 ### Changed

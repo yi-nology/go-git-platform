@@ -3,141 +3,43 @@ package gitea
 import (
 	"context"
 
-	gitea "gitea.dev/sdk"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListTags implements provider.ReleaseManager. The provider surface carries
-// no pagination parameters, so the full tag list is fetched by exhausting
-// the endpoint's pagination (backendutil.AllPages).
+// ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, err := backendutil.AllPages(func(page int) ([]*gitea.Tag, error) {
-		list, _, err := p.client.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListTags", err)
-	}
-	result := make([]*provider.TagInfo, 0, len(tags))
-	for _, t := range tags {
-		ti := &provider.TagInfo{Name: t.Name}
-		if t.Commit != nil {
-			ti.Commit = t.Commit.SHA
-		}
-		result = append(result, ti)
-	}
-	return result, nil
+	return giteafamily.ListTags(ctx, p.family, p.ports, owner, repo)
 }
 
-// ListReleases implements provider.ReleaseManager. The provider surface
-// carries no pagination parameters, so the full release list is fetched by
-// exhausting the endpoint's pagination (backendutil.AllPages).
+// ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, err := backendutil.AllPages(func(page int) ([]*gitea.Release, error) {
-		list, _, err := p.client.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListReleases", err)
-	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
-	for _, r := range releases {
-		result = append(result, convertRelease(r))
-	}
-	return result, nil
+	return giteafamily.ListReleases(ctx, p.family, p.ports, owner, repo)
 }
 
-// CreateRelease implements provider.ReleaseManager. Registration:
-// CreateReleaseOption.Target always serializes (target_commitish carries
-// no omitempty), so a Target-less create sends `"target_commitish": ""`,
-// which the server treats as unchanged (the default branch).
+// CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.Releases.CreateRelease(ctx, owner, repo, gitea.CreateReleaseOption{
-		TagName:      opts.TagName,
-		Target:       opts.Target,
-		Title:        opts.Title,
-		Note:         opts.Body,
-		IsDraft:      opts.Draft,
-		IsPrerelease: opts.Prerelease,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "CreateRelease", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.CreateRelease(ctx, p.family, p.ports, owner, repo, opts)
 }
 
-// GetReleaseByTag implements provider.ReleaseManager. Gitea exposes a
-// dedicated tag-addressed endpoint.
+// GetReleaseByTag implements provider.ReleaseManager.
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.Releases.GetReleaseByTag(ctx, owner, repo, tag)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "GetReleaseByTag", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.GetReleaseByTag(ctx, p.family, p.ports, owner, repo, tag)
 }
 
-// UpdateRelease implements provider.ReleaseManager. The edit endpoint is
-// id-addressed, so the tag is resolved through the by-tag endpoint first
-// (exact lookup, no list window). EditReleaseOption's name/note fields are
-// plain strings that would clobber the release when sent empty, so the
-// current values from the resolution fetch backfill every option the caller
-// left nil; draft/prerelease are pointers that pass through untouched.
+// UpdateRelease implements provider.ReleaseManager.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
-	cur, _, err := p.client.Releases.GetReleaseByTag(ctx, owner, repo, tag)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "UpdateRelease", err)
-	}
-	title, note := cur.Title, cur.Note
-	if opts.Name != nil {
-		title = *opts.Name
-	}
-	if opts.Body != nil {
-		note = *opts.Body
-	}
-	r, _, err := p.client.Releases.EditRelease(ctx, owner, repo, cur.ID, gitea.EditReleaseOption{
-		TagName:      tag,
-		Title:        title,
-		Note:         note,
-		IsDraft:      opts.Draft,
-		IsPrerelease: opts.Prerelease,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "UpdateRelease", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.UpdateRelease(ctx, p.family, p.ports, owner, repo, tag, opts)
 }
 
-// DeleteRelease implements provider.ReleaseManager via Gitea's
-// tag-addressed delete (server >= 1.14; the SDK version-gates itself).
-// The release's tag is kept.
+// DeleteRelease implements provider.ReleaseManager.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
-	if _, err := p.client.Releases.DeleteReleaseByTag(ctx, owner, repo, tag); err != nil {
-		return provider.Wrap(provider.PlatformGitea, "DeleteRelease", err)
-	}
-	return nil
+	return giteafamily.DeleteRelease(ctx, p.family, p.ports, owner, repo, tag)
 }
 
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	var (
-		data []byte
-		err  error
-	)
-	if format == "zip" {
-		data, _, err = p.client.Repositories.GetArchive(ctx, owner, repo, ref, gitea.ZipArchive)
-	} else {
-		data, _, err = p.client.Repositories.GetArchive(ctx, owner, repo, ref, gitea.TarGZArchive)
-	}
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "GetArchive", err)
-	}
-	return data, nil
+	return giteafamily.GetArchive(ctx, p.family, p.ports, owner, repo, ref, format)
 }
 
 var _ provider.ReleaseManager = (*Provider)(nil)

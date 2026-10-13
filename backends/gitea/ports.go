@@ -6,6 +6,7 @@ import (
 
 	gitea "gitea.dev/sdk"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -975,24 +976,234 @@ func (s sdkPorts) ListPullRequestCommits(ctx context.Context, owner, repo string
 	return out, err
 }
 
+// --- giteafamily.ReleasePort ---
+
+func (s sdkPorts) ListRepoTags(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyTag, error) {
+	list, _, err := s.c.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{
+		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	out := make([]*giteafamily.FamilyTag, 0, len(list))
+	for _, t := range list {
+		ft := &giteafamily.FamilyTag{Name: t.Name}
+		if t.Commit != nil {
+			ft.CommitSHA = t.Commit.SHA
+		}
+		out = append(out, ft)
+	}
+	return out, err
+}
+
+func (s sdkPorts) ListReleases(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyRelease, error) {
+	list, _, err := s.c.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{
+		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	return familyReleases(list), err
+}
+
+func (s sdkPorts) CreateRelease(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateReleaseOption) (*giteafamily.FamilyRelease, error) {
+	r, _, err := s.c.Releases.CreateRelease(ctx, owner, repo, gitea.CreateReleaseOption{
+		TagName:      opt.TagName,
+		Target:       opt.Target,
+		Title:        opt.Title,
+		Note:         opt.Note,
+		IsDraft:      opt.IsDraft,
+		IsPrerelease: opt.IsPrerelease,
+	})
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*giteafamily.FamilyRelease, error) {
+	r, _, err := s.c.Releases.GetReleaseByTag(ctx, owner, repo, tag)
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) EditRelease(ctx context.Context, owner, repo string, id int64, opt giteafamily.FamilyEditReleaseOption) (*giteafamily.FamilyRelease, error) {
+	r, _, err := s.c.Releases.EditRelease(ctx, owner, repo, id, gitea.EditReleaseOption{
+		TagName:      opt.TagName,
+		Title:        opt.Title,
+		Note:         opt.Note,
+		IsDraft:      opt.IsDraft,
+		IsPrerelease: opt.IsPrerelease,
+	})
+	return familyRelease(r), err
+}
+
+func (s sdkPorts) DeleteReleaseByTag(ctx context.Context, owner, repo, tag string) error {
+	_, err := s.c.Releases.DeleteReleaseByTag(ctx, owner, repo, tag)
+	return err
+}
+
+func (s sdkPorts) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
+	kind := gitea.TarGZArchive
+	if format == "zip" {
+		kind = gitea.ZipArchive
+	}
+	data, _, err := s.c.Repositories.GetArchive(ctx, owner, repo, ref, kind)
+	return data, err
+}
+
+func familyRelease(r *gitea.Release) *giteafamily.FamilyRelease {
+	if r == nil {
+		return nil
+	}
+	return &giteafamily.FamilyRelease{
+		ID:           r.ID,
+		TagName:      r.TagName,
+		Title:        r.Title,
+		Note:         r.Note,
+		URL:          r.URL,
+		IsDraft:      r.IsDraft,
+		IsPrerelease: r.IsPrerelease,
+		CreatedAt:    r.CreatedAt,
+		PublishedAt:  r.PublishedAt,
+	}
+}
+
+func familyReleases(list []*gitea.Release) []*giteafamily.FamilyRelease {
+	out := make([]*giteafamily.FamilyRelease, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyRelease(r))
+	}
+	return out
+}
+
+// --- giteafamily.ReactionPort ---
+
+// ListIssueReactions returns the FULL reaction list by walking the gitea
+// SDK's paginated endpoint (the port's contract is "all reactions"; forgejo
+// serves the same list unpaginated).
+func (s sdkPorts) ListIssueReactions(ctx context.Context, owner, repo string, index int64) ([]*giteafamily.FamilyReaction, error) {
+	list, err := backendutil.AllPages(func(page int) ([]*gitea.Reaction, error) {
+		page1, _, err := s.c.Issues.ListIssueReactions(ctx, owner, repo, index, gitea.ListIssueReactionsOptions{
+			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
+		})
+		return page1, err
+	})
+	return familyReactions(list), err
+}
+
+func (s sdkPorts) PostIssueReaction(ctx context.Context, owner, repo string, index int64, emoji string) (*giteafamily.FamilyReaction, error) {
+	r, _, err := s.c.Issues.PostIssueReaction(ctx, owner, repo, index, emoji)
+	return familyReaction(r), err
+}
+
+func (s sdkPorts) DeleteIssueReaction(ctx context.Context, owner, repo string, index int64, content string) error {
+	_, err := s.c.Issues.DeleteIssueReaction(ctx, owner, repo, index, content)
+	return err
+}
+
+func (s sdkPorts) GetIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*giteafamily.FamilyReaction, error) {
+	list, _, err := s.c.Issues.GetIssueCommentReactions(ctx, owner, repo, commentID)
+	return familyReactions(list), err
+}
+
+func (s sdkPorts) PostIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*giteafamily.FamilyReaction, error) {
+	r, _, err := s.c.Issues.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
+	return familyReaction(r), err
+}
+
+func (s sdkPorts) DeleteIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, content string) error {
+	_, err := s.c.Issues.DeleteIssueCommentReaction(ctx, owner, repo, commentID, content)
+	return err
+}
+
+func familyReaction(r *gitea.Reaction) *giteafamily.FamilyReaction {
+	if r == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyReaction{Reaction: r.Reaction}
+	if r.User != nil {
+		out.UserID = r.User.ID
+		out.Username = r.User.UserName
+	}
+	return out
+}
+
+func familyReactions(list []*gitea.Reaction) []*giteafamily.FamilyReaction {
+	out := make([]*giteafamily.FamilyReaction, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyReaction(r))
+	}
+	return out
+}
+
+// --- giteafamily.BranchProtectionPort ---
+
+func (s sdkPorts) ListBranchProtections(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyBranchProtection, error) {
+	list, _, err := s.c.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{
+		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
+	})
+	out := make([]*giteafamily.FamilyBranchProtection, 0, len(list))
+	for _, bp := range list {
+		out = append(out, familyBranchProtection(bp))
+	}
+	return out, err
+}
+
+func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*giteafamily.FamilyBranchProtection, error) {
+	bp, _, err := s.c.Repositories.GetBranchProtection(ctx, owner, repo, branch)
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
+	bp, _, err := s.c.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
+		BranchName:        opt.BranchName,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
+		EnablePush:        opt.EnablePush,
+	})
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) EditBranchProtection(ctx context.Context, owner, repo, branch string, opt giteafamily.FamilyEditBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
+	bp, _, err := s.c.Repositories.EditBranchProtection(ctx, owner, repo, branch, gitea.EditBranchProtectionOption{
+		RequiredApprovals:      opt.RequiredApprovals,
+		EnableStatusCheck:      opt.EnableStatusCheck,
+		EnablePush:             opt.EnablePush,
+		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+	})
+	return familyBranchProtection(bp), err
+}
+
+func (s sdkPorts) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
+	_, err := s.c.Repositories.DeleteBranchProtection(ctx, owner, repo, branch)
+	return err
+}
+
+func familyBranchProtection(bp *gitea.BranchProtection) *giteafamily.FamilyBranchProtection {
+	if bp == nil {
+		return nil
+	}
+	return &giteafamily.FamilyBranchProtection{
+		BranchName:             bp.BranchName,
+		RequiredApprovals:      bp.RequiredApprovals,
+		EnableStatusCheck:      bp.EnableStatusCheck,
+		EnablePush:             bp.EnablePush,
+		BlockOnRejectedReviews: bp.BlockOnRejectedReviews,
+	}
+}
+
 // compile-time anchors: the adapter must keep satisfying every family port.
 var (
-	_ giteafamily.HookPort         = sdkPorts{}
-	_ giteafamily.DeployKeyPort    = sdkPorts{}
-	_ giteafamily.MilestonePort    = sdkPorts{}
-	_ giteafamily.LabelPort        = sdkPorts{}
-	_ giteafamily.BranchPort       = sdkPorts{}
-	_ giteafamily.CollaboratorPort = sdkPorts{}
-	_ giteafamily.RepoStatsPort    = sdkPorts{}
-	_ giteafamily.NotificationPort = sdkPorts{}
-	_ giteafamily.CommitPort       = sdkPorts{}
-	_ giteafamily.SearchPort       = sdkPorts{}
-	_ giteafamily.ReviewPort       = sdkPorts{}
-	_ giteafamily.DiffPort         = sdkPorts{}
-	_ giteafamily.FilePort         = sdkPorts{}
-	_ giteafamily.RepoPort         = sdkPorts{}
-	_ giteafamily.IssuePort        = sdkPorts{}
-	_ giteafamily.PRPort           = sdkPorts{}
+	_ giteafamily.HookPort             = sdkPorts{}
+	_ giteafamily.DeployKeyPort        = sdkPorts{}
+	_ giteafamily.MilestonePort        = sdkPorts{}
+	_ giteafamily.LabelPort            = sdkPorts{}
+	_ giteafamily.BranchPort           = sdkPorts{}
+	_ giteafamily.CollaboratorPort     = sdkPorts{}
+	_ giteafamily.RepoStatsPort        = sdkPorts{}
+	_ giteafamily.NotificationPort     = sdkPorts{}
+	_ giteafamily.CommitPort           = sdkPorts{}
+	_ giteafamily.SearchPort           = sdkPorts{}
+	_ giteafamily.ReviewPort           = sdkPorts{}
+	_ giteafamily.DiffPort             = sdkPorts{}
+	_ giteafamily.FilePort             = sdkPorts{}
+	_ giteafamily.RepoPort             = sdkPorts{}
+	_ giteafamily.IssuePort            = sdkPorts{}
+	_ giteafamily.PRPort               = sdkPorts{}
+	_ giteafamily.ReleasePort          = sdkPorts{}
+	_ giteafamily.ReactionPort         = sdkPorts{}
+	_ giteafamily.BranchProtectionPort = sdkPorts{}
 )
 
 // splitCSV converts a comma-separated filter (the family's issue label

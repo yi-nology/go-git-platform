@@ -3,147 +3,43 @@ package forgejo
 import (
 	"context"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListTags implements provider.ReleaseManager. The provider surface carries
-// no pagination parameters, so the full tag list is fetched by exhausting
-// the endpoint's pagination (backendutil.AllPages).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// ListTags implements provider.ReleaseManager.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
-	tags, err := backendutil.AllPages(func(page int) ([]*forgejo.Tag, error) {
-		list, _, err := p.client.ListRepoTags(owner, repo, forgejo.ListRepoTagsOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "ListTags", err)
-	}
-	result := make([]*provider.TagInfo, 0, len(tags))
-	for _, t := range tags {
-		ti := &provider.TagInfo{Name: t.Name}
-		if t.Commit != nil {
-			ti.Commit = t.Commit.SHA
-		}
-		result = append(result, ti)
-	}
-	return result, nil
+	return giteafamily.ListTags(ctx, p.family, p.ports, owner, repo)
 }
 
-// ListReleases implements provider.ReleaseManager. The provider surface
-// carries no pagination parameters, so the full release list is fetched by
-// exhausting the endpoint's pagination (backendutil.AllPages).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// ListReleases implements provider.ReleaseManager.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, err := backendutil.AllPages(func(page int) ([]*forgejo.Release, error) {
-		list, _, err := p.client.ListReleases(owner, repo, forgejo.ListReleasesOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "ListReleases", err)
-	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
-	for _, r := range releases {
-		result = append(result, convertRelease(r))
-	}
-	return result, nil
+	return giteafamily.ListReleases(ctx, p.family, p.ports, owner, repo)
 }
 
-// CreateRelease implements provider.ReleaseManager. Registration:
-// CreateReleaseOption.Target always serializes (target_commitish carries
-// no omitempty), so a Target-less create sends `"target_commitish": ""`,
-// which the server treats as unchanged (the default branch).
+// CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.CreateRelease(owner, repo, forgejo.CreateReleaseOption{
-		TagName:      opts.TagName,
-		Target:       opts.Target,
-		Title:        opts.Title,
-		Note:         opts.Body,
-		IsDraft:      opts.Draft,
-		IsPrerelease: opts.Prerelease,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "CreateRelease", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.CreateRelease(ctx, p.family, p.ports, owner, repo, opts)
 }
 
-// GetReleaseByTag implements provider.ReleaseManager. Forgejo exposes a
-// dedicated tag-addressed endpoint.
+// GetReleaseByTag implements provider.ReleaseManager.
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.GetReleaseByTag(owner, repo, tag)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "GetReleaseByTag", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.GetReleaseByTag(ctx, p.family, p.ports, owner, repo, tag)
 }
 
-// UpdateRelease implements provider.ReleaseManager. The edit endpoint is
-// id-addressed, so the tag is resolved through the by-tag endpoint first
-// (exact lookup, no list window). EditReleaseOption's name/note fields are
-// plain strings that would clobber the release when sent empty, so the
-// current values from the resolution fetch backfill every option the caller
-// left nil; draft/prerelease are pointers that pass through untouched.
+// UpdateRelease implements provider.ReleaseManager.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
-	cur, _, err := p.client.GetReleaseByTag(owner, repo, tag)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateRelease", err)
-	}
-	title, note := cur.Title, cur.Note
-	if opts.Name != nil {
-		title = *opts.Name
-	}
-	if opts.Body != nil {
-		note = *opts.Body
-	}
-	r, _, err := p.client.EditRelease(owner, repo, cur.ID, forgejo.EditReleaseOption{
-		TagName:      tag,
-		Title:        title,
-		Note:         note,
-		IsDraft:      opts.Draft,
-		IsPrerelease: opts.Prerelease,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "UpdateRelease", err)
-	}
-	return convertRelease(r), nil
+	return giteafamily.UpdateRelease(ctx, p.family, p.ports, owner, repo, tag, opts)
 }
 
-// DeleteRelease implements provider.ReleaseManager via Forgejo's
-// tag-addressed delete (the SDK version-gates itself against the server).
-// The release's tag is kept.
+// DeleteRelease implements provider.ReleaseManager.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
-	if _, err := p.client.DeleteReleaseByTag(owner, repo, tag); err != nil {
-		return provider.Wrap(provider.PlatformForgejo, "DeleteRelease", err)
-	}
-	return nil
+	return giteafamily.DeleteRelease(ctx, p.family, p.ports, owner, repo, tag)
 }
 
 // GetArchive implements provider.ReleaseManager.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	var (
-		data []byte
-		err  error
-	)
-	if format == "zip" {
-		data, _, err = p.client.GetArchive(owner, repo, ref, forgejo.ZipArchive)
-	} else {
-		data, _, err = p.client.GetArchive(owner, repo, ref, forgejo.TarGZArchive)
-	}
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "GetArchive", err)
-	}
-	return data, nil
+	return giteafamily.GetArchive(ctx, p.family, p.ports, owner, repo, ref, format)
 }
 
 var _ provider.ReleaseManager = (*Provider)(nil)
