@@ -1,86 +1,10 @@
 package gitea
 
 import (
-	"strconv"
-	"time"
-
 	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
-
-func convertRepo(r *gitea.Repository) *provider.PlatformRepo {
-	if r == nil {
-		return nil
-	}
-	owner := ""
-	if r.Owner != nil {
-		owner = r.Owner.UserName
-	}
-	return &provider.PlatformRepo{
-		ID:            r.ID,
-		FullName:      r.FullName,
-		Name:          r.Name,
-		Owner:         owner,
-		Description:   r.Description,
-		CloneURL:      r.CloneURL,
-		SSHURL:        r.SSHURL,
-		DefaultBranch: r.DefaultBranch,
-		Private:       r.Private,
-		Archived:      r.Archived,
-		Fork:          r.Fork,
-		Stars:         r.Stars,
-		Language:      r.Language,
-		Platform:      provider.PlatformGitea,
-	}
-}
-
-func convertPR(pr *gitea.PullRequest) *provider.ChangeRequest {
-	if pr == nil {
-		return nil
-	}
-	var author *provider.CRUser
-	if pr.Poster != nil {
-		author = &provider.CRUser{ID: pr.Poster.ID, Username: pr.Poster.UserName, AvatarURL: pr.Poster.AvatarURL}
-	}
-	var labels []string
-	for _, l := range pr.Labels {
-		if l != nil {
-			labels = append(labels, l.Name)
-		}
-	}
-	var reviewers []*provider.CRUser
-	for _, r := range pr.RequestedReviewers {
-		if r != nil {
-			reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
-		}
-	}
-	var assignees []*provider.CRUser
-	for _, a := range pr.Assignees {
-		if a != nil {
-			assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.UserName, AvatarURL: a.AvatarURL})
-		}
-	}
-	return &provider.ChangeRequest{
-		ID:           pr.ID,
-		Number:       strconv.FormatInt(pr.Index, 10),
-		Title:        pr.Title,
-		Description:  pr.Body,
-		State:        mapState(string(pr.State), pr.HasMerged),
-		Draft:        pr.Draft,
-		SourceBranch: pr.Head.Ref,
-		TargetBranch: pr.Base.Ref,
-		HeadSHA:      pr.Head.Sha,
-		BaseSHA:      pr.Base.Sha,
-		Author:       author,
-		Assignees:    assignees,
-		Reviewers:    reviewers,
-		Labels:       labels,
-		WebURL:       pr.HTMLURL,
-		CreatedAt:    timeOrZero(pr.Created),
-		UpdatedAt:    timeOrZero(pr.Updated),
-	}
-}
 
 func convertRelease(r *gitea.Release) *provider.ReleaseInfo {
 	if r == nil {
@@ -99,21 +23,4 @@ func convertRelease(r *gitea.Release) *provider.ReleaseInfo {
 	}
 }
 
-func timeOrZero(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return *t
-}
-
-func mapState(state string, merged bool) provider.CRState {
-	return provider.MapBoolStateToCR(state, merged)
-}
-
 // parseTotalCount extracts the X-Total-Count header from a gitea response.
-func parseTotalCount(resp *gitea.Response) int {
-	if resp == nil {
-		return 0
-	}
-	return provider.ParseTotalCountHeader(resp.Header, 0)
-}

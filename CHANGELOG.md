@@ -4,6 +4,39 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.80.0] - 2026-10-13
+
+### Changed
+
+Gitea 家族合并第 3 批（承接 v0.78.0 架构,台账见
+`docs/superpowers/specs/2026-10-06-cohesion-patterns-refactor-design.md`）:
+
+- **4 能力迁入 `giteafamily` 引擎**: reviews(GitHub 事件词表→家族 review
+  状态词汇映射,行号 side 语义收编)、diffs(GetCRDiff 的 raw diff + 文件
+  分解 + 总数聚合,DeleteNote 的 404 容忍)、files(GetFile 的 404 经
+  *Response 状态保真,FileResult 的 commit SHA)、repos(ListRepos 的
+  owner 过滤分歧、GetRepo 的 404 保真、CreateRepo 的 user/org 分流、
+  ForkRepo、DeleteRepo、UpdateRepo)。两后端各 4 文件收为一行委托
+- **issues 完整迁入**(含 title-backfill——家族 EditIssueOption 无
+  omitempty,标题回填经一次 GET;labels/assignees 经共享 TTL 缓存解析;
+  comments 全量分页;close/reopen 状态归一)
+- **crs.go + types.go 收敛**: `PullRequest` 线格式逐字段核验(两 fork 同
+  构字段 30+,gitea 独有 RequestedReviewers/RequestedReviewersTeams/
+  Draft/ReviewComments 四个),引擎按 Family 方言参数
+  `CRPointersHaveReviewers`/`PRWireHasDraft` 取活子集;forgejo 侧
+  convertPR 的 Reviewers 回填 Assignees、Draft 恒 false 原样保留;
+  `mapListState` 归一化统一(forgejo 原透传 "opened" 是历史 bug,一并修)
+- 引擎新增 PRPort(含 ListPullRequestCommits)、IssuePort(含 comments)、
+  DiffPort(含 comment 创建/删除)、ReviewPort、FilePort、RepoPort;
+  Family 线格式 PullRequest/FamilyComment/FamilyChangedFile/
+  FamilyFileResult 等自持
+- 净删 ~2100 行、增 ~1130 行;gitea/forgejo 两包从 ~6.4k 行降到 ~1.3k 行
+
+### Fixed
+
+- forgejo 的 `ListCRs` 状态过滤修正(原透传 "opened" 触发家族"未知值返
+  回全部"行为,现与 gitea 一致归一到 open/closed)
+
 ## [0.79.3] - 2026-10-13
 
 ### Fixed

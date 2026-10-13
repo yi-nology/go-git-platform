@@ -325,16 +325,8 @@ type SearchRepoOptions struct {
 	Order       string
 }
 
-// ListIssueOption mirrors the family's issue list filters (the subset the
-// search engine uses).
-type ListIssueOption struct {
-	ListOptions ListOptions
-	KeyWord     string
-	State       string
-	// Type "issues" restricts the global issue search to real issues (the
-	// endpoint also matches pull requests).
-	Type string
-}
+// (FamilyIssueListOption in issues.go is the full issue-list filter; the
+// search port shares it so IssuePort and SearchPort stay interchangeable.)
 
 // Issue is the slice of the family's issue object the engine consumes.
 type Issue struct {
@@ -364,8 +356,8 @@ type MilestoneRef struct {
 // SDK returns no totals (nil), matching the provider's *int-nil contract.
 type SearchPort interface {
 	SearchRepos(ctx context.Context, opt SearchRepoOptions) ([]*Repo, error)
-	ListIssues(ctx context.Context, opt ListIssueOption) ([]*Issue, error)
-	ListRepoIssues(ctx context.Context, owner, repo string, opt ListIssueOption) ([]*Issue, error)
+	ListIssues(ctx context.Context, opt FamilyIssueListOption) ([]*Issue, error)
+	ListRepoIssues(ctx context.Context, owner, repo string, opt FamilyIssueListOption) ([]*Issue, error)
 	SearchUsers(ctx context.Context, opt SearchUserOptions) ([]*User, error)
 }
 
@@ -418,7 +410,7 @@ func SearchRepos(ctx context.Context, f Family, c SearchPort, opts provider.Sear
 // issue search runs restricted to real issues via the "issues" type filter.
 // Dual-mode pagination via backendutil.PageList.
 func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
-	listOpts := ListIssueOption{
+	listOpts := FamilyIssueListOption{
 		KeyWord: opts.Query,
 		State:   opts.State,
 		Type:    "issues",

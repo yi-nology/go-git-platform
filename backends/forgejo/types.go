@@ -1,78 +1,10 @@
 package forgejo
 
 import (
-	"strconv"
-	"time"
-
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
-
-func convertRepo(r *forgejo.Repository) *provider.PlatformRepo {
-	if r == nil {
-		return nil
-	}
-	owner := ""
-	if r.Owner != nil {
-		owner = r.Owner.UserName
-	}
-	return &provider.PlatformRepo{
-		ID:            r.ID,
-		FullName:      r.FullName,
-		Name:          r.Name,
-		Owner:         owner,
-		Description:   r.Description,
-		CloneURL:      r.CloneURL,
-		SSHURL:        r.SSHURL,
-		DefaultBranch: r.DefaultBranch,
-		Private:       r.Private,
-		Archived:      r.Archived,
-		Fork:          r.Fork,
-		Stars:         r.Stars,
-		Platform:      provider.PlatformForgejo,
-	}
-}
-
-func convertPR(pr *forgejo.PullRequest) *provider.ChangeRequest {
-	if pr == nil {
-		return nil
-	}
-	var author *provider.CRUser
-	if pr.Poster != nil {
-		author = &provider.CRUser{ID: pr.Poster.ID, Username: pr.Poster.UserName, AvatarURL: pr.Poster.AvatarURL}
-	}
-	var labels []string
-	for _, l := range pr.Labels {
-		if l != nil {
-			labels = append(labels, l.Name)
-		}
-	}
-	var assignees []*provider.CRUser
-	for _, r := range pr.Assignees {
-		if r != nil {
-			assignees = append(assignees, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
-		}
-	}
-	return &provider.ChangeRequest{
-		ID:           pr.ID,
-		Number:       strconv.FormatInt(pr.Index, 10),
-		Title:        pr.Title,
-		Description:  pr.Body,
-		State:        mapState(string(pr.State), pr.HasMerged),
-		SourceBranch: pr.Head.Ref,
-		TargetBranch: pr.Base.Ref,
-		HeadSHA:      pr.Head.Sha,
-		BaseSHA:      pr.Base.Sha,
-		Author:       author,
-		Assignees:    assignees,
-		Reviewers:    assignees, // Forgejo has no separate RequestedReviewers
-		Labels:       labels,
-		WebURL:       pr.HTMLURL,
-		CreatedAt:    timeOrZero(pr.Created),
-		UpdatedAt:    timeOrZero(pr.Updated),
-	}
-}
 
 func convertRelease(r *forgejo.Release) *provider.ReleaseInfo {
 	if r == nil {
@@ -91,21 +23,4 @@ func convertRelease(r *forgejo.Release) *provider.ReleaseInfo {
 	}
 }
 
-func timeOrZero(t *time.Time) time.Time {
-	if t == nil {
-		return time.Time{}
-	}
-	return *t
-}
-
-func mapState(state string, merged bool) provider.CRState {
-	return provider.MapBoolStateToCR(state, merged)
-}
-
 // parseTotalCount extracts the X-Total-Count header from a forgejo response.
-func parseTotalCount(resp *forgejo.Response) int {
-	if resp == nil {
-		return 0
-	}
-	return provider.ParseTotalCountHeader(resp.Header, 0)
-}

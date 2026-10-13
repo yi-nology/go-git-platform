@@ -2,131 +2,39 @@ package gitea
 
 import (
 	"context"
-	"strings"
 
-	gitea "gitea.dev/sdk"
-
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListRepos implements provider.RepoManager.
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	if opts.Owner != "" {
-		results, _, err := p.client.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
-			ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
-		})
-		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitea, "ListRepos", err)
-		}
-		filtered := make([]*provider.PlatformRepo, 0)
-		for _, r := range results {
-			pr := convertRepo(r)
-			if strings.EqualFold(pr.Owner, opts.Owner) {
-				filtered = append(filtered, pr)
-			}
-		}
-		return filtered, nil
-	}
-	repos, _, err := p.client.Repositories.ListMyRepos(ctx, gitea.ListReposOptions{
-		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListRepos", err)
-	}
-	result := make([]*provider.PlatformRepo, 0, len(repos))
-	for _, r := range repos {
-		result = append(result, convertRepo(r))
-	}
-	return result, nil
+	return giteafamily.ListRepos(ctx, p.family, p.ports, opts)
 }
 
 // GetRepo implements provider.RepoManager.
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
-	r, resp, err := p.client.Repositories.GetRepo(ctx, owner, repo)
-	if err != nil {
-		// Gitea's error type does not carry the HTTP status; preserve it
-		// from the *Response so provider.IsNotFound works.
-		if resp != nil && resp.Response != nil {
-			err = provider.Wrap(provider.PlatformGitea, "GetRepo",
-				provider.New(provider.PlatformGitea, "GetRepo", resp.Response.StatusCode, err.Error()))
-		} else {
-			err = provider.Wrap(provider.PlatformGitea, "GetRepo", err)
-		}
-		return nil, err
-	}
-	return convertRepo(r), nil
+	return giteafamily.GetRepo(ctx, p.family, p.ports, owner, repo)
 }
 
 // CreateRepo implements provider.RepoManager.
 func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
-	createOpts := gitea.CreateRepoOption{
-		Name:        opts.Name,
-		Description: opts.Description,
-		Private:     opts.Private,
-		AutoInit:    opts.AutoInit,
-	}
-	if opts.DefaultBranch != "" {
-		createOpts.DefaultBranch = opts.DefaultBranch
-	}
-	var r *gitea.Repository
-	var err error
-	if owner != "" {
-		r, _, err = p.client.Repositories.CreateOrgRepo(ctx, owner, createOpts)
-	} else {
-		r, _, err = p.client.Repositories.CreateRepo(ctx, createOpts)
-	}
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "CreateRepo", err)
-	}
-	return convertRepo(r), nil
-}
-
-// ForkRepo implements provider.RepoManager.
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
-	forkOpts := gitea.CreateForkOption{}
-	if opts.Organization != "" {
-		forkOpts.Organization = &opts.Organization
-	}
-	if opts.Name != "" {
-		forkOpts.Name = &opts.Name
-	}
-	r, _, err := p.client.Repositories.CreateFork(ctx, owner, repo, forkOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ForkRepo", err)
-	}
-	return convertRepo(r), nil
+	return giteafamily.CreateRepo(ctx, p.family, p.ports, owner, opts)
 }
 
 // DeleteRepo implements provider.RepoManager.
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
-	_, err := p.client.Repositories.DeleteRepo(ctx, owner, repo)
-	if err != nil {
-		return provider.Wrap(provider.PlatformGitea, "DeleteRepo", err)
-	}
-	return nil
+	return giteafamily.DeleteRepo(ctx, p.family, p.ports, owner, repo)
 }
 
 // UpdateRepo implements provider.RepoManager.
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
-	editOpts := gitea.EditRepoOption{}
-	if opts.Name != "" {
-		editOpts.Name = &opts.Name
-	}
-	if opts.Description != "" {
-		editOpts.Description = &opts.Description
-	}
-	if opts.DefaultBranch != "" {
-		editOpts.DefaultBranch = &opts.DefaultBranch
-	}
-	if opts.Private != nil {
-		editOpts.Private = opts.Private
-	}
-	r, _, err := p.client.Repositories.EditRepo(ctx, owner, repo, editOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "UpdateRepo", err)
-	}
-	return convertRepo(r), nil
+	return giteafamily.UpdateRepo(ctx, p.family, p.ports, owner, repo, opts)
+}
+
+// ForkRepo implements provider.RepoManager.
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+	return giteafamily.ForkRepo(ctx, p.family, p.ports, owner, repo, opts)
 }
 
 var _ provider.RepoManager = (*Provider)(nil)

@@ -32,7 +32,10 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// Family carries the per-platform bits of one Gitea-family backend.
+// Family carries the per-platform bits of one Gitea-family backend, plus the
+// behavioral dialect parameters for the places the family's forks genuinely
+// diverge. Fields must be set by the backend constructor; the engine reads
+// them, never branches on the platform name.
 type Family struct {
 	// Platform identifies the backend (provider.PlatformGitea / Forgejo).
 	Platform provider.Platform
@@ -44,6 +47,18 @@ type Family struct {
 	EventHeader string
 	// PageSize is the per-page size for paginated family list fetches.
 	PageSize int
+
+	// --- behavioral dialect parameters (real differences observed across
+	// the family; kept declarative here so the engine never branches on the
+	// platform name) ---
+
+	// CRPointersHaveReviewers reports whether the PR wire type exposes a
+	// RequestedReviewers list distinct from Assignees. Gitea does; Forgejo
+	// (older fork) folds them into Assignees.
+	CRPointersHaveReviewers bool
+	// PRWireHasDraft reports whether the PR wire type carries a Draft flag.
+	// Gitea does; Forgejo does not (Draft is always false).
+	PRWireHasDraft bool
 }
 
 // --- family wire types (the engine's only vocabulary) ---

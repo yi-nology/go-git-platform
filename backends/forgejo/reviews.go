@@ -2,194 +2,34 @@ package forgejo
 
 import (
 	"context"
-	"strconv"
-	"strings"
 
-	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListReviews implements provider.ReviewManager. The provider surface
-// carries no pagination parameters, so the full review list is fetched by
-// exhausting the endpoint's pagination (backendutil.AllPages).
-//
-// The forgejo SDK accepts no context parameter (registered platform
-// limitation), so ctx is unused beyond signature conformance.
+// ListReviews implements provider.ReviewManager.
 func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "ListReviews", number)
-	if err != nil {
-		return nil, err
-	}
-	reviews, err := backendutil.AllPages(func(page int) ([]*forgejo.PullReview, error) {
-		list, _, err := p.client.ListPullReviews(owner, repo, index, forgejo.ListPullReviewsOptions{
-			ListOptions: forgejo.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "ListReviews", err)
-	}
-	result := make([]provider.Review, 0, len(reviews))
-	for _, r := range reviews {
-		result = append(result, convertReview(r))
-	}
-	return result, nil
+	return giteafamily.ListReviews(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // GetReview implements provider.ReviewManager.
 func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "GetReview", number)
-	if err != nil {
-		return nil, err
-	}
-	review, _, err := p.client.GetPullReview(owner, repo, index, reviewID)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "GetReview", err)
-	}
-	r := convertReview(review)
-	return &r, nil
+	return giteafamily.GetReview(ctx, p.family, p.ports, owner, repo, number, reviewID)
 }
 
-// CreateReview implements provider.ReviewManager. It moved here from
-// DiffManager; the change request number is now addressed as a string.
-//
-// Forgejo's CreatePullReviewOptions carries the verdict under the event JSON
-// key (the SDK's State field), and the server finalizes the review on
-// create, so a single POST is enough — SubmitPullReview only exists for
-// pending-draft workflows and would needlessly double the round trips (and
-// its pending create path rejects empty-body, comment-less reviews that the
-// direct submit accepts). The event mapping follows CreateReviewOptions's
-// GitHub-style values: APPROVE and REQUEST_CHANGES map to the forgejo states
-// of the same names; anything else (COMMENT included) becomes COMMENT.
+// CreateReview implements provider.ReviewManager.
 func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "CreateReview", number)
-	if err != nil {
-		return nil, err
-	}
-	reviewOpts := forgejo.CreatePullReviewOptions{
-		CommitID: opts.CommitID,
-		Body:     opts.Body,
-	}
-	switch opts.Event {
-	case "APPROVE":
-		reviewOpts.State = forgejo.ReviewStateApproved
-	case "REQUEST_CHANGES":
-		reviewOpts.State = forgejo.ReviewStateRequestChanges
-	default:
-		reviewOpts.State = forgejo.ReviewStateComment
-	}
-
-	for _, c := range opts.Comments {
-		rc := forgejo.CreatePullReviewComment{Path: c.Path, Body: c.Body}
-		if c.Side == "LEFT" {
-			rc.OldLineNum = int64(c.Line)
-		} else {
-			rc.NewLineNum = int64(c.Line)
-		}
-		if c.StartLine > 0 && c.EndLine > c.StartLine {
-			if c.Side == "LEFT" {
-				rc.OldLineNum = int64(c.StartLine)
-			} else {
-				rc.NewLineNum = int64(c.StartLine)
-			}
-		}
-		reviewOpts.Comments = append(reviewOpts.Comments, rc)
-	}
-
-	review, _, err := p.client.CreatePullReview(owner, repo, index, reviewOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformForgejo, "CreateReview", err)
-	}
-	return convertReviewResult(review), nil
+	return giteafamily.CreateReview(ctx, p.family, p.ports, owner, repo, number, opts)
 }
 
-// RequestReviewers implements provider.ReviewManager via
-// CreateReviewRequests, which posts the reviewer logins under the same
-// "reviewers" wire key as GitHub.
+// RequestReviewers implements provider.ReviewManager.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "RequestReviewers", number)
-	if err != nil {
-		return err
-	}
-	if _, err := p.client.CreateReviewRequests(owner, repo, index, forgejo.PullReviewRequestOptions{
-		Reviewers: reviewers,
-	}); err != nil {
-		return provider.Wrap(provider.PlatformForgejo, "RequestReviewers", err)
-	}
-	return nil
+	return giteafamily.RequestReviewers(ctx, p.family, p.ports, owner, repo, number, reviewers)
 }
 
-// DismissReview implements provider.ReviewManager via DismissPullReview
-// (POST .../reviews/{id}/dismissals with the dismissal message).
+// DismissReview implements provider.ReviewManager.
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	index, err := backendutil.ParsePRNumber64(provider.PlatformForgejo, "DismissReview", number)
-	if err != nil {
-		return err
-	}
-	if _, err := p.client.DismissPullReview(owner, repo, index, reviewID, forgejo.DismissPullReviewOptions{
-		Message: message,
-	}); err != nil {
-		return provider.Wrap(provider.PlatformForgejo, "DismissReview", err)
-	}
-	return nil
-}
-
-// convertReview maps a forgejo PullReview to a provider.Review, normalizing
-// the UPPERCASE wire states to the SDK's lowercase ReviewState constants.
-// Forgejo's REQUEST_REVIEW state has no provider constant (it is a review
-// request rather than a submitted verdict) and passes through lowercased
-// rather than being silently dropped, matching the GitHub backend.
-func convertReview(r *forgejo.PullReview) provider.Review {
-	var review provider.Review
-	if r == nil {
-		return review
-	}
-	review = provider.Review{
-		ID:   r.ID,
-		Body: r.Body,
-	}
-	if r.Reviewer != nil {
-		review.User = r.Reviewer.UserName
-	}
-	switch r.State {
-	case forgejo.ReviewStateApproved:
-		review.State = provider.ReviewStateApproved
-	case forgejo.ReviewStateRequestChanges:
-		review.State = provider.ReviewStateChangesRequested
-	case forgejo.ReviewStateComment:
-		review.State = provider.ReviewStateCommented
-	case forgejo.ReviewStatePending:
-		review.State = provider.ReviewStatePending
-	default:
-		if s := string(r.State); s != "" {
-			review.State = provider.ReviewState(strings.ToLower(s))
-		}
-	}
-	if !r.Submitted.IsZero() {
-		review.SubmittedAt = r.Submitted
-	}
-	return review
-}
-
-// convertReviewResult maps a forgejo PullReview to a provider.ReviewResult.
-func convertReviewResult(r *forgejo.PullReview) *provider.ReviewResult {
-	if r == nil {
-		return nil
-	}
-	result := &provider.ReviewResult{
-		ID:      strconv.FormatInt(r.ID, 10),
-		HTMLURL: r.HTMLURL,
-	}
-	if r.Reviewer != nil {
-		result.User = &provider.CRUser{
-			ID:        r.Reviewer.ID,
-			Username:  r.Reviewer.UserName,
-			AvatarURL: r.Reviewer.AvatarURL,
-		}
-	}
-	return result
+	return giteafamily.DismissReview(ctx, p.family, p.ports, owner, repo, number, reviewID, message)
 }
 
 var _ provider.ReviewManager = (*Provider)(nil)

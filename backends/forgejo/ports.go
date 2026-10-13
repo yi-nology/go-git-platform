@@ -2,10 +2,12 @@ package forgejo
 
 import (
 	"context"
+	"strings"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // forgejoDivergences is the Forgejo view of the family divergence ledger.
@@ -503,26 +505,16 @@ func familyCommit(c *forgejo.Commit) *giteafamily.Commit {
 
 // --- giteafamily.SearchPort ---
 
-func (s sdkPorts) SearchRepos(ctx context.Context, opt giteafamily.SearchRepoOptions) ([]*giteafamily.Repo, error) {
+func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
 	_ = ctx
-	list, _, err := s.c.SearchRepos(forgejo.SearchRepoOptions{
+	list, _, err := s.c.ListIssues(forgejo.ListIssueOption{
 		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
-		Keyword:     opt.Keyword,
-		Sort:        opt.Sort,
-		Order:       opt.Order,
+		KeyWord:     opt.KeyWord,
+		State:       forgejo.StateType(opt.State),
+		AssignedBy:  opt.Assignee,
+		Labels:      splitCSV(opt.Labels),
+		Type:        forgejo.IssueType(opt.Type),
 	})
-	return familyRepos(list), err
-}
-
-func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.ListIssueOption) ([]*giteafamily.Issue, error) {
-	_ = ctx
-	list, _, err := s.c.ListIssues(forgejoIssueListOpt(opt))
-	return familyIssues(list), err
-}
-
-func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt giteafamily.ListIssueOption) ([]*giteafamily.Issue, error) {
-	_ = ctx
-	list, _, err := s.c.ListRepoIssues(owner, repo, forgejoIssueListOpt(opt))
 	return familyIssues(list), err
 }
 
@@ -533,15 +525,6 @@ func (s sdkPorts) SearchUsers(ctx context.Context, opt giteafamily.SearchUserOpt
 		KeyWord:     opt.Keyword,
 	})
 	return familyUsers(list), err
-}
-
-func forgejoIssueListOpt(opt giteafamily.ListIssueOption) forgejo.ListIssueOption {
-	return forgejo.ListIssueOption{
-		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
-		KeyWord:     opt.KeyWord,
-		State:       forgejo.StateType(opt.State),
-		Type:        forgejo.IssueType(opt.Type),
-	}
 }
 
 func familyIssue(i *forgejo.Issue) *giteafamily.Issue {
@@ -595,6 +578,476 @@ func (s sdkPorts) ListStatuses(ctx context.Context, owner, repo, sha string, opt
 	return out, err
 }
 
+// --- giteafamily.ReviewPort ---
+
+func (s sdkPorts) ListPullReviews(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullReviewsOptions) ([]*giteafamily.PullReview, error) {
+	_ = ctx
+	list, _, err := s.c.ListPullReviews(owner, repo, index, forgejo.ListPullReviewsOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.PullReview, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyReview(r))
+	}
+	return out, err
+}
+
+func (s sdkPorts) GetPullReview(ctx context.Context, owner, repo string, index, reviewID int64) (*giteafamily.PullReview, error) {
+	_ = ctx
+	r, _, err := s.c.GetPullReview(owner, repo, index, reviewID)
+	return familyReview(r), err
+}
+
+func (s sdkPorts) CreatePullReview(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreatePullReviewOption) (*giteafamily.PullReview, error) {
+	_ = ctx
+	rc := forgejo.CreatePullReviewOptions{
+		State:    forgejo.ReviewStateType(opt.State),
+		Body:     opt.Body,
+		CommitID: opt.CommitID,
+	}
+	for _, c := range opt.Comments {
+		rc.Comments = append(rc.Comments, forgejo.CreatePullReviewComment{
+			Path:       c.Path,
+			Body:       c.Body,
+			OldLineNum: c.OldLineNum,
+			NewLineNum: c.NewLineNum,
+		})
+	}
+	r, _, err := s.c.CreatePullReview(owner, repo, index, rc)
+	return familyReview(r), err
+}
+
+func (s sdkPorts) CreateReviewRequests(ctx context.Context, owner, repo string, index int64, opt giteafamily.PullReviewRequestOptions) error {
+	_ = ctx
+	_, err := s.c.CreateReviewRequests(owner, repo, index, forgejo.PullReviewRequestOptions{Reviewers: opt.Reviewers})
+	return err
+}
+
+func (s sdkPorts) DismissPullReview(ctx context.Context, owner, repo string, index, reviewID int64, opt giteafamily.DismissPullReviewOptions) error {
+	_ = ctx
+	_, err := s.c.DismissPullReview(owner, repo, index, reviewID, forgejo.DismissPullReviewOptions{Message: opt.Message})
+	return err
+}
+
+func familyReview(r *forgejo.PullReview) *giteafamily.PullReview {
+	if r == nil {
+		return nil
+	}
+	out := &giteafamily.PullReview{
+		ID:          r.ID,
+		State:       string(r.State),
+		Body:        r.Body,
+		HTMLURL:     r.HTMLURL,
+		SubmittedAt: r.Submitted,
+	}
+	if r.Reviewer != nil {
+		out.Reviewer = familyUser(r.Reviewer)
+	}
+	return out
+}
+
+// --- giteafamily.DiffPort ---
+
+func (s sdkPorts) GetPullRequestDiff(ctx context.Context, owner, repo string, index int64) ([]byte, error) {
+	_ = ctx
+	data, _, err := s.c.GetPullRequestDiff(owner, repo, index, forgejo.PullRequestDiffOptions{})
+	return data, err
+}
+
+func (s sdkPorts) ListPullRequestFiles(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullRequestFilesOptions) ([]*giteafamily.FamilyChangedFile, error) {
+	_ = ctx
+	list, _, err := s.c.ListPullRequestFiles(owner, repo, index, forgejo.ListPullRequestFilesOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyChangedFile, 0, len(list))
+	for _, cf := range list {
+		out = append(out, familyChangedFile(cf))
+	}
+	return out, err
+}
+
+func (s sdkPorts) CreateIssueComment(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreateIssueCommentOption) (*giteafamily.FamilyComment, int, error) {
+	_ = ctx
+	c, resp, err := s.c.CreateIssueComment(owner, repo, index, forgejo.CreateIssueCommentOption{Body: opt.Body})
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyComment(c), status, err
+}
+
+func (s sdkPorts) DeleteIssueComment(ctx context.Context, owner, repo string, id int64) (int, error) {
+	_ = ctx
+	resp, err := s.c.DeleteIssueComment(owner, repo, id)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return status, err
+}
+
+func familyChangedFile(cf *forgejo.ChangedFile) *giteafamily.FamilyChangedFile {
+	if cf == nil {
+		return nil
+	}
+	return &giteafamily.FamilyChangedFile{
+		Filename:         cf.Filename,
+		PreviousFilename: cf.PreviousFilename,
+		Status:           cf.Status,
+		Additions:        cf.Additions,
+		Deletions:        cf.Deletions,
+	}
+}
+
+func familyComment(c *forgejo.Comment) *giteafamily.FamilyComment {
+	if c == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyComment{ID: c.ID, Body: c.Body, CreatedAt: c.Created, UpdatedAt: c.Updated}
+	if c.Poster != nil {
+		out.Poster = familyUser(c.Poster)
+	}
+	return out
+}
+
+// --- giteafamily.FilePort ---
+
+func (s sdkPorts) GetFile(ctx context.Context, owner, repo, ref, path string) ([]byte, int, error) {
+	_ = ctx
+	data, resp, err := s.c.GetFile(owner, repo, ref, path)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return data, status, err
+}
+
+func (s sdkPorts) CreateFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, error) {
+	_ = ctx
+	resp, _, err := s.c.CreateFile(owner, repo, path, forgejo.CreateFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		Content:     opt.Content,
+	})
+	return familyFileResult(resp, err)
+}
+
+func (s sdkPorts) UpdateFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, error) {
+	_ = ctx
+	resp, _, err := s.c.UpdateFile(owner, repo, path, forgejo.UpdateFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		SHA:         opt.SHA,
+		Content:     opt.Content,
+	})
+	return familyFileResult(resp, err)
+}
+
+func (s sdkPorts) DeleteFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, int, error) {
+	_ = ctx
+	resp, err := s.c.DeleteFile(owner, repo, path, forgejo.DeleteFileOptions{
+		FileOptions: forgejo.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		SHA:         opt.SHA,
+	})
+	status := 0
+	sha := ""
+	if resp != nil {
+		if resp.Response != nil {
+			status = resp.Response.StatusCode
+		}
+		sha = resp.Header.Get("X-Commit-Sha")
+	}
+	return &giteafamily.FamilyFileResult{CommitSHA: sha}, status, err
+}
+
+func familyFileResult(resp *forgejo.FileResponse, err error) (*giteafamily.FamilyFileResult, error) {
+	sha := ""
+	if resp != nil && resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &giteafamily.FamilyFileResult{CommitSHA: sha}, err
+}
+
+// --- giteafamily.RepoPort ---
+
+func (s sdkPorts) SearchRepos(ctx context.Context, opt giteafamily.SearchRepoOptions) ([]*giteafamily.Repo, error) {
+	_ = ctx
+	list, _, err := s.c.SearchRepos(forgejo.SearchRepoOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+		Keyword:     opt.Keyword,
+		Sort:        opt.Sort,
+		Order:       opt.Order,
+	})
+	return familyRepos(list), err
+}
+
+func (s sdkPorts) ListMyRepos(ctx context.Context, opt giteafamily.FamilyListReposOptions) ([]*giteafamily.Repo, error) {
+	_ = ctx
+	list, _, err := s.c.ListMyRepos(forgejo.ListReposOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	return familyRepos(list), err
+}
+
+func (s sdkPorts) GetRepo(ctx context.Context, owner, repo string) (*giteafamily.Repo, int, error) {
+	_ = ctx
+	r, resp, err := s.c.GetRepo(owner, repo)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyRepo(r), status, err
+}
+
+func (s sdkPorts) CreateRepo(ctx context.Context, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
+	_ = ctx
+	r, _, err := s.c.CreateRepo(forgejo.CreateRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		Private:       opt.Private,
+		AutoInit:      opt.AutoInit,
+		DefaultBranch: opt.DefaultBranch,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) CreateOrgRepo(ctx context.Context, org string, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
+	_ = ctx
+	r, _, err := s.c.CreateOrgRepo(org, forgejo.CreateRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		Private:       opt.Private,
+		AutoInit:      opt.AutoInit,
+		DefaultBranch: opt.DefaultBranch,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) CreateFork(ctx context.Context, owner, repo string, opt giteafamily.FamilyForkRepoOption) (*giteafamily.Repo, error) {
+	_ = ctx
+	r, _, err := s.c.CreateFork(owner, repo, forgejo.CreateForkOption{
+		Organization: opt.Organization,
+		Name:         opt.Name,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_ = ctx
+	_, err := s.c.DeleteRepo(owner, repo)
+	return err
+}
+
+func (s sdkPorts) EditRepo(ctx context.Context, owner, repo string, opt giteafamily.FamilyEditRepoOption) (*giteafamily.Repo, error) {
+	_ = ctx
+	r, _, err := s.c.EditRepo(owner, repo, forgejo.EditRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		DefaultBranch: opt.DefaultBranch,
+		Private:       opt.Private,
+	})
+	return familyRepo(r), err
+}
+
+// --- giteafamily.IssuePort ---
+
+func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
+	_ = ctx // forgejo SDK takes no context
+	list, _, err := s.c.ListRepoIssues(owner, repo, forgejo.ListIssueOption{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+		KeyWord:     opt.KeyWord,
+		State:       forgejo.StateType(opt.State),
+		AssignedBy:  opt.Assignee,
+		Labels:      splitCSV(opt.Labels),
+		Type:        forgejo.IssueType(opt.Type),
+	})
+	return familyIssues(list), err
+}
+
+func (s sdkPorts) GetIssue(ctx context.Context, owner, repo string, index int64) (*giteafamily.Issue, error) {
+	_ = ctx // forgejo SDK takes no context
+	i, _, err := s.c.GetIssue(owner, repo, index)
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) CreateIssue(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateIssueOption) (*giteafamily.Issue, error) {
+	_ = ctx // forgejo SDK takes no context
+	i, _, err := s.c.CreateIssue(owner, repo, forgejo.CreateIssueOption{
+		Title:     opt.Title,
+		Body:      opt.Body,
+		Assignees: opt.Assignees,
+		Milestone: opt.Milestone,
+		Labels:    opt.Labels,
+	})
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) EditIssue(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyEditIssueOption) (*giteafamily.Issue, error) {
+	_ = ctx // forgejo SDK takes no context
+	edit := forgejo.EditIssueOption{Title: opt.Title}
+	if opt.Body != nil {
+		edit.Body = opt.Body
+	}
+	if opt.State != nil {
+		st := forgejo.StateType(*opt.State)
+		edit.State = &st
+	}
+	edit.Assignees = opt.Assignees
+	if opt.Milestone != nil {
+		edit.Milestone = opt.Milestone
+	}
+	i, _, err := s.c.EditIssue(owner, repo, index, edit)
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) ReplaceIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
+	_ = ctx // forgejo SDK takes no context
+	_, _, err := s.c.ReplaceIssueLabels(owner, repo, index, forgejo.IssueLabelsOption{Labels: opt.Labels})
+	return err
+}
+
+func (s sdkPorts) AddIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
+	_ = ctx // forgejo SDK takes no context
+	_, _, err := s.c.AddIssueLabels(owner, repo, index, forgejo.IssueLabelsOption{Labels: opt.Labels})
+	return err
+}
+
+func (s sdkPorts) DeleteIssueLabel(ctx context.Context, owner, repo string, index, labelID int64) error {
+	_ = ctx // forgejo SDK takes no context
+	_, err := s.c.DeleteIssueLabel(owner, repo, index, labelID)
+	return err
+}
+
+func (s sdkPorts) ListIssueComments(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListIssueCommentsOptions) ([]*giteafamily.FamilyComment, error) {
+	_ = ctx // forgejo SDK takes no context
+	list, _, err := s.c.ListIssueComments(owner, repo, index, forgejo.ListIssueCommentOptions{
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyComment, 0, len(list))
+	for _, c := range list {
+		out = append(out, familyComment(c))
+	}
+	return out, err
+}
+
+func (s sdkPorts) EditIssueComment(ctx context.Context, owner, repo string, commentID int64, opt giteafamily.EditIssueCommentOption) (*giteafamily.FamilyComment, error) {
+	_ = ctx // forgejo SDK takes no context
+	c, _, err := s.c.EditIssueComment(owner, repo, commentID, forgejo.EditIssueCommentOption{Body: opt.Body})
+	return familyComment(c), err
+}
+
+// --- giteafamily.PRPort ---
+
+func (s sdkPorts) CreatePullRequest(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreatePullRequestOption) (*giteafamily.FamilyPullRequest, error) {
+	_ = ctx
+	pr, _, err := s.c.CreatePullRequest(owner, repo, forgejo.CreatePullRequestOption{
+		Head:  opt.Head,
+		Base:  opt.Base,
+		Title: opt.Title,
+		Body:  opt.Body,
+	})
+	return familyPR(pr), err
+}
+
+func (s sdkPorts) GetPullRequest(ctx context.Context, owner, repo string, index int64) (*giteafamily.FamilyPullRequest, error) {
+	_ = ctx
+	pr, _, err := s.c.GetPullRequest(owner, repo, index)
+	return familyPR(pr), err
+}
+
+func (s sdkPorts) ListPullRequests(ctx context.Context, owner, repo string, opt giteafamily.FamilyListPullRequestsOptions) ([]*giteafamily.FamilyPullRequest, int, error) {
+	_ = ctx
+	prs, resp, err := s.c.ListRepoPullRequests(owner, repo, forgejo.ListPullRequestsOptions{
+		State:       forgejo.StateType(opt.State),
+		ListOptions: forgejo.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyPullRequest, 0, len(prs))
+	for _, pr := range prs {
+		out = append(out, familyPR(pr))
+	}
+	total := 0
+	if resp != nil {
+		total = provider.ParseTotalCountHeader(resp.Header, 0)
+	}
+	return out, total, err
+}
+
+func (s sdkPorts) MergePullRequest(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyMergePullRequestOption) (int, error) {
+	_ = ctx
+	_, resp, err := s.c.MergePullRequest(owner, repo, index, forgejo.MergePullRequestOption{
+		Style:                  forgejo.MergeStyle(opt.Style),
+		Title:                  opt.Title,
+		DeleteBranchAfterMerge: opt.DeleteBranchAfterMerge != nil && *opt.DeleteBranchAfterMerge,
+	})
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return status, err
+}
+
+func (s sdkPorts) EditPullRequest(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyEditPullRequestOption) (*giteafamily.FamilyPullRequest, error) {
+	_ = ctx
+	edit := forgejo.EditPullRequestOption{
+		Title: opt.Title,
+		Body:  opt.Body,
+		Base:  opt.Base,
+	}
+	if opt.State != nil {
+		st := forgejo.StateType(*opt.State)
+		edit.State = &st
+	}
+	pr, _, err := s.c.EditPullRequest(owner, repo, index, edit)
+	return familyPR(pr), err
+}
+
+// familyPR is the field-by-field projection of the SDK's PullRequest onto
+// the engine's wire shape. Forgejo (older fork) has no RequestedReviewers
+// or Draft on the wire; the dialect parameters pick the live subset.
+func familyPR(pr *forgejo.PullRequest) *giteafamily.FamilyPullRequest {
+	if pr == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyPullRequest{
+		ID:        pr.ID,
+		Index:     pr.Index,
+		Title:     pr.Title,
+		Body:      pr.Body,
+		State:     string(pr.State),
+		HTMLURL:   pr.HTMLURL,
+		HasMerged: pr.HasMerged,
+		Merged:    pr.Merged,
+		MergeBase: pr.MergeBase,
+		Created:   pr.Created,
+		Updated:   pr.Updated,
+		Closed:    pr.Closed,
+	}
+	if pr.Poster != nil {
+		out.Poster = familyUser(pr.Poster)
+	}
+	for _, l := range pr.Labels {
+		out.Labels = append(out.Labels, familyLabel(l))
+	}
+	for _, a := range pr.Assignees {
+		out.Assignees = append(out.Assignees, familyUser(a))
+	}
+	if pr.Head != nil {
+		out.Head = &giteafamily.FamilyPRBranchInfo{Ref: pr.Head.Ref, Sha: pr.Head.Sha}
+	}
+	if pr.Base != nil {
+		out.Base = &giteafamily.FamilyPRBranchInfo{Ref: pr.Base.Ref, Sha: pr.Base.Sha}
+	}
+	return out
+}
+
+func (s sdkPorts) ListPullRequestCommits(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListOptions) ([]*giteafamily.Commit, error) {
+	_ = ctx // forgejo SDK takes no context
+	list, _, err := s.c.ListPullRequestCommits(owner, repo, index, forgejo.ListPullRequestCommitsOptions{ListOptions: forgejo.ListOptions{Page: opt.Page, PageSize: opt.PageSize}})
+	out := make([]*giteafamily.Commit, 0, len(list))
+	for _, c := range list {
+		out = append(out, familyCommit(c))
+	}
+	return out, err
+}
+
 // compile-time anchors: the adapter must keep satisfying every family port.
 var (
 	_ giteafamily.HookPort         = sdkPorts{}
@@ -607,4 +1060,25 @@ var (
 	_ giteafamily.NotificationPort = sdkPorts{}
 	_ giteafamily.CommitPort       = sdkPorts{}
 	_ giteafamily.SearchPort       = sdkPorts{}
+	_ giteafamily.ReviewPort       = sdkPorts{}
+	_ giteafamily.DiffPort         = sdkPorts{}
+	_ giteafamily.FilePort         = sdkPorts{}
+	_ giteafamily.RepoPort         = sdkPorts{}
+	_ giteafamily.IssuePort        = sdkPorts{}
+	_ giteafamily.PRPort           = sdkPorts{}
 )
+
+// splitCSV converts a comma-separated filter (the family's issue label
+// vocabulary) to a slice; empty input yields nil.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	out := []string{}
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

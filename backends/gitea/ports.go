@@ -2,10 +2,12 @@ package gitea
 
 import (
 	"context"
+	"strings"
 
 	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // giteafamilyDivergences is the Gitea view of the family divergence ledger.
@@ -465,23 +467,15 @@ func familyCommit(c *gitea.Commit) *giteafamily.Commit {
 
 // --- giteafamily.SearchPort ---
 
-func (s sdkPorts) SearchRepos(ctx context.Context, opt giteafamily.SearchRepoOptions) ([]*giteafamily.Repo, error) {
-	list, _, err := s.c.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
+func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
+	list, _, err := s.c.Issues.ListIssues(ctx, gitea.ListIssueOption{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
-		Keyword:     opt.Keyword,
-		Sort:        opt.Sort,
-		Order:       opt.Order,
+		KeyWord:     opt.KeyWord,
+		State:       gitea.StateType(opt.State),
+		AssignedBy:  opt.Assignee,
+		Labels:      splitCSV(opt.Labels),
+		Type:        gitea.IssueType(opt.Type),
 	})
-	return familyRepos(list), err
-}
-
-func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.ListIssueOption) ([]*giteafamily.Issue, error) {
-	list, _, err := s.c.Issues.ListIssues(ctx, giteaIssueListOpt(opt))
-	return familyIssues(list), err
-}
-
-func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt giteafamily.ListIssueOption) ([]*giteafamily.Issue, error) {
-	list, _, err := s.c.Issues.ListRepoIssues(ctx, owner, repo, giteaIssueListOpt(opt))
 	return familyIssues(list), err
 }
 
@@ -491,15 +485,6 @@ func (s sdkPorts) SearchUsers(ctx context.Context, opt giteafamily.SearchUserOpt
 		KeyWord:     opt.Keyword,
 	})
 	return familyUsers(list), err
-}
-
-func giteaIssueListOpt(opt giteafamily.ListIssueOption) gitea.ListIssueOption {
-	return gitea.ListIssueOption{
-		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
-		KeyWord:     opt.KeyWord,
-		State:       gitea.StateType(opt.State),
-		Type:        gitea.IssueType(opt.Type),
-	}
 }
 
 func familyIssue(i *gitea.Issue) *giteafamily.Issue {
@@ -552,6 +537,444 @@ func (s sdkPorts) ListStatuses(ctx context.Context, owner, repo, sha string, opt
 	return out, err
 }
 
+// --- giteafamily.ReviewPort ---
+
+func (s sdkPorts) ListPullReviews(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullReviewsOptions) ([]*giteafamily.PullReview, error) {
+	list, _, err := s.c.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.PullReview, 0, len(list))
+	for _, r := range list {
+		out = append(out, familyReview(r))
+	}
+	return out, err
+}
+
+func (s sdkPorts) GetPullReview(ctx context.Context, owner, repo string, index, reviewID int64) (*giteafamily.PullReview, error) {
+	r, _, err := s.c.PullRequests.GetPullReview(ctx, owner, repo, index, reviewID)
+	return familyReview(r), err
+}
+
+func (s sdkPorts) CreatePullReview(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreatePullReviewOption) (*giteafamily.PullReview, error) {
+	rc := gitea.CreatePullReviewOptions{
+		State:    gitea.ReviewStateType(opt.State),
+		Body:     opt.Body,
+		CommitID: opt.CommitID,
+	}
+	for _, c := range opt.Comments {
+		rc.Comments = append(rc.Comments, gitea.CreatePullReviewComment{
+			Path:       c.Path,
+			Body:       c.Body,
+			OldLineNum: c.OldLineNum,
+			NewLineNum: c.NewLineNum,
+		})
+	}
+	r, _, err := s.c.PullRequests.CreatePullReview(ctx, owner, repo, index, rc)
+	return familyReview(r), err
+}
+
+func (s sdkPorts) CreateReviewRequests(ctx context.Context, owner, repo string, index int64, opt giteafamily.PullReviewRequestOptions) error {
+	_, err := s.c.PullRequests.CreateReviewRequests(ctx, owner, repo, index, gitea.PullReviewRequestOptions{Reviewers: opt.Reviewers})
+	return err
+}
+
+func (s sdkPorts) DismissPullReview(ctx context.Context, owner, repo string, index, reviewID int64, opt giteafamily.DismissPullReviewOptions) error {
+	_, err := s.c.PullRequests.DismissPullReview(ctx, owner, repo, index, reviewID, gitea.DismissPullReviewOptions{Message: opt.Message})
+	return err
+}
+
+func familyReview(r *gitea.PullReview) *giteafamily.PullReview {
+	if r == nil {
+		return nil
+	}
+	out := &giteafamily.PullReview{
+		ID:          r.ID,
+		State:       string(r.State),
+		Body:        r.Body,
+		HTMLURL:     r.HTMLURL,
+		SubmittedAt: r.Submitted,
+	}
+	if r.Reviewer != nil {
+		out.Reviewer = familyUser(r.Reviewer)
+	}
+	return out
+}
+
+// --- giteafamily.DiffPort ---
+
+func (s sdkPorts) GetPullRequestDiff(ctx context.Context, owner, repo string, index int64) ([]byte, error) {
+	data, _, err := s.c.PullRequests.GetPullRequestDiff(ctx, owner, repo, index, gitea.PullRequestDiffOptions{})
+	return data, err
+}
+
+func (s sdkPorts) ListPullRequestFiles(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullRequestFilesOptions) ([]*giteafamily.FamilyChangedFile, error) {
+	list, _, err := s.c.PullRequests.ListPullRequestFiles(ctx, owner, repo, index, gitea.ListPullRequestFilesOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyChangedFile, 0, len(list))
+	for _, cf := range list {
+		out = append(out, familyChangedFile(cf))
+	}
+	return out, err
+}
+
+func (s sdkPorts) CreateIssueComment(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreateIssueCommentOption) (*giteafamily.FamilyComment, int, error) {
+	c, resp, err := s.c.Issues.CreateIssueComment(ctx, owner, repo, index, gitea.CreateIssueCommentOption{Body: opt.Body})
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyComment(c), status, err
+}
+
+func (s sdkPorts) DeleteIssueComment(ctx context.Context, owner, repo string, id int64) (int, error) {
+	resp, err := s.c.Issues.DeleteIssueComment(ctx, owner, repo, id)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return status, err
+}
+
+func familyChangedFile(cf *gitea.ChangedFile) *giteafamily.FamilyChangedFile {
+	if cf == nil {
+		return nil
+	}
+	return &giteafamily.FamilyChangedFile{
+		Filename:         cf.Filename,
+		PreviousFilename: cf.PreviousFilename,
+		Status:           cf.Status,
+		Additions:        cf.Additions,
+		Deletions:        cf.Deletions,
+	}
+}
+
+func familyComment(c *gitea.Comment) *giteafamily.FamilyComment {
+	if c == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyComment{ID: c.ID, Body: c.Body, CreatedAt: c.Created, UpdatedAt: c.Updated}
+	if c.Poster != nil {
+		out.Poster = familyUser(c.Poster)
+	}
+	return out
+}
+
+// --- giteafamily.FilePort ---
+
+func (s sdkPorts) GetFile(ctx context.Context, owner, repo, ref, path string) ([]byte, int, error) {
+	data, resp, err := s.c.Repositories.GetFile(ctx, owner, repo, ref, path)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return data, status, err
+}
+
+func (s sdkPorts) CreateFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, error) {
+	resp, _, err := s.c.Repositories.CreateFile(ctx, owner, repo, path, gitea.CreateFileOptions{
+		FileOptions: gitea.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		Content:     opt.Content,
+	})
+	return familyFileResult(resp, err)
+}
+
+func (s sdkPorts) UpdateFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, error) {
+	resp, _, err := s.c.Repositories.UpdateFile(ctx, owner, repo, path, gitea.UpdateFileOptions{
+		FileOptions: gitea.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		SHA:         opt.SHA,
+		Content:     opt.Content,
+	})
+	return familyFileResult(resp, err)
+}
+
+func (s sdkPorts) DeleteFile(ctx context.Context, owner, repo, path string, opt giteafamily.FamilyFileOptions) (*giteafamily.FamilyFileResult, int, error) {
+	resp, err := s.c.Repositories.DeleteFile(ctx, owner, repo, path, gitea.DeleteFileOptions{
+		FileOptions: gitea.FileOptions{Message: opt.Message, BranchName: opt.Branch},
+		SHA:         opt.SHA,
+	})
+	status := 0
+	sha := ""
+	if resp != nil {
+		if resp.Response != nil {
+			status = resp.Response.StatusCode
+		}
+		sha = resp.Header.Get("X-Commit-Sha")
+	}
+	return &giteafamily.FamilyFileResult{CommitSHA: sha}, status, err
+}
+
+func familyFileResult(resp *gitea.FileResponse, err error) (*giteafamily.FamilyFileResult, error) {
+	sha := ""
+	if resp != nil && resp.Commit != nil {
+		sha = resp.Commit.SHA
+	}
+	return &giteafamily.FamilyFileResult{CommitSHA: sha}, err
+}
+
+// --- giteafamily.RepoPort ---
+
+func (s sdkPorts) SearchRepos(ctx context.Context, opt giteafamily.SearchRepoOptions) ([]*giteafamily.Repo, error) {
+	list, _, err := s.c.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+		Keyword:     opt.Keyword,
+		Sort:        opt.Sort,
+		Order:       opt.Order,
+	})
+	return familyRepos(list), err
+}
+
+func (s sdkPorts) ListMyRepos(ctx context.Context, opt giteafamily.FamilyListReposOptions) ([]*giteafamily.Repo, error) {
+	list, _, err := s.c.Repositories.ListMyRepos(ctx, gitea.ListReposOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	return familyRepos(list), err
+}
+
+func (s sdkPorts) GetRepo(ctx context.Context, owner, repo string) (*giteafamily.Repo, int, error) {
+	r, resp, err := s.c.Repositories.GetRepo(ctx, owner, repo)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyRepo(r), status, err
+}
+
+func (s sdkPorts) CreateRepo(ctx context.Context, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
+	r, _, err := s.c.Repositories.CreateRepo(ctx, gitea.CreateRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		Private:       opt.Private,
+		AutoInit:      opt.AutoInit,
+		DefaultBranch: opt.DefaultBranch,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) CreateOrgRepo(ctx context.Context, org string, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
+	r, _, err := s.c.Repositories.CreateOrgRepo(ctx, org, gitea.CreateRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		Private:       opt.Private,
+		AutoInit:      opt.AutoInit,
+		DefaultBranch: opt.DefaultBranch,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) CreateFork(ctx context.Context, owner, repo string, opt giteafamily.FamilyForkRepoOption) (*giteafamily.Repo, error) {
+	r, _, err := s.c.Repositories.CreateFork(ctx, owner, repo, gitea.CreateForkOption{
+		Organization: opt.Organization,
+		Name:         opt.Name,
+	})
+	return familyRepo(r), err
+}
+
+func (s sdkPorts) DeleteRepo(ctx context.Context, owner, repo string) error {
+	_, err := s.c.Repositories.DeleteRepo(ctx, owner, repo)
+	return err
+}
+
+func (s sdkPorts) EditRepo(ctx context.Context, owner, repo string, opt giteafamily.FamilyEditRepoOption) (*giteafamily.Repo, error) {
+	r, _, err := s.c.Repositories.EditRepo(ctx, owner, repo, gitea.EditRepoOption{
+		Name:          opt.Name,
+		Description:   opt.Description,
+		DefaultBranch: opt.DefaultBranch,
+		Private:       opt.Private,
+	})
+	return familyRepo(r), err
+}
+
+// --- giteafamily.IssuePort ---
+
+func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
+	list, _, err := s.c.Issues.ListRepoIssues(ctx, owner, repo, gitea.ListIssueOption{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+		KeyWord:     opt.KeyWord,
+		State:       gitea.StateType(opt.State),
+		AssignedBy:  opt.Assignee,
+		Labels:      splitCSV(opt.Labels),
+		Type:        gitea.IssueType(opt.Type),
+	})
+	return familyIssues(list), err
+}
+
+func (s sdkPorts) GetIssue(ctx context.Context, owner, repo string, index int64) (*giteafamily.Issue, error) {
+	i, _, err := s.c.Issues.GetIssue(ctx, owner, repo, index)
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) CreateIssue(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateIssueOption) (*giteafamily.Issue, error) {
+	i, _, err := s.c.Issues.CreateIssue(ctx, owner, repo, gitea.CreateIssueOption{
+		Title:     opt.Title,
+		Body:      opt.Body,
+		Assignees: opt.Assignees,
+		Milestone: opt.Milestone,
+		Labels:    opt.Labels,
+	})
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) EditIssue(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyEditIssueOption) (*giteafamily.Issue, error) {
+	edit := gitea.EditIssueOption{Title: opt.Title}
+	if opt.Body != nil {
+		edit.Body = opt.Body
+	}
+	if opt.State != nil {
+		st := gitea.StateType(*opt.State)
+		edit.State = &st
+	}
+	edit.Assignees = opt.Assignees
+	if opt.Milestone != nil {
+		edit.Milestone = opt.Milestone
+	}
+	i, _, err := s.c.Issues.EditIssue(ctx, owner, repo, index, edit)
+	return familyIssue(i), err
+}
+
+func (s sdkPorts) ReplaceIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
+	_, _, err := s.c.Issues.ReplaceIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
+	return err
+}
+
+func (s sdkPorts) AddIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
+	_, _, err := s.c.Issues.AddIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
+	return err
+}
+
+func (s sdkPorts) DeleteIssueLabel(ctx context.Context, owner, repo string, index, labelID int64) error {
+	_, err := s.c.Issues.DeleteIssueLabel(ctx, owner, repo, index, labelID)
+	return err
+}
+
+func (s sdkPorts) ListIssueComments(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListIssueCommentsOptions) ([]*giteafamily.FamilyComment, error) {
+	list, _, err := s.c.Issues.ListIssueComments(ctx, owner, repo, index, gitea.ListIssueCommentOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyComment, 0, len(list))
+	for _, c := range list {
+		out = append(out, familyComment(c))
+	}
+	return out, err
+}
+
+func (s sdkPorts) EditIssueComment(ctx context.Context, owner, repo string, commentID int64, opt giteafamily.EditIssueCommentOption) (*giteafamily.FamilyComment, error) {
+	c, _, err := s.c.Issues.EditIssueComment(ctx, owner, repo, commentID, gitea.EditIssueCommentOption{Body: opt.Body})
+	return familyComment(c), err
+}
+
+// --- giteafamily.PRPort ---
+
+func (s sdkPorts) CreatePullRequest(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreatePullRequestOption) (*giteafamily.FamilyPullRequest, error) {
+	pr, _, err := s.c.PullRequests.CreatePullRequest(ctx, owner, repo, gitea.CreatePullRequestOption{
+		Head:  opt.Head,
+		Base:  opt.Base,
+		Title: opt.Title,
+		Body:  opt.Body,
+	})
+	return familyPR(pr), err
+}
+
+func (s sdkPorts) GetPullRequest(ctx context.Context, owner, repo string, index int64) (*giteafamily.FamilyPullRequest, error) {
+	pr, _, err := s.c.PullRequests.GetPullRequest(ctx, owner, repo, index)
+	return familyPR(pr), err
+}
+
+func (s sdkPorts) ListPullRequests(ctx context.Context, owner, repo string, opt giteafamily.FamilyListPullRequestsOptions) ([]*giteafamily.FamilyPullRequest, int, error) {
+	prs, resp, err := s.c.PullRequests.ListRepoPullRequests(ctx, owner, repo, gitea.ListPullRequestsOptions{
+		State:       gitea.StateType(opt.State),
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	out := make([]*giteafamily.FamilyPullRequest, 0, len(prs))
+	for _, pr := range prs {
+		out = append(out, familyPR(pr))
+	}
+	total := 0
+	if resp != nil {
+		total = provider.ParseTotalCountHeader(resp.Header, 0)
+	}
+	return out, total, err
+}
+
+func (s sdkPorts) MergePullRequest(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyMergePullRequestOption) (int, error) {
+	_, resp, err := s.c.PullRequests.MergePullRequest(ctx, owner, repo, index, gitea.MergePullRequestOption{
+		Style:                  gitea.MergeStyle(opt.Style),
+		Title:                  opt.Title,
+		DeleteBranchAfterMerge: opt.DeleteBranchAfterMerge,
+	})
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return status, err
+}
+
+func (s sdkPorts) EditPullRequest(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyEditPullRequestOption) (*giteafamily.FamilyPullRequest, error) {
+	edit := gitea.EditPullRequestOption{
+		Title: opt.Title,
+		Body:  opt.Body,
+		Base:  opt.Base,
+	}
+	if opt.State != nil {
+		st := gitea.StateType(*opt.State)
+		edit.State = &st
+	}
+	pr, _, err := s.c.PullRequests.EditPullRequest(ctx, owner, repo, index, edit)
+	return familyPR(pr), err
+}
+
+// familyPR is the field-by-field projection of the SDK's PullRequest onto
+// the engine's wire shape. Gitea carries RequestedReviewers and Draft;
+// Forgejo does not (the dialect parameters pick the live subset).
+func familyPR(pr *gitea.PullRequest) *giteafamily.FamilyPullRequest {
+	if pr == nil {
+		return nil
+	}
+	out := &giteafamily.FamilyPullRequest{
+		ID:        pr.ID,
+		Index:     pr.Index,
+		Title:     pr.Title,
+		Body:      pr.Body,
+		State:     string(pr.State),
+		HTMLURL:   pr.HTMLURL,
+		HasMerged: pr.HasMerged,
+		Draft:     pr.Draft,
+		Merged:    pr.Merged,
+		MergeBase: pr.MergeBase,
+		Created:   pr.Created,
+		Updated:   pr.Updated,
+		Closed:    pr.Closed,
+	}
+	if pr.Poster != nil {
+		out.Poster = familyUser(pr.Poster)
+	}
+	for _, l := range pr.Labels {
+		out.Labels = append(out.Labels, familyLabel(l))
+	}
+	for _, a := range pr.Assignees {
+		out.Assignees = append(out.Assignees, familyUser(a))
+	}
+	for _, r := range pr.RequestedReviewers {
+		out.RequestedReviewers = append(out.RequestedReviewers, familyUser(r))
+	}
+	if pr.Head != nil {
+		out.Head = &giteafamily.FamilyPRBranchInfo{Ref: pr.Head.Ref, Sha: pr.Head.Sha}
+	}
+	if pr.Base != nil {
+		out.Base = &giteafamily.FamilyPRBranchInfo{Ref: pr.Base.Ref, Sha: pr.Base.Sha}
+	}
+	return out
+}
+
+func (s sdkPorts) ListPullRequestCommits(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListOptions) ([]*giteafamily.Commit, error) {
+	list, _, err := s.c.PullRequests.ListPullRequestCommits(ctx, owner, repo, index, gitea.ListPullRequestCommitsOptions{ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize}})
+	out := make([]*giteafamily.Commit, 0, len(list))
+	for _, c := range list {
+		out = append(out, familyCommit(c))
+	}
+	return out, err
+}
+
 // compile-time anchors: the adapter must keep satisfying every family port.
 var (
 	_ giteafamily.HookPort         = sdkPorts{}
@@ -564,4 +987,25 @@ var (
 	_ giteafamily.NotificationPort = sdkPorts{}
 	_ giteafamily.CommitPort       = sdkPorts{}
 	_ giteafamily.SearchPort       = sdkPorts{}
+	_ giteafamily.ReviewPort       = sdkPorts{}
+	_ giteafamily.DiffPort         = sdkPorts{}
+	_ giteafamily.FilePort         = sdkPorts{}
+	_ giteafamily.RepoPort         = sdkPorts{}
+	_ giteafamily.IssuePort        = sdkPorts{}
+	_ giteafamily.PRPort           = sdkPorts{}
 )
+
+// splitCSV converts a comma-separated filter (the family's issue label
+// vocabulary) to a slice; empty input yields nil.
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	out := []string{}
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

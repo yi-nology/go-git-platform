@@ -2,239 +2,59 @@ package gitea
 
 import (
 	"context"
-	"strconv"
 
-	gitea "gitea.dev/sdk"
-
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-
+	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
-	pr, _, err := p.client.PullRequests.CreatePullRequest(ctx, opts.Owner, opts.Repo, gitea.CreatePullRequestOption{
-		Head:  opts.SourceBranch,
-		Base:  opts.TargetBranch,
-		Title: opts.Title,
-		Body:  opts.Description,
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "CreateCR", err)
-	}
-	return convertPR(pr), nil
+	return giteafamily.CreateCR(ctx, p.family, p.ports, opts)
 }
 
 // GetCR implements provider.ChangeRequestManager.
 func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "GetCR", number)
-	if err != nil {
-		return nil, err
-	}
-	pr, _, err := p.client.PullRequests.GetPullRequest(ctx, owner, repo, n)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "GetCR", err)
-	}
-	return convertPR(pr), nil
-}
-
-// mapListState normalizes the provider-uniform CR state ("opened"/"closed"/"merged")
-// to the filter value Gitea/Forgejo list endpoints understand ("open"/"closed").
-// Gitea rejects unknown values like "opened" by returning ALL pull requests
-// regardless of state, which made callers review closed PRs; "merged" has no
-// list filter and is the closest superset.
-func mapListState(s provider.CRState) gitea.StateType {
-	switch s {
-	case provider.CRStateClosed:
-		return gitea.StateClosed
-	case provider.CRStateMerged:
-		return gitea.StateClosed
-	default:
-		return gitea.StateOpen
-	}
+	return giteafamily.GetCR(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, int, error) {
-	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	prs, resp, err := p.client.PullRequests.ListRepoPullRequests(ctx, opts.Owner, opts.Repo, gitea.ListPullRequestsOptions{
-		State:       mapListState(opts.State),
-		ListOptions: gitea.ListOptions{Page: opts.Page, PageSize: opts.PerPage},
-	})
-	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitea, "ListCRs", err)
-	}
-	crs := make([]*provider.ChangeRequest, 0, len(prs))
-	for _, pr := range prs {
-		crs = append(crs, convertPR(pr))
-	}
-	total := parseTotalCount(resp)
-	if total < len(crs) {
-		total = len(crs)
-	}
-	return crs, total, nil
+	return giteafamily.ListCRs(ctx, p.family, p.ports, opts)
 }
 
 // MergeCR implements provider.ChangeRequestManager.
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "MergeCR", number)
-	if err != nil {
-		return nil, err
-	}
-	style := gitea.MergeStyleMerge
-	if opts.Squash {
-		style = gitea.MergeStyleSquash
-	}
-	deleteBranch := opts.RemoveSourceBranch
-	_, resp, err := p.client.PullRequests.MergePullRequest(ctx, owner, repo, n, gitea.MergePullRequestOption{
-		Style:                  style,
-		Title:                  opts.MergeCommitMessage,
-		DeleteBranchAfterMerge: &deleteBranch,
-	})
-	if err != nil {
-		// Gitea returns 405 when the PR is already merged; recover gracefully.
-		if resp != nil && resp.StatusCode == 405 {
-			cr, getErr := p.GetCR(ctx, owner, repo, number)
-			if getErr == nil && cr.State == provider.CRStateMerged {
-				return cr, nil
-			}
-		}
-		return nil, provider.Wrap(provider.PlatformGitea, "MergeCR", err)
-	}
-	return p.GetCR(ctx, owner, repo, number)
+	return giteafamily.MergeCR(ctx, p.family, p.ports, owner, repo, number, opts)
 }
 
 // CloseCR implements provider.ChangeRequestManager.
 func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "CloseCR", number)
-	if err != nil {
-		return nil, err
-	}
-	state := gitea.StateClosed
-	_, _, err = p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, gitea.EditPullRequestOption{State: &state})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "CloseCR", err)
-	}
-	return p.GetCR(ctx, owner, repo, number)
+	return giteafamily.CloseCR(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
 func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ReopenCR", number)
-	if err != nil {
-		return nil, err
-	}
-	state := gitea.StateOpen
-	pr, _, err := p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, gitea.EditPullRequestOption{State: &state})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ReopenCR", err)
-	}
-	return convertPR(pr), nil
+	return giteafamily.ReopenCR(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "UpdateCR", number)
-	if err != nil {
-		return nil, err
-	}
-	editOpts := gitea.EditPullRequestOption{}
-	if opts.Title != "" {
-		editOpts.Title = opts.Title
-	}
-	if opts.Description != "" {
-		editOpts.Body = &opts.Description
-	}
-	if opts.TargetBranch != "" {
-		editOpts.Base = opts.TargetBranch
-	}
-	pr, _, err := p.client.PullRequests.EditPullRequest(ctx, owner, repo, n, editOpts)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "UpdateCR", err)
-	}
-	return convertPR(pr), nil
+	return giteafamily.UpdateCR(ctx, p.family, p.ports, owner, repo, number, opts)
+}
+
+// ListCRComments implements provider.ChangeRequestManager.
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
+	return giteafamily.ListCRComments(ctx, p.family, p.ports, owner, repo, number)
+}
+
+// ListCRCommits implements provider.ChangeRequestManager.
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
+	return giteafamily.ListCRCommits(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "UpdateCRLabels", number)
-	if err != nil {
-		return err
-	}
-	labelIDs := make([]int64, 0, len(labels))
-	for _, l := range labels {
-		if id, err := strconv.ParseInt(l, 10, 64); err == nil {
-			labelIDs = append(labelIDs, id)
-		}
-	}
-	_, _, err = p.client.Issues.AddIssueLabels(ctx, owner, repo, n, gitea.IssueLabelsOption{Labels: labelIDs})
-	if err != nil {
-		return provider.Wrap(provider.PlatformGitea, "UpdateCRLabels", err)
-	}
-	return nil
-}
-
-// ListCRComments implements provider.ChangeRequestManager. The provider
-// surface carries no pagination parameters, so the full comment list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ListCRComments", number)
-	if err != nil {
-		return nil, err
-	}
-	comments, err := backendutil.AllPages(func(page int) ([]*gitea.Comment, error) {
-		list, _, err := p.client.Issues.ListIssueComments(ctx, owner, repo, n, gitea.ListIssueCommentOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.IssueCommentPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListCRComments", err)
-	}
-	result := make([]*provider.CRComment, 0, len(comments))
-	for _, c := range comments {
-		cc := &provider.CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.Created, UpdatedAt: c.Updated}
-		if c.Poster != nil {
-			cc.Author = &provider.CRUser{ID: c.Poster.ID, Username: c.Poster.UserName, AvatarURL: c.Poster.AvatarURL}
-		}
-		result = append(result, cc)
-	}
-	return result, nil
-}
-
-// ListCRCommits implements provider.ChangeRequestManager. The provider
-// surface carries no pagination parameters, so the full commit list is
-// fetched by exhausting the endpoint's pagination (backendutil.AllPages).
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitea, "ListCRCommits", number)
-	if err != nil {
-		return nil, err
-	}
-	commits, err := backendutil.AllPages(func(page int) ([]*gitea.Commit, error) {
-		list, _, err := p.client.PullRequests.ListPullRequestCommits(ctx, owner, repo, n, gitea.ListPullRequestCommitsOptions{
-			ListOptions: gitea.ListOptions{Page: page, PageSize: listPageSize},
-		})
-		return list, err
-	})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListCRCommits", err)
-	}
-	result := make([]*provider.CRCommit, 0, len(commits))
-	for _, c := range commits {
-		sha := ""
-		if c.CommitMeta != nil {
-			sha = c.CommitMeta.SHA
-		}
-		cc := &provider.CRCommit{SHA: sha}
-		if c.RepoCommit != nil {
-			cc.Message = c.RepoCommit.Message
-			if c.RepoCommit.Author != nil {
-				cc.Author = &provider.CRUser{Name: c.RepoCommit.Author.Name}
-			}
-		}
-		result = append(result, cc)
-	}
-	return result, nil
+	return giteafamily.UpdateCRLabels(ctx, p.family, p.ports, p.ports, p.labelIDs, owner, repo, number, labels)
 }
 
 var _ provider.ChangeRequestManager = (*Provider)(nil)
