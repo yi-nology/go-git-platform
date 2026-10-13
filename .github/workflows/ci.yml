@@ -32,7 +32,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.14.0
 
   vuln:
     name: Vulnerability check
@@ -51,7 +51,7 @@ jobs:
       # Pinned: @latest makes the check non-reproducible and lets a bad
       # release break CI. Bump deliberately alongside x/vuln's database.
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
       - name: Run govulncheck
         run: govulncheck ./...

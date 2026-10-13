@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.79.3] - 2026-10-13
+
+### Fixed
+
+- **CI 链配套升级**(v0.79.2 的 Release 已发但 CI 腿红,govulncheck 与 lint
+  两个门禁都卡在"工具链比目标旧"): golangci-lint v2.12.2 → v2.14.0(其
+  二进制以 go1.27 编译,跟上 1.27 目标);govulncheck v1.1.4 → v1.9.0(修复
+  对 go1.27 AST 的 panic: unexpected expr: *ast.KeyValueExpr);vuln job
+  去掉显式 GOTOOLCHAIN=local 的隐式锁定,让工具读 go.mod 的 toolchain。
+  无 API 变化
+
 ## [0.79.2] - 2026-10-13
 
 ### Changed
