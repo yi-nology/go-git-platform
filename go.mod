@@ -1,8 +1,6 @@
 module github.com/yi-nology/go-git-platform
 
-go 1.26.3
-
-toolchain go1.26.9
+go 1.27.2
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
@@ -12,15 +10,12 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/stretchr/testify v1.12.1
+	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v3 v3.15.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/oauth2 v0.37.0
-)
-
-require (
-	github.com/go-openapi/jsonpointer v1.0.2 // indirect
-	github.com/go-openapi/swag/pools v0.29.2 // indirect
+	golang.org/x/time v0.16.0
 )
 
 require (
@@ -36,6 +31,7 @@ require (
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.1 // indirect
 	github.com/go-openapi/errors v0.22.9 // indirect
+	github.com/go-openapi/jsonpointer v1.0.2 // indirect
 	github.com/go-openapi/strfmt v0.27.2 // indirect
 	github.com/go-openapi/swag v0.29.2 // indirect
 	github.com/go-openapi/swag/cmdutils v0.29.2 // indirect
@@ -45,6 +41,7 @@ require (
 	github.com/go-openapi/swag/loading v0.29.2 // indirect
 	github.com/go-openapi/swag/mangling v0.29.2 // indirect
 	github.com/go-openapi/swag/netutils v0.29.2 // indirect
+	github.com/go-openapi/swag/pools v0.29.2 // indirect
 	github.com/go-openapi/swag/stringutils v0.29.2 // indirect
 	github.com/go-openapi/swag/typeutils v0.29.2 // indirect
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
@@ -61,12 +58,10 @@ require (
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.3 // indirect
-	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	golang.org/x/time v0.16.0
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

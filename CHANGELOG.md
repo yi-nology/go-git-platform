@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.79.2] - 2026-10-13
+
+### Changed
+
+- **Go 版本线升级 1.26.3 → 1.27.2**(主模块 + mcp 模块,`go`/`toolchain`
+  同步):跟进上游稳定线;CI 全部 job 经 `go-version-file: go.mod` 自动跟随,
+  govulncheck 门禁在新线干净(1.27.2 已含 crypto/tls、net/http 系列修复)。
+  无 API 变化
+
 ## [0.79.1] - 2026-10-13
 
 ### Fixed
