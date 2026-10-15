@@ -70,6 +70,47 @@ the shape).
   each `backends/<platform>/` implements it. Shared plumbing lives in
   `backends/internal/backendutil` — reuse it instead of copy-pasting.
 
+## oekit-first conventions (required)
+
+This SDK consumes the [oekit](https://oekit.github.io) ecosystem. Prefer its
+bottom-layer modules over hand-rolled equivalents; the allowed dependency set
+is exactly three modules (adding any other oekit module would drag transitive
+dependencies onto every downstream consumer):
+
+| Module | Use for | Entry points here |
+|---|---|---|
+| `github.com/oekit/pkg` | error wrapping | `oekiterrors.Wrap(err, msg, kv...)` |
+| `github.com/oekit/concurrency` | panic-safe goroutines | `async.GoSafe`, `async.GoSafeWithErrChannel` |
+| `github.com/oekit/logx` | logging facade | `provider.NewLogxLogger`, `transport.NewLogxLogger` |
+
+Concrete rules:
+
+- **Error wrapping.** Any wrap that must keep the cause chain uses
+  `oekiterrors.Wrap` (nil-safe; put dynamic context in kv pairs, not in the
+  message text). `fmt.Errorf` survives only for the two dual-`%w` sites in
+  `provider/errors.go` (sentinel + cause double chain — Wrap is single-cause)
+  and for fresh errors with no cause. Never wrap with `%v`, never discard
+  errors with `_`.
+- **Classification is sentinel-based.** Branch with `errors.Is` on
+  `provider.ErrNotFound` & co. Never match error message text — since
+  v0.87.0 dynamic values are kv suffixes and the text is unstable.
+- **Logging.** Library code logs through the injected `provider.Logger` /
+  `transport.Logger` (noop by default). To attach the consumer's oekit/logx
+  stack use `NewLogxLogger(component)` (lazy `logx.Delegating` resolution).
+  Deployable binaries (the MCP server) own a service name via
+  `logx.WithService`. No new stdlib `log` or `fmt.Println` debug output.
+- **Concurrency.** No bare `go func` — use `async.GoSafe` (panic-recovering);
+  `GoSafeWithErrChannel` when the goroutine produces an error. Bounded fan-out
+  follows the `provider/batch.go` semaphore + `BatchResult` pattern (a panicking
+  item becomes that item's `Err`; it must not crash the process).
+- **Explicitly out of scope** (settled — don't re-litigate): `BizError` /
+  `mw.Fail` (HTTP-service-layer concepts; this SDK has no such layer), and
+  replacing `transport/retry.go` with `oekit/concurrency/retry` (the former is
+  HTTP-specialized: Retry-After handling, GitHub 403 secondary-rate detection).
+
+`AGENTS.md` at the repo root is the authoritative version of these rules,
+plus the release/CI discipline AI agents must follow.
+
 ## Adding a new platform backend
 
 1. Create `backends/<platform>/` with a `New(cfg provider.Config) (provider.Provider, error)`
