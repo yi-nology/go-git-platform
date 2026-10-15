@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -132,6 +133,33 @@ func TestBatchCancellationInterruptsSemaphoreAcquisition(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("batch did not return after cancellation")
+	}
+}
+
+// panickingFakeProvider panics on odd-length paths: the batch must convert
+// the panic into that item's Err and leave the sibling items unaffected.
+type panickingFakeProvider struct{ Provider }
+
+func (panickingFakeProvider) Platform() Platform { return PlatformGitHub }
+func (panickingFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	if len(path)%2 == 1 {
+		panic("boom: " + path)
+	}
+	return "content:" + path, nil
+}
+
+func TestBatchPanicBecomesItemError(t *testing.T) {
+	paths := []string{"a", "bb"}
+	got := GetFileContents(context.Background(), panickingFakeProvider{}, "o", "r", "", paths,
+		BatchOptions{Concurrency: 2})
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Err == nil || !strings.Contains(got[0].Err.Error(), "panicked") {
+		t.Fatalf("panicking item err = %v, want panic converted to error", got[0].Err)
+	}
+	if got[1].Err != nil || got[1].Value != "content:bb" {
+		t.Fatalf("sibling item = %+v, want unaffected success", got[1])
 	}
 }
 

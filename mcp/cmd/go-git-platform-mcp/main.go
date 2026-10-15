@@ -43,6 +43,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/oekit/concurrency/async"
+
 	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 	"github.com/yi-nology/go-git-platform/provider"
 
@@ -151,7 +153,7 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	errCh := make(chan error, 1)
-	go func() { errCh <- server.ListenAndServe() }()
+	async.GoSafeWithErrChannel(errCh, func() error { return server.ListenAndServe() })
 	select {
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

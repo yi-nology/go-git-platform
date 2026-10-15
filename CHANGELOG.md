@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.84.0] - 2026-10-16
+
+### Changed
+
+接入 [oekit](https://oekit.github.io) 生态第一批——`concurrency/async`
+安全 goroutine（对齐其 llms.txt AI Agent 硬规则"禁止裸 go func"）:
+
+- **provider/batch**: worker goroutine 改经 `async.GoSafe` 启动,内层
+  recover 把 `fn` 的 panic 转换为该 item 的 `Err`(其余 item 不受影响);
+  此前 panic 会直接崩溃调用方进程
+- **provider/janitor**: 后台清理 goroutine 改经 `async.GoSafe`;`cleanup`
+  panic 时 defers 照常执行(done 关闭/状态复位),janitor 干净停止且可被
+  `start` 重新拉起,不再拖垮宿主进程
+- **mcp**: HTTP 监听 goroutine 改经 `async.GoSafeWithErrChannel`,panic
+  转为 error 汇入 errCh
+
+### Fixed
+
+- `GetFileContents`/`GetCRs`/`SetCommitStatuses` 批量原语: 单项 panic 不再
+  使进程崩溃或结果缺失,新增 `TestBatchPanicBecomesItemError` 回归测试
+
 ## [0.83.0] - 2026-10-13
 
 ### Changed

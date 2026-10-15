@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/oekit/concurrency/async"
 )
 
 // janitor is the reusable background-cleanup runner behind Manager: it
@@ -35,20 +37,23 @@ func (j *janitor) start(ctx context.Context, interval time.Duration) {
 	doneCh := make(chan struct{})
 	j.stop = stopCh
 	j.done = doneCh
-	go func(stop, done chan struct{}) {
-		defer close(done)
+	// async.GoSafe recovers a panicking cleanup: the defers below still run
+	// (done closed, state cleared), so the janitor stops cleanly instead of
+	// crashing the host process, and start can relaunch it.
+	async.GoSafe(func() {
+		defer close(doneCh)
 		// Reset the janitor state before signalling exit so start can
 		// relaunch after this goroutine dies (e.g. via ctx cancellation).
-		// Runs before close(done): once done is closed, the state is already
-		// cleared. stop() may have cleared the fields already; the identity
-		// checks keep that case a no-op.
+		// Runs before close(doneCh): once doneCh is closed, the state is
+		// already cleared. stop() may have cleared the fields already; the
+		// identity checks keep that case a no-op.
 		defer func() {
 			j.mu.Lock()
 			defer j.mu.Unlock()
-			if j.stop == stop {
+			if j.stop == stopCh {
 				j.stop = nil
 			}
-			if j.done == done {
+			if j.done == doneCh {
 				j.done = nil
 			}
 		}()
@@ -58,13 +63,13 @@ func (j *janitor) start(ctx context.Context, interval time.Duration) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-stop:
+			case <-stopCh:
 				return
 			case <-ticker.C:
 				j.cleanup()
 			}
 		}
-	}(stopCh, doneCh)
+	})
 }
 
 // stopAndWait halts the janitor and blocks until it has exited.

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/oekit/concurrency/async"
 )
 
 // DefaultBatchConcurrency is the number of in-flight operations used by
@@ -76,13 +78,22 @@ func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func
 			continue
 		}
 		wg.Add(1)
-		go func(i int, item T) {
+		// async.GoSafe recovers a panicking fn at the outermost layer; the
+		// inner recover below runs first and converts the panic into the
+		// item's Err, so one bad item neither crashes the process nor goes
+		// silently missing from the results.
+		async.GoSafe(func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					results[i].Err = fmt.Errorf("batch: fn panicked: %v", r)
+				}
+			}()
 			v, err := fn(ctx, item)
 			results[i].Value = v
 			results[i].Err = err
-		}(i, item)
+		})
 	}
 	wg.Wait()
 	return results
