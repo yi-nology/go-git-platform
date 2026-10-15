@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.85.0] - 2026-10-16
+
+### Added
+
+接入 oekit 生态第二批——`logx` 日志门面（对齐其 llms.txt 日志规范）:
+
+- **`provider.NewLogxLogger(component)` / `transport.NewLogxLogger(component)`**:
+  基于 `logx.Delegating` 的懒解析 logger——消费方在任意时刻
+  `logx.SetDefault`/`UseSlog` 后自动跟随;component 属性标识子系统
+  (service name 属于消费方)。`logx.Logger` 与本 SDK 的
+  `provider.Logger`/`transport.Logger` 方法集结构同构,附编译期断言防漂移
+
+### Changed
+
+- **mcp 命令**: stdlib `log` 换成 `logx` kv 风格
+  (`logx.WithService("go-git-platform-mcp")`——二进制是服务方,拥有
+  service name;启动横幅改为结构化 kv)
+
 ## [0.84.0] - 2026-10-16
 
 ### Changed

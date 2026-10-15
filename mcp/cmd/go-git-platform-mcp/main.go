@@ -34,7 +34,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -44,6 +43,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/oekit/concurrency/async"
+	"github.com/oekit/logx"
 
 	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -52,9 +52,15 @@ import (
 	_ "github.com/yi-nology/go-git-platform/backends/all"
 )
 
+// logger is the binary's service logger (kv style). The mcp server is a
+// deployable service, so it owns a service name — SDK packages inside the
+// process stay on component-attributed loggers instead.
+var logger = logx.WithService("go-git-platform-mcp")
+
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		logger.Error("fatal", "err", err)
+		os.Exit(1)
 	}
 }
 
@@ -140,8 +146,10 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 		})
 	}
 
-	log.Printf("go-git-platform-mcp %s: streamable HTTP on http://%s/mcp (auth: %s)",
-		mcpserver.Version(), addr, map[bool]string{true: "bearer token", false: "NONE — set --http-token"}[bearer != ""])
+	logger.Info("streamable HTTP listening",
+		"version", mcpserver.Version(),
+		"url", "http://"+addr+"/mcp",
+		"auth", map[bool]string{true: "bearer token", false: "NONE — set --http-token"}[bearer != ""])
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           handler,

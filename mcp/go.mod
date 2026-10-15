@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/oekit/concurrency v0.1.5
+	github.com/oekit/logx v0.1.10
 	github.com/yi-nology/go-git-platform v0.61.0
 )
 
@@ -54,6 +55,7 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
 
 replace github.com/yi-nology/go-git-platform => ../
