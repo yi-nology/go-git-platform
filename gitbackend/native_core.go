@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Core operations ---
@@ -68,7 +70,7 @@ func (b *NativeGitBackend) snapshotFetchRefs(ctx context.Context, repoPath, remo
 		"refs/remotes/" + remote + "/", "refs/tags/",
 	}, AuthConfig{})
 	if err != nil {
-		return nil, fmt.Errorf("git for-each-ref: %w: %s", err, strings.TrimSpace(stderr))
+		return nil, oekiterrors.Wrap(err, "git for-each-ref", "stderr", strings.TrimSpace(stderr))
 	}
 	refs := make(map[string]string)
 	for _, line := range strings.Split(stdout, "\n") {

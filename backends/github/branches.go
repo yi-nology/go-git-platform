@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -39,7 +41,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 		// only the branch tip is needed, not the full history.
 		commits, err := p.ListCommits(ctx, owner, repo, provider.ListCommitsOptions{Branch: ref, Page: 1, PerPage: 1})
 		if err != nil {
-			return nil, fmt.Errorf("github: resolve ref %q: %w", ref, err)
+			return nil, oekiterrors.Wrap(err, "github: resolve ref", "ref", ref)
 		}
 		if len(commits) == 0 {
 			return nil, fmt.Errorf("github: no commits found on ref %q", ref)

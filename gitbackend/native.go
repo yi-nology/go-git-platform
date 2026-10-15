@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 type NativeGitBackend struct {
@@ -20,7 +22,7 @@ type NativeGitBackend struct {
 func NewNativeGitBackend(opts Options) (*NativeGitBackend, error) {
 	path, err := exec.LookPath("git")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGitNotFound, err)
+		return nil, oekiterrors.Wrap(ErrGitNotFound, "look up git binary", "err", err)
 	}
 	logger := opts.Logger
 	if logger == nil {
@@ -66,15 +68,15 @@ var safeConfigOverrides = regexp.MustCompile(
 func checkGitArg(arg string) error {
 	for _, r := range arg {
 		if (r < 0x20 && r != '\t') || r == 0x7f {
-			return fmt.Errorf("%w: control character in argument", ErrInvalidGitArg)
+			return oekiterrors.Wrap(ErrInvalidGitArg, "control character in argument")
 		}
 	}
 	if strings.HasPrefix(arg, "ext::") {
-		return fmt.Errorf("%w: ext:: transport URLs are not allowed", ErrInvalidGitArg)
+		return oekiterrors.Wrap(ErrInvalidGitArg, "ext:: transport URLs are not allowed")
 	}
 	for _, flag := range gitExecFlags {
 		if arg == flag || strings.HasPrefix(arg, flag+"=") {
-			return fmt.Errorf("%w: %q is not accepted from callers", ErrInvalidGitArg, arg)
+			return oekiterrors.Wrap(ErrInvalidGitArg, "exec/config flag is not accepted from callers", "arg", arg)
 		}
 	}
 	return nil
@@ -94,7 +96,7 @@ func checkGitArg(arg string) error {
 // AFTER this check.
 func sanitizeGitArgs(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("%w: empty git command", ErrInvalidGitArg)
+		return oekiterrors.Wrap(ErrInvalidGitArg, "empty git command")
 	}
 	i := 0
 	for i < len(args) && args[i] == "-c" {
@@ -103,12 +105,12 @@ func sanitizeGitArgs(args []string) error {
 			value = args[i+1]
 		}
 		if !safeConfigOverrides.MatchString(value) {
-			return fmt.Errorf("%w: -c is only accepted with a known-safe config override", ErrInvalidGitArg)
+			return oekiterrors.Wrap(ErrInvalidGitArg, "-c is only accepted with a known-safe config override")
 		}
 		i += 2
 	}
 	if i >= len(args) || !gitSubcommands[args[i]] {
-		return fmt.Errorf("%w: %q is not an allowed git subcommand", ErrInvalidGitArg, args[i])
+		return oekiterrors.Wrap(ErrInvalidGitArg, "not an allowed git subcommand", "arg", args[i])
 	}
 	for ; i < len(args); i++ {
 		if err := checkGitArg(args[i]); err != nil {

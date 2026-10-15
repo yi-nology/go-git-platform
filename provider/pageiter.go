@@ -3,7 +3,8 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // DefaultIterMaxPages is the page budget applied by Each/Collect when no
@@ -60,7 +61,7 @@ func EachBounded[T any](ctx context.Context, fetch PageFetch[T], maxPages int, f
 	}
 	for page := 1; ; page++ {
 		if page > maxPages {
-			return fmt.Errorf("%w after %d pages", ErrPageBudgetExceeded, maxPages)
+			return oekiterrors.Wrap(ErrPageBudgetExceeded, "page budget exhausted", "max_pages", maxPages)
 		}
 		if err := ctx.Err(); err != nil {
 			return err

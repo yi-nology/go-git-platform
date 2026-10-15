@@ -3,13 +3,14 @@ package gitbackend
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -252,27 +253,27 @@ func worktreeFileMode(mode filemode.FileMode) os.FileMode {
 func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemode.FileMode) (err error) {
 	fullPath := filepath.Join(repoPath, relPath)
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o750); err != nil {
-		return fmt.Errorf("mkdir for %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "mkdir", "path", relPath)
 	}
 
 	reader, err := blob.Reader()
 	if err != nil {
-		return fmt.Errorf("open blob reader for %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "open blob reader", "path", relPath)
 	}
 	defer func() {
 		if cerr := reader.Close(); cerr != nil && err == nil {
-			err = fmt.Errorf("close blob reader for %s: %w", relPath, cerr)
+			err = oekiterrors.Wrap(cerr, "close blob reader", "path", relPath)
 		}
 	}()
 
 	if mode == filemode.Symlink {
 		target, err := io.ReadAll(reader)
 		if err != nil {
-			return fmt.Errorf("read symlink target for %s: %w", relPath, err)
+			return oekiterrors.Wrap(err, "read symlink target", "path", relPath)
 		}
 		_ = os.Remove(fullPath)
 		if err := os.Symlink(string(target), fullPath); err != nil {
-			return fmt.Errorf("create symlink %s: %w", relPath, err)
+			return oekiterrors.Wrap(err, "create symlink", "path", relPath)
 		}
 		return nil
 	}
@@ -282,19 +283,19 @@ func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemod
 	// never sit at the wrong mode mid-write.
 	f, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
-		return fmt.Errorf("create file %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "create file", "path", relPath)
 	}
 	if _, err := io.Copy(f, reader); err != nil {
 		_ = f.Close()
-		return fmt.Errorf("write file %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "write file", "path", relPath)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("close file %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "close file", "path", relPath)
 	}
 	// The process umask strips bits from OpenFile's mode parameter; chmod
 	// restores the exact entry mode so the executable bit survives.
 	if err := os.Chmod(fullPath, perm); err != nil {
-		return fmt.Errorf("chmod %s: %w", relPath, err)
+		return oekiterrors.Wrap(err, "chmod", "path", relPath)
 	}
 	return nil
 }
@@ -373,7 +374,7 @@ func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, 
 	for _, file := range files {
 		treeFile, err := tree.File(file)
 		if err != nil {
-			lastErr = fmt.Errorf("file %s not found in tree: %w", file, err)
+			lastErr = oekiterrors.Wrap(err, "file not found in tree", "file", file)
 			continue
 		}
 		if err := writeWorktreeFile(repoPath, file, &treeFile.Blob, treeFile.Mode); err != nil {
@@ -381,7 +382,7 @@ func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, 
 			continue
 		}
 		if _, err := wt.Add(file); err != nil {
-			lastErr = fmt.Errorf("git add %s: %w", file, err)
+			lastErr = oekiterrors.Wrap(err, "git add", "file", file)
 		}
 	}
 	return lastErr

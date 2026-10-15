@@ -81,7 +81,7 @@ func ProjectList[T any](items []T, fields ...string) ([]map[string]any, error) {
 	for i, item := range items {
 		m, err := Project(item, fields...)
 		if err != nil {
-			return nil, fmt.Errorf("projection: item %d: %w", i, err)
+			return nil, oekiterrors.Wrap(err, "projection: project item", "index", i)
 		}
 		out = append(out, m)
 	}

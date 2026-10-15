@@ -28,7 +28,6 @@ package github
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 
 	oekiterrors "github.com/oekit/pkg/errors"
@@ -78,7 +77,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		// by this backend, so pass the API base for it.
 		c, err := github.NewClient(github.WithHTTPClient(httpClient), github.WithEnterpriseURLs(base, base))
 		if err != nil {
-			return nil, fmt.Errorf("github: failed to create enterprise client for %s: %w", base, err)
+			return nil, oekiterrors.Wrap(err, "github: failed to create enterprise client", "base_url", base)
 		}
 		ghClient = c
 	}

@@ -308,7 +308,7 @@ func pinnedKnownHostsLines(ctx context.Context, host string, port int, pin strin
 	defer cancel()
 	out, err := exec.CommandContext(cctx, keyscan, "-T", "5", "-p", strconv.Itoa(port), host).Output()
 	if err != nil && len(out) == 0 {
-		return nil, fmt.Errorf("ssh-keyscan %s:%d: %w", host, port, err)
+		return nil, oekiterrors.Wrap(err, "ssh-keyscan", "host", host, "port", port)
 	}
 	return filterPinnedLines(string(out), pin, host, port)
 }

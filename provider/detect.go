@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // DetectResult holds the platform, owner, repo, and base API URL extracted
@@ -29,7 +31,7 @@ type DetectResult struct {
 // explicit Config for self-hosted instances not in the known-host list.
 func DetectPlatform(remoteURL string) (*DetectResult, error) {
 	if remoteURL == "" {
-		return nil, fmt.Errorf("%w: empty remote URL", ErrInvalidInput)
+		return nil, oekiterrors.Wrap(ErrInvalidInput, "empty remote URL")
 	}
 
 	if strings.HasPrefix(remoteURL, "git@") {
@@ -41,7 +43,7 @@ func DetectPlatform(remoteURL string) (*DetectResult, error) {
 	if strings.HasPrefix(remoteURL, "ssh://") {
 		return detectSSHProtocol(remoteURL)
 	}
-	return nil, fmt.Errorf("%w: unsupported URL format: %s", ErrInvalidInput, remoteURL)
+	return nil, oekiterrors.Wrap(ErrInvalidInput, "unsupported URL format", "url", remoteURL)
 }
 
 func detectSSH(raw string) (*DetectResult, error) {
@@ -199,5 +201,5 @@ func classifyHost(host string) (Platform, string, error) {
 			return k.platform, k.baseURL, nil
 		}
 	}
-	return "", "", fmt.Errorf("%w: unrecognized host %q; use provider.NewProvider with explicit platform config instead of DetectPlatform", ErrPlatformNotSupported, host)
+	return "", "", oekiterrors.Wrap(ErrPlatformNotSupported, "unrecognized host; use provider.NewProvider with explicit platform config instead of DetectPlatform", "host", host)
 }

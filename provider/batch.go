@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/oekit/concurrency/async"
 )
 
@@ -152,7 +154,7 @@ func SetCommitStatuses(ctx context.Context, p Provider, owner, repo, sha string,
 				// no p.Platform() here: callers may pass a partially
 				// implemented (embedded-interface) provider whose
 				// Platform() would panic.
-				return struct{}{}, fmt.Errorf("%w: provider does not implement CommitStatusManager", ErrNotImplemented)
+				return struct{}{}, oekiterrors.Wrap(ErrNotImplemented, "provider does not implement CommitStatusManager")
 			}
 			return struct{}{}, csm.CreateCommitStatus(ctx, owner, repo, sha, s)
 		})

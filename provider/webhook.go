@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // WebhookValidator verifies the authenticity of an incoming webhook request.
@@ -93,7 +95,7 @@ func (r *WebhookValidatorRegistry) Get(p Platform) WebhookValidator {
 func (r *WebhookValidatorRegistry) Validate(p Platform, req *http.Request, body []byte, secret string) error {
 	v := r.Get(p)
 	if v == nil {
-		return fmt.Errorf("%w: no webhook validator for %s", ErrNotImplemented, p)
+		return oekiterrors.Wrap(ErrNotImplemented, "no webhook validator", "platform", p)
 	}
 	return v.Validate(req, body, secret)
 }
@@ -123,21 +125,21 @@ func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret strin
 	}
 	header := r.Header.Get(h.Header)
 	if header == "" {
-		return fmt.Errorf("%w: missing %s header", ErrWebhookValidation, h.Header)
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", h.Header)
 	}
 	if secret == "" {
 		// An empty key makes HMAC verification trivially forgeable for
 		// predictable payloads (e.g. push events on public repos), so refuse
 		// it up front, mirroring StaticTokenValidator.
-		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
 	expected, err := decodeSignature(header, "sha256")
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrWebhookValidation, err)
+		return oekiterrors.Wrap(ErrWebhookValidation, "decode signature", "err", err)
 	}
 	actual := signBody(secret, body)
 	if subtle.ConstantTimeCompare(actual, expected) != 1 {
-		return fmt.Errorf("%w: signature mismatch", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
 	}
 	return nil
 }
@@ -159,7 +161,7 @@ func (ForgejoWebhookValidator) Validate(r *http.Request, body []byte, secret str
 			return HMACSHA256Validator{Header: hdr}.Validate(r, body, secret)
 		}
 	}
-	return fmt.Errorf("%w: missing X-Forgejo-Signature header", ErrWebhookValidation)
+	return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", "X-Forgejo-Signature")
 }
 
 // GitCodeWebhookValidator accepts GitCode's two webhook verification
@@ -181,7 +183,7 @@ func (GitCodeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 	if r.Header.Get("X-GitCode-Token") != "" {
 		return StaticTokenValidator{Header: "X-GitCode-Token"}.Validate(r, body, secret)
 	}
-	return fmt.Errorf("%w: missing GitCode signature header", ErrWebhookValidation)
+	return oekiterrors.Wrap(ErrWebhookValidation, "missing GitCode signature or token header")
 }
 
 // StaticTokenValidator compares a static token header against the configured
@@ -200,13 +202,13 @@ func (s StaticTokenValidator) Validate(r *http.Request, body []byte, secret stri
 	}
 	got := r.Header.Get(s.Header)
 	if got == "" {
-		return fmt.Errorf("%w: missing %s header", ErrWebhookValidation, s.Header)
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing token header", "header", s.Header)
 	}
 	if secret == "" {
-		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
 	if subtle.ConstantTimeCompare([]byte(got), []byte(secret)) != 1 {
-		return fmt.Errorf("%w: token mismatch", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "token mismatch")
 	}
 	return nil
 }
@@ -248,11 +250,11 @@ func (GiteeWebhookValidator) Name() string { return "gitee-sign" }
 // Validate implements WebhookValidator.
 func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
 	if secret == "" {
-		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
 	token := r.Header.Get("X-Gitee-Token")
 	if token == "" {
-		return fmt.Errorf("%w: missing X-Gitee-Token header", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", "X-Gitee-Token")
 	}
 	ts := strings.TrimSpace(r.Header.Get("X-Gitee-Timestamp"))
 	if ts == "" {
@@ -265,10 +267,10 @@ func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 			return nil
 		}
 		if !v.AllowPasswordMode {
-			return fmt.Errorf("%w: missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)", ErrWebhookValidation)
+			return oekiterrors.Wrap(ErrWebhookValidation, "missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)")
 		}
 		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
-			return fmt.Errorf("%w: password mismatch", ErrWebhookValidation)
+			return oekiterrors.Wrap(ErrWebhookValidation, "password mismatch")
 		}
 		return nil
 	}
@@ -277,7 +279,7 @@ func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 	mac.Write([]byte(ts + "\n" + secret))
 	want := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
-		return fmt.Errorf("%w: signature mismatch", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
 	}
 
 	maxAge := v.MaxAge
@@ -287,10 +289,10 @@ func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 	if maxAge > 0 {
 		ms, err := strconv.ParseInt(ts, 10, 64)
 		if err != nil {
-			return fmt.Errorf("%w: bad X-Gitee-Timestamp %q", ErrWebhookValidation, ts)
+			return oekiterrors.Wrap(ErrWebhookValidation, "bad X-Gitee-Timestamp", "value", ts)
 		}
 		if drift := time.Since(time.UnixMilli(ms)); drift > maxAge || -drift > maxAge {
-			return fmt.Errorf("%w: timestamp drift %s exceeds %s", ErrWebhookValidation, drift, maxAge)
+			return oekiterrors.Wrap(ErrWebhookValidation, "timestamp drift exceeds max age", "drift", drift.String(), "max_age", maxAge.String())
 		}
 	}
 	return nil
@@ -312,10 +314,10 @@ func (h *HmacValidator) Name() string { return "hmac-" + h.Algorithm }
 func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) error {
 	header := r.Header.Get(h.Header)
 	if header == "" {
-		return fmt.Errorf("%w: missing %s header", ErrWebhookValidation, h.Header)
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", h.Header)
 	}
 	if secret == "" {
-		return fmt.Errorf("%w: empty secret", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
 	algo := h.Algorithm
 	if algo == "" {
@@ -323,11 +325,11 @@ func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) er
 	}
 	expected, err := decodeSignature(header, h.Prefix)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrWebhookValidation, err)
+		return oekiterrors.Wrap(ErrWebhookValidation, "decode signature", "err", err)
 	}
 	actual := signBodyHash(secret, body, algo)
 	if subtle.ConstantTimeCompare(actual, expected) != 1 {
-		return fmt.Errorf("%w: signature mismatch", ErrWebhookValidation)
+		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
 	}
 	return nil
 }
@@ -403,7 +405,7 @@ func ReadAndRestoreBody(r *http.Request) ([]byte, error) {
 func ValidateWebhookWithRegistry(p Platform, r *http.Request, secret string) error {
 	body, err := ReadAndRestoreBody(r)
 	if err != nil {
-		return fmt.Errorf("%w: read body: %v", ErrWebhookValidation, err)
+		return oekiterrors.Wrap(ErrWebhookValidation, "read request body", "err", err)
 	}
 	return defaultWebhookRegistry.Validate(p, r, body, secret)
 }

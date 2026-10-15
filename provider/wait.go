@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // Default polling parameters for WaitForCommitStatus.
@@ -60,7 +62,7 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 	if !ok {
 		// no p.Platform() here: callers may pass a partially-implemented
 		// (embedded-interface) provider whose Platform() would panic.
-		return "", fmt.Errorf("%w: provider does not implement CommitStatusManager", ErrNotImplemented)
+		return "", oekiterrors.Wrap(ErrNotImplemented, "provider does not implement CommitStatusManager")
 	}
 
 	interval, budget, want := initWait(opts)
@@ -101,7 +103,7 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 		case <-ctx.Done():
 			return "", ctx.Err()
 		case <-budget:
-			return "", fmt.Errorf("%w (last combined state: %s)", ErrWaitTimedOut, last)
+			return "", oekiterrors.Wrap(ErrWaitTimedOut, "wait budget exhausted", "last_state", last.String())
 		case <-ticker.C:
 		}
 	}

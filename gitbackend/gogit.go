@@ -58,7 +58,7 @@ func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 		}, nil
 	case AuthSSH:
 		authFail := func(err error) (transport.AuthMethod, error) {
-			return nil, fmt.Errorf("%w: %v", ErrAuthFailed, err)
+			return nil, oekiterrors.Wrap(ErrAuthFailed, "build SSH auth", "err", err)
 		}
 		hk, err := hostKeyCallbackWithConfig(auth)
 		if err != nil {
@@ -78,7 +78,7 @@ func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 			if _, err := os.Stat(auth.SSHKey); err == nil {
 				signer, err := xssh.NewPublicKeysFromFile("git", auth.SSHKey, auth.Passphrase)
 				if err != nil {
-					return authFail(fmt.Errorf("parse SSH key %s: %w", auth.SSHKey, err))
+					return authFail(oekiterrors.Wrap(err, "parse SSH key", "path", auth.SSHKey))
 				}
 				signer.HostKeyCallback = hk
 				return signer, nil
@@ -141,7 +141,7 @@ func hostKeyCallbackWithConfig(auth AuthConfig) (ssh.HostKeyCallback, error) {
 	}
 	cb, err := knownhosts.New(kh)
 	if err != nil {
-		return nil, fmt.Errorf("load %s: %w", kh, err)
+		return nil, oekiterrors.Wrap(err, "load known_hosts", "path", kh)
 	}
 	return cb, nil
 }
@@ -180,7 +180,7 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 func openRepo(op, repoPath string) (*git.Repository, error) {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return nil, newGitError(op, repoPath, "", fmt.Errorf("%w: %v", ErrRepoNotFound, err))
+		return nil, newGitError(op, repoPath, "", oekiterrors.Wrap(ErrRepoNotFound, "open repository", "err", err))
 	}
 	return repo, nil
 }

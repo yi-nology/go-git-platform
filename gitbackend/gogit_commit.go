@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -101,7 +103,7 @@ func resolveRev(repo *git.Repository, rev string) (plumbing.Hash, error) {
 			return hash, nil
 		}
 	}
-	return plumbing.ZeroHash, fmt.Errorf("%w: %q", errCannotResolveRev, rev)
+	return plumbing.ZeroHash, oekiterrors.Wrap(errCannotResolveRev, "cannot resolve revision", "rev", rev)
 }
 
 // applyChangesToWorktree computes the diff between baseTree and sourceTree and
@@ -122,7 +124,7 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 		case merkletrie.Insert, merkletrie.Modify:
 			file, err := sourceTree.File(change.To.Name)
 			if err != nil {
-				return fmt.Errorf("resolve %s in source tree: %w", change.To.Name, err)
+				return oekiterrors.Wrap(err, "resolve file in source tree", "file", change.To.Name)
 			}
 			// Write with the entry's mode restored and surface copy/close
 			// errors: a silently truncated file used to be staged and
@@ -131,7 +133,7 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 				return err
 			}
 			if _, err := wt.Add(change.To.Name); err != nil {
-				return fmt.Errorf("stage %s: %w", change.To.Name, err)
+				return oekiterrors.Wrap(err, "stage file", "file", change.To.Name)
 			}
 
 		case merkletrie.Delete:
@@ -611,7 +613,7 @@ func (b *GoGitBackend) Add(ctx context.Context, repoPath string, files []string)
 	}
 	for _, file := range files {
 		if _, err := wt.Add(file); err != nil {
-			return newGitError("Add", repoPath, "", fmt.Errorf("git add %s: %w", file, err))
+			return newGitError("Add", repoPath, "", oekiterrors.Wrap(err, "git add", "file", file))
 		}
 	}
 	return nil

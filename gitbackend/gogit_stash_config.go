@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/go-git/go-git/v5/plumbing/format/config"
 )
 
@@ -15,7 +17,7 @@ import (
 // and a pop path that could drop entries whose apply half-failed). Use the
 // native backend (requires the git binary) for stash.
 func stashUnsupported(op, repoPath string) error {
-	return newGitError(op, repoPath, "", fmt.Errorf("%w: the go-git backend cannot represent git's stash reflog; use the native backend", ErrStashUnsupported))
+	return newGitError(op, repoPath, "", oekiterrors.Wrap(ErrStashUnsupported, "the go-git backend cannot represent git's stash reflog; use the native backend"))
 }
 
 func (b *GoGitBackend) StashList(ctx context.Context, repoPath string) ([]StashEntry, error) {
@@ -91,7 +93,7 @@ func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (str
 	}
 
 	if cfg.Raw == nil {
-		return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("%w: %s", ErrConfigKeyNotFound, key))
+		return "", newGitError("GetConfig", repoPath, "", oekiterrors.Wrap(ErrConfigKeyNotFound, "raw config is nil", "key", key))
 	}
 
 	sec := cfg.Raw.Section(section)
@@ -111,7 +113,7 @@ func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (str
 		val, exists = find(sec.Options)
 	}
 	if !exists {
-		return "", newGitError("GetConfig", repoPath, "", fmt.Errorf("%w: %s", ErrConfigKeyNotFound, key))
+		return "", newGitError("GetConfig", repoPath, "", oekiterrors.Wrap(ErrConfigKeyNotFound, "key not present", "key", key))
 	}
 	return val, nil
 }

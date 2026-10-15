@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.87.0] - 2026-10-16
+
+### Changed
+
+oekit/pkg/errors 迁移收尾——剩余 74 处带动态参数的 `%w` 包装点全部换成
+`oekiterrors.Wrap(err, msg, kv...)` 结构化形式:
+
+- **gitbackend**(24 处): 哨兵增强型(`ErrInvalidGitArg`/`ErrConfigKeyNotFound`/
+  `ErrRepoNotFound`/`ErrAuthFailed` 等)与工作树写盘路径——动态值全部收进
+  kv(`key`/`path`/`file`/`host`/`port`/`segment`)
+- **provider**(18 处): webhook 验证器矩阵(HMAC/StaticToken/Gitee 双模式/
+  Hmac 任意算法)+ wait/factory/detect/pageiter/batch——kv 化
+  `header`/`platform`/`ref`/`last_state`/`max_pages`/`drift`
+- **backends/pkg**(4 处): github resolve-ref、enterprise client、
+  branchfilter bad-pattern、projection item
+- **保留 3 处双 `%w`**(provider/errors.go): `Wrap` 分类链需同时挂哨兵与
+  原始错误双链,oekit Wrap 单 cause 语义不覆盖,oekit 错误指南对 `%w`
+  形式明确认可
+- 错误字符串形状变化(动态值从内嵌改为 kv 后缀,如
+  `invalid git argument: "ext::"` → `invalid git argument: exec/config
+  flag is not accepted from callers arg=ext::`)——分类判定
+  (`errors.Is` 哨兵/HTTP status)不受影响,匹配错误消息**文本**的调用方
+  需要改用哨兵判定
+
 ## [0.86.0] - 2026-10-16
 
 ### Changed

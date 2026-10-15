@@ -14,9 +14,10 @@
 package branchfilter
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // BranchFilter matches branch names against a set of comma-separated glob
@@ -48,7 +49,7 @@ func New(filterStr string) (*BranchFilter, error) {
 		// silently matches nothing and callers cannot tell exclusion caused
 		// by the filter apart from a broken pattern.
 		if _, err := filepath.Match(p, ""); err != nil {
-			return nil, fmt.Errorf("branchfilter: bad pattern %q: %w", p, err)
+			return nil, oekiterrors.Wrap(err, "branchfilter: bad pattern", "pattern", p)
 		}
 		patterns = append(patterns, p)
 	}

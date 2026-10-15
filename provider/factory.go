@@ -1,6 +1,6 @@
 package provider
 
-import "fmt"
+import oekiterrors "github.com/oekit/pkg/errors"
 
 // Config holds the configuration for creating a Provider.
 type Config struct {
@@ -49,7 +49,7 @@ func NewProvider(cfg Config) (Provider, error) {
 	registryMu.RUnlock()
 
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrPlatformNotSupported, cfg.Platform)
+		return nil, oekiterrors.Wrap(ErrPlatformNotSupported, "platform not registered", "platform", cfg.Platform)
 	}
 	return ctor(cfg)
 }
