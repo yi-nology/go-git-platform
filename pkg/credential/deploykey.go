@@ -7,8 +7,9 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"strings"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -29,7 +30,7 @@ type DeployKey struct {
 func GenerateEd25519DeployKey(comment string) (*DeployKey, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("generate ed25519 key: %w", err)
+		return nil, oekiterrors.Wrap(err, "generate ed25519 key")
 	}
 
 	// 转 OpenSSH/authorized_keys 公钥
@@ -85,7 +86,7 @@ func MatchFingerprint(authorizedKey, want string) bool {
 func sshPublicKeyFromEd25519(pub ed25519.PublicKey, comment string) (string, error) {
 	sshPub, err := ssh.NewPublicKey(pub)
 	if err != nil {
-		return "", fmt.Errorf("wrap ed25519 public key: %w", err)
+		return "", oekiterrors.Wrap(err, "wrap ed25519 public key")
 	}
 	line := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub)))
 	if comment != "" && !strings.Contains(line, " "+comment) {

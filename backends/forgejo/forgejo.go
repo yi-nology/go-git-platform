@@ -25,8 +25,9 @@ package forgejo
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
@@ -68,7 +69,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	client, err := forgejo.NewClient(baseURL, forgejo.SetToken(cfg.Token), forgejo.SetHTTPClient(httpClient))
 	if err != nil {
-		return nil, fmt.Errorf("forgejo: failed to create client: %w", err)
+		return nil, oekiterrors.Wrap(err, "forgejo: failed to create client")
 	}
 	return &Provider{
 		client:   client,

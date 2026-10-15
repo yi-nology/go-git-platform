@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/transport"
 )
 
@@ -36,7 +38,7 @@ func MintJWT(appID int64, privateKeyPEM string) (string, error) {
 	}
 	key, err := parseRSAPrivateKey(privateKeyPEM)
 	if err != nil {
-		return "", fmt.Errorf("githubapp: parse private key: %w", err)
+		return "", oekiterrors.Wrap(err, "githubapp: parse private key")
 	}
 	now := time.Now()
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
@@ -47,14 +49,14 @@ func MintJWT(appID int64, privateKeyPEM string) (string, error) {
 	}
 	payloadJSON, err := json.Marshal(payloadMap)
 	if err != nil {
-		return "", fmt.Errorf("githubapp: marshal jwt payload: %w", err)
+		return "", oekiterrors.Wrap(err, "githubapp: marshal jwt payload")
 	}
 	payload := base64.RawURLEncoding.EncodeToString(payloadJSON)
 	signingInput := header + "." + payload
 	sum := sha256.Sum256([]byte(signingInput))
 	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
 	if err != nil {
-		return "", fmt.Errorf("githubapp: sign jwt: %w", err)
+		return "", oekiterrors.Wrap(err, "githubapp: sign jwt")
 	}
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
@@ -95,7 +97,7 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 	if err != nil {
 		// transport 只把 >=400 包装成带 status 的错误；3xx 走下面统一判定，
 		// 保证 >=300 一律报错且错误信息带 status。
-		return "", time.Time{}, fmt.Errorf("githubapp: fetch installation token: %w", err)
+		return "", time.Time{}, oekiterrors.Wrap(err, "githubapp: fetch installation token")
 	}
 	if resp.StatusCode >= 300 {
 		return "", time.Time{}, fmt.Errorf("githubapp: fetch installation token: status %d", resp.StatusCode)
@@ -105,7 +107,7 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 		ExpiresAt time.Time `json:"expires_at"`
 	}
 	if err := json.Unmarshal(resp.Body, &body); err != nil {
-		return "", time.Time{}, fmt.Errorf("githubapp: decode installation token: %w", err)
+		return "", time.Time{}, oekiterrors.Wrap(err, "githubapp: decode installation token")
 	}
 	if body.Token == "" {
 		return "", time.Time{}, fmt.Errorf("githubapp: installation token empty in response")
@@ -124,7 +126,7 @@ func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("unsupported private key: %w", err)
+		return nil, oekiterrors.Wrap(err, "unsupported private key")
 	}
 	rsaKey, ok := parsed.(*rsa.PrivateKey)
 	if !ok {

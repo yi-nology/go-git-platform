@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.86.0] - 2026-10-16
+
+### Changed
+
+接入 oekit 生态第三批——`pkg/errors` 错误包装（对齐其 llms.txt 错误处理
+规范）:
+
+- 30 处纯前缀 `fmt.Errorf("...: %w", err)` 包装点统一换成
+  `oekiterrors.Wrap(err, "...")`(gitbackend/transport/backends×7/
+  provider/githubapp/pkg/mcp)——获得 nil-safe 语义,消息形状
+  `msg: cause` 与 `errors.Is/As` 链完全不变
+- **不动公共契约**: 哨兵错误/`ProviderError`/`Wrap`/`Wrapf`/`New` 签名
+  原样保留;带动态参数的 74 处 `fmt.Errorf` 保留 `%w` 形式(oekit 错误
+  指南明确允许),后续再逐步迁移为 kv 结构化参数
+
 ## [0.85.0] - 2026-10-16
 
 ### Added

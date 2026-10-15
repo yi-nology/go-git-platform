@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // keepTree marks which parts of a document survive projection. A true
@@ -34,13 +36,13 @@ const keepAll = "*"
 func Project(v any, fields ...string) (map[string]any, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
-		return nil, fmt.Errorf("projection: marshal: %w", err)
+		return nil, oekiterrors.Wrap(err, "projection: marshal")
 	}
 	var doc map[string]any
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	if err := dec.Decode(&doc); err != nil {
-		return nil, fmt.Errorf("projection: document is not a JSON object: %w", err)
+		return nil, oekiterrors.Wrap(err, "projection: document is not a JSON object")
 	}
 	if len(fields) == 0 {
 		return nil, fmt.Errorf("projection: no fields selected (pass at least one field, or \"*\" for the full document)")

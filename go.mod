@@ -11,6 +11,7 @@ require (
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.1.5
 	github.com/oekit/logx v0.1.10
+	github.com/oekit/pkg v0.1.3
 	github.com/stretchr/testify v1.12.1
 	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/yi-nology/go-gitcode v0.7.2

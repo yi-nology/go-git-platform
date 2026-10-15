@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -66,12 +68,12 @@ func (b *NativeGitBackend) resolveSSHPin(ctx context.Context, repoPath string, a
 
 	tmp, err := os.CreateTemp("", "git_ssh_known_hosts_*")
 	if err != nil {
-		return auth, noop, fmt.Errorf("ssh pin: create temp known_hosts: %w", err)
+		return auth, noop, oekiterrors.Wrap(err, "ssh pin: create temp known_hosts")
 	}
 	if _, err := tmp.WriteString(strings.Join(lines, "\n") + "\n"); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmp.Name())
-		return auth, noop, fmt.Errorf("ssh pin: write known_hosts: %w", err)
+		return auth, noop, oekiterrors.Wrap(err, "ssh pin: write known_hosts")
 	}
 	_ = tmp.Close()
 	_ = os.Chmod(tmp.Name(), 0o600)
@@ -300,7 +302,7 @@ func plausibleHost(host string) bool {
 func pinnedKnownHostsLines(ctx context.Context, host string, port int, pin string) ([]string, error) {
 	keyscan, err := exec.LookPath("ssh-keyscan")
 	if err != nil {
-		return nil, fmt.Errorf("HostKeyFingerprint 已设置但找不到 ssh-keyscan（native 钉扎依赖它预校验）: %w", err)
+		return nil, oekiterrors.Wrap(err, "HostKeyFingerprint 已设置但找不到 ssh-keyscan（native 钉扎依赖它预校验）")
 	}
 	cctx, cancel := context.WithTimeout(ctx, keyscanTimeout)
 	defer cancel()

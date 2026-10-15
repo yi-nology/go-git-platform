@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // Manager caches Provider instances keyed by configuration so repeated
@@ -92,7 +94,7 @@ func HashToken(token string) string {
 func (m *Manager) GetByURL(cloneURL, token string) (Provider, error) {
 	result, err := DetectPlatform(cloneURL)
 	if err != nil {
-		return nil, fmt.Errorf("detect platform: %w", err)
+		return nil, oekiterrors.Wrap(err, "detect platform")
 	}
 	return m.Get(Config{
 		Platform: result.Platform,

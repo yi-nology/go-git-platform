@@ -31,6 +31,8 @@ import (
 	"fmt"
 	"net/http"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -66,7 +68,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	if cfg.BaseURL == "" {
 		c, err := github.NewClient(github.WithHTTPClient(httpClient))
 		if err != nil {
-			return nil, fmt.Errorf("github: failed to create client: %w", err)
+			return nil, oekiterrors.Wrap(err, "github: failed to create client")
 		}
 		ghClient = c
 	} else {

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/google/go-github/v92/github"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -55,7 +57,7 @@ func decodeStarredEntry(entry json.RawMessage) (*github.Repository, error) {
 	}
 	var bare github.Repository
 	if err := json.Unmarshal(entry, &bare); err != nil {
-		return nil, fmt.Errorf("decode starred entry: %w", err)
+		return nil, oekiterrors.Wrap(err, "decode starred entry")
 	}
 	return &bare, nil
 }

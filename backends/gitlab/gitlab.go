@@ -25,7 +25,8 @@ package gitlab
 
 import (
 	"context"
-	"fmt"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"time"
 
@@ -83,7 +84,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client, err = gitlab.NewClient(cfg.Token, opts...)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("gitlab: failed to create client: %w", err)
+		return nil, oekiterrors.Wrap(err, "gitlab: failed to create client")
 	}
 	return &Provider{
 		client:   client,

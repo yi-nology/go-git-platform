@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -234,5 +236,5 @@ func (h *SSHKeyHelper) ExtractPublicKeyFromPrivateKey(privateKey, passphrase str
 	// Do not fall back to shelling out to ssh-keygen: its only way to supply
 	// a passphrase (-P) is via argv, which leaks the secret to any local
 	// user through ps / /proc. Surface the in-process parse error instead.
-	return "", fmt.Errorf("failed to parse private key: %w", err)
+	return "", oekiterrors.Wrap(err, "failed to parse private key")
 }

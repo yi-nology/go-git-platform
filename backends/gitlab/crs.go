@@ -2,7 +2,8 @@ package gitlab
 
 import (
 	"context"
-	"fmt"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
@@ -109,7 +110,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, n, acceptOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "MergeCR", fmt.Errorf("merge failed: %w", err))
+		return nil, provider.Wrap(provider.PlatformGitLab, "MergeCR", oekiterrors.Wrap(err, "merge failed"))
 	}
 	return convertMR(mr), nil
 }

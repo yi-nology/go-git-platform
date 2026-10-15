@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/transport"
@@ -66,7 +68,7 @@ func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 		if auth.SSHKeyContent != "" {
 			signer, err := xssh.NewPublicKeys("git", []byte(auth.SSHKeyContent), auth.Passphrase)
 			if err != nil {
-				return authFail(fmt.Errorf("parse SSH key from SSHKeyContent: %w", err))
+				return authFail(oekiterrors.Wrap(err, "parse SSH key from SSHKeyContent"))
 			}
 			signer.HostKeyCallback = hk
 			return signer, nil
@@ -130,7 +132,7 @@ func hostKeyCallbackWithConfig(auth AuthConfig) (ssh.HostKeyCallback, error) {
 	if kh == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, fmt.Errorf("resolve home dir for known_hosts: %w", err)
+			return nil, oekiterrors.Wrap(err, "resolve home dir for known_hosts")
 		}
 		kh = filepath.Join(home, ".ssh", "known_hosts")
 	}

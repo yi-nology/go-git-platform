@@ -41,6 +41,8 @@ import (
 	"syscall"
 	"time"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/oekit/concurrency/async"
 	"github.com/oekit/logx"
@@ -97,7 +99,7 @@ func run() error {
 	}
 	p, err := provider.NewProvider(cfg)
 	if err != nil {
-		return fmt.Errorf("build provider: %w", err)
+		return oekiterrors.Wrap(err, "build provider")
 	}
 
 	opts := mcpserver.Options{ReadOnly: *readOnly}
@@ -111,7 +113,7 @@ func run() error {
 
 	srv, err := mcpserver.NewServer(p, opts)
 	if err != nil {
-		return fmt.Errorf("build mcp server: %w", err)
+		return oekiterrors.Wrap(err, "build mcp server")
 	}
 
 	if *httpAddr != "" {
@@ -120,7 +122,7 @@ func run() error {
 
 	ctx := context.Background()
 	if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil {
-		return fmt.Errorf("mcp server: %w", err)
+		return oekiterrors.Wrap(err, "mcp server")
 	}
 	return nil
 }

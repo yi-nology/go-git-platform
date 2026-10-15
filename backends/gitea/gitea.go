@@ -25,8 +25,9 @@ package gitea
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	gitea "gitea.dev/sdk"
 
@@ -68,7 +69,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	client, err := gitea.NewClient(baseURL, gitea.SetToken(cfg.Token), gitea.SetHTTPClient(httpClient))
 	if err != nil {
-		return nil, fmt.Errorf("gitea: failed to create client: %w", err)
+		return nil, oekiterrors.Wrap(err, "gitea: failed to create client")
 	}
 	return &Provider{
 		client:   client,

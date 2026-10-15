@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // DefaultTimeout is the per-request HTTP timeout applied when the caller does
@@ -339,7 +341,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return out, ErrEmptyResponse
 	}
 	if err := json.Unmarshal(body, req.Result); err != nil {
-		return out, fmt.Errorf("transport: decode response: %w", err)
+		return out, oekiterrors.Wrap(err, "transport: decode response")
 	}
 	return out, nil
 }
@@ -351,7 +353,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request, error) {
 	bodyReader, contentType, err := encodeBody(req.Body)
 	if err != nil {
-		return nil, fmt.Errorf("transport: encode body: %w", err)
+		return nil, oekiterrors.Wrap(err, "transport: encode body")
 	}
 
 	full := c.baseURL + req.Path
@@ -360,7 +362,7 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, strings.ToUpper(req.Method), full, bodyReader)
 	if err != nil {
-		return nil, fmt.Errorf("transport: build request: %w", err)
+		return nil, oekiterrors.Wrap(err, "transport: build request")
 	}
 
 	for k, vs := range req.Headers {
