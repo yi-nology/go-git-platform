@@ -308,19 +308,25 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return nil, err
 	}
 
-	c.log().Debug("transport request ok",
-		"method", req.Method,
-		"path", req.Path,
-		"status", resp.StatusCode,
-		"duration", duration,
-		"body_size", len(body),
-	)
-	if len(body) > 0 {
-		c.log().Debug("transport response body",
+	// Debug events are only worth their argument cost when a real logger is
+	// attached: with the default noop these calls would still evaluate their
+	// kv pairs — including truncateForLog's full-body string copy on every
+	// successful request.
+	if c.logger != nil {
+		c.logger.Debug("transport request ok",
 			"method", req.Method,
 			"path", req.Path,
-			"body", truncateForLog(body, 2048),
+			"status", resp.StatusCode,
+			"duration", duration,
+			"body_size", len(body),
 		)
+		if len(body) > 0 {
+			c.logger.Debug("transport response body",
+				"method", req.Method,
+				"path", req.Path,
+				"body", truncateForLog(body, 2048),
+			)
+		}
 	}
 
 	if resp.StatusCode >= 400 {

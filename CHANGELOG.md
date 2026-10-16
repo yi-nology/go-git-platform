@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.88.0] - 2026-10-16
+
+### Changed
+
+oekit 依赖升级到最新 + 热点路径深层优化(无 API 变化):
+
+- **依赖**: `oekit/pkg` v0.1.3→**v0.6.0**、`oekit/concurrency` v0.1.5→
+  **v0.4.0**、`oekit/logx` v0.1.10→**v0.2.0**(主模块与 mcp 同步)。逐个
+  核对所用 API 签名(`errors.Wrap`/`async.GoSafe*`/`logx.Delegating`/
+  `WithService`)全部未变,logx 根包依赖面仍只有 lumberjack 一个传递依赖
+- **provider/batch 批处理引擎重写为固定 worker pool**: 原"每 item 一个
+  goroutine + semaphore"改为 workers 个常驻 goroutine 拉取 index——
+  goroutine 创建从 O(items) 降到 O(concurrency)。语义逐项保持(输入序
+  结果/并发上界/取消 fail-fast/panic 转 item Err),既有测试全部通过。
+  benchmark(M5, GetFileContents 空 fn): 10k 项 **9.86ms→1.29ms(7.6×)**,
+  分配 30004→10012 allocs(-67%),1.84MB→563KB(-69%);1k 项 7.2×
+- **transport/client Do 路径的 debug 日志守卫**: noop logger(默认)下
+  不再求值 debug kv 参数——原先每次成功请求都执行 `truncateForLog` 的
+  响应体字符串拷贝(截断上限 2048B)+ 10 个 kv 装箱分配。挂了真实
+  logger 的调用方行为不变
+
+### Added
+
+- benchmark 基线: `transport` Do/DoJSON(noop logger, ~36KB payload)、
+  `provider` batch 1k/10k 项 × 默认/最大并发
+
 ## [0.87.0] - 2026-10-16
 
 ### Changed

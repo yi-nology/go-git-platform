@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
-	oekiterrors "github.com/oekit/pkg/errors"
+	"sync/atomic"
 
 	"github.com/oekit/concurrency/async"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // DefaultBatchConcurrency is the number of in-flight operations used by
@@ -54,47 +54,55 @@ type BatchResult[T any] struct {
 // batch runs fn over items with bounded concurrency and returns results
 // in input order. The context is honored: after cancellation, remaining
 // items fail fast with the context error instead of being started —
-// including items blocked waiting for a concurrency slot, since semaphore
-// acquisition is itself a cancellable select.
+// workers check ctx before running each item, so an already-cancelled
+// batch drains in one pass.
 func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func(T) string, fn func(context.Context, T) (R, error)) []BatchResult[R] {
 	results := make([]BatchResult[R], len(items))
 	if len(items) == 0 {
 		return results
 	}
-
-	sem := make(chan struct{}, opts.normalized())
-	var wg sync.WaitGroup
 	for i, item := range items {
 		results[i].Key = key(item)
-		if err := ctx.Err(); err != nil {
-			results[i].Err = err
-			continue
-		}
-		// Acquiring a slot must be interruptible: without the ctx.Done
-		// branch a cancellation during contention (all slots busy) would
-		// block the loop until an in-flight item happens to finish.
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			results[i].Err = ctx.Err()
-			continue
-		}
-		wg.Add(1)
-		// async.GoSafe recovers a panicking fn at the outermost layer; the
-		// inner recover below runs first and converts the panic into the
-		// item's Err, so one bad item neither crashes the process nor goes
-		// silently missing from the results.
+	}
+
+	// Fixed worker pool: `workers` long-lived goroutines pull the next
+	// index, instead of spawning one goroutine per item behind a
+	// semaphore. Goroutine creation drops from O(items) to O(workers) —
+	// a 10k-item batch used to create 10k goroutines. Semantics carried
+	// over from the per-item version:
+	//   - results land by index, so order follows input;
+	//   - at most `workers` calls to fn are in flight;
+	//   - cancellation fails every not-yet-run item with ctx.Err() while
+	//     in-flight items run to completion;
+	//   - a panicking fn becomes that item's Err and the worker moves on,
+	//     so one bad item neither crashes the process nor starves the rest.
+	workers := opts.normalized()
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
 		async.GoSafe(func() {
 			defer wg.Done()
-			defer func() { <-sem }()
-			defer func() {
-				if r := recover(); r != nil {
-					results[i].Err = fmt.Errorf("batch: fn panicked: %v", r)
+			for {
+				i := int(next.Add(1)) - 1
+				if i >= len(items) {
+					return
 				}
-			}()
-			v, err := fn(ctx, item)
-			results[i].Value = v
-			results[i].Err = err
+				if err := ctx.Err(); err != nil {
+					results[i].Err = err
+					continue
+				}
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							results[i].Err = fmt.Errorf("batch: fn panicked: %v", r)
+						}
+					}()
+					v, err := fn(ctx, items[i])
+					results[i].Value = v
+					results[i].Err = err
+				}()
+			}
 		})
 	}
 	wg.Wait()
