@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.88.1] - 2026-10-16
+
+### Changed
+
+依赖升级(合入 Dependabot #22/#23/#24,统一提交保持线性历史):
+
+- `github.com/go-git/go-git/v5` v5.19.2→**v5.19.3**(commondir 句柄关闭/
+  redirect 凭证收敛等上游修复)
+- `gitlab.com/gitlab-org/api/client-go/v3` v3.15.0→**v3.18.0**(3 个
+  minor,后端全量测试通过)
+- `golang.org/x/crypto` v0.57.0→**v0.58.0**,联动 `x/net` v0.59.0→
+  **v0.60.0**(清掉 GO-2026-6617/6612/6611 的 require 级命中)+ x/sys、
+  x/text;`mcp/` 同步
+
 ## [0.88.0] - 2026-10-16
 
 ### Changed

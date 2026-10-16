@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
 	gitea.dev/sdk v1.3.0
-	github.com/go-git/go-git/v5 v5.19.2
+	github.com/go-git/go-git/v5 v5.19.3
 	github.com/google/go-github/v92 v92.0.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
@@ -15,8 +15,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/yi-nology/go-gitcode v0.7.2
-	gitlab.com/gitlab-org/api/client-go/v3 v3.15.0
-	golang.org/x/crypto v0.57.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.18.0
+	golang.org/x/crypto v0.58.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/time v0.16.0
 )
@@ -32,7 +32,7 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
-	github.com/go-git/go-billy/v5 v5.9.1 // indirect
+	github.com/go-git/go-billy/v5 v5.9.2 // indirect
 	github.com/go-openapi/errors v0.22.9 // indirect
 	github.com/go-openapi/jsonpointer v1.0.2 // indirect
 	github.com/go-openapi/strfmt v0.27.2 // indirect
@@ -63,9 +63,9 @@ require (
 	github.com/skeema/knownhosts v1.3.3 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
