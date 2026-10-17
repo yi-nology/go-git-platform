@@ -554,7 +554,7 @@ go-git-platform/
 ├── docs/
 │   ├── divergence-ledger.md     # 渲染后的分歧台账 (go generate 再生成)
 │   └── v1.0-readiness.md        # 1.0 路线
-├── examples/                    # automation/capabilities/credential/gitbackend/notification/provider/reaction/webhook
+├── examples/                    # automation/capabilities/credential/gitbackend/logging/notification/provider/reaction/webhook
 ├── Makefile                     # test/lint/fmt/cover 等命令
 ├── .golangci.yml                # lint 配置
 └── go.mod
