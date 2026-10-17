@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.88.2] - 2026-10-17
+
+### Changed
+
+- `oekit/pkg` v0.6.0→**v0.7.0**(主模块与 mcp 同步)。所用 API
+  (`errors.Wrap`)签名与行为不变;新 API `In`/`Chain` 不影响既有调用
+- **适配**: `gitbackend.IsNotFound` 改用 `oekiterrors.In`——四哨兵一次
+  链遍历替代四个独立 `errors.Is` 的 `||` 链,语义严格等价(oekit-first
+  规则:能用 oekit 底层解决的不得手写等价物)
+
 ## [0.88.1] - 2026-10-16
 
 ### Changed

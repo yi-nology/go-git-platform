@@ -3,6 +3,8 @@ package gitbackend
 import (
 	"errors"
 	"fmt"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 var (
@@ -58,10 +60,10 @@ func newGitError(op, path, stderr string, err error) *GitError {
 	}
 }
 
-// IsNotFound checks if an error is a not-found error.
+// IsNotFound checks if an error is a not-found error. oekiterrors.In walks
+// the chain once for all four sentinels instead of four separate walks.
 func IsNotFound(err error) bool {
-	return errors.Is(err, ErrRepoNotFound) || errors.Is(err, ErrBranchNotFound) ||
-		errors.Is(err, ErrRemoteNotFound) || errors.Is(err, ErrFileNotFound)
+	return oekiterrors.In(err, ErrRepoNotFound, ErrBranchNotFound, ErrRemoteNotFound, ErrFileNotFound)
 }
 
 // IsAuthFailed checks if an error is an authentication error.
