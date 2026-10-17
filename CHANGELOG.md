@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.89.0] - 2026-10-17
+
+### Changed
+
+oekit 升级适配(主模块与 mcp 同步;本次升级的三个变化全部源自本仓在
+oekit 提的 issue 被上游采纳):
+
+- `oekit/pkg` v0.7.0→**v0.9.0**、`oekit/logx` v0.2.0→**v0.4.0**
+- **logx#8 落地**: `logx.Delegating` 变参改单参必填(误用编译期报错)——
+  本仓 `provider/transport.NewLogxLogger` 的编译期断言同步改为
+  `Delegating("")`;对外 API 无变化
+- **logx#7 落地**: FileSink/RotatingSink 拆出根包,`logx` 根包不再携带
+  lumberjack 传递依赖——SDK 消费方的依赖面净减一个
+- **pkg#3 落地**: `errors.Wrap` 奇数个 kv 不再静默丢弃,渲染
+  `!BADKEY=<value>` 对齐 slog 约定(本仓 104 处调用均为偶数 kv,行为
+  不受影响)
+
 ## [0.88.2] - 2026-10-17
 
 ### Changed

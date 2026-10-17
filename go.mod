@@ -10,8 +10,8 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.4.0
-	github.com/oekit/logx v0.2.0
-	github.com/oekit/pkg v0.7.0
+	github.com/oekit/logx v0.4.0
+	github.com/oekit/pkg v0.9.0
 	github.com/stretchr/testify v1.12.1
 	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/yi-nology/go-gitcode v0.7.2
@@ -66,6 +66,5 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )

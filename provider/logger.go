@@ -23,7 +23,7 @@ func (noopLogger) Error(string, ...any) {}
 func NewNoopLogger() Logger { return noopLogger{} }
 
 // logx.Logger satisfies Logger structurally (same four kv-style methods).
-var _ Logger = logx.Delegating()
+var _ Logger = logx.Delegating("")
 
 // NewLogxLogger returns a Logger backed by the oekit/logx facade, for
 // consumers who run the oekit observability stack. The logger is lazily

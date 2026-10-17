@@ -5,7 +5,7 @@ import "github.com/oekit/logx"
 // logx.Logger satisfies Logger structurally (same four kv-style methods), so
 // any oekit/logx logger — including the consumer's SetDefault chain — plugs
 // into Config.Logger without an adapter.
-var _ Logger = logx.Delegating()
+var _ Logger = logx.Delegating("")
 
 // NewLogxLogger returns a Logger backed by the oekit/logx facade. The
 // returned logger is lazily resolved (logx.Delegating): it follows whatever

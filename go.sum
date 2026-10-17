@@ -119,10 +119,10 @@ github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18 h1:hMf3u2RMBoIjR
 github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18/go.mod h1:GvqteloYLLcJ0N3W6n+qNQXV/voE1Vuo3x7o/5H8EqM=
 github.com/oekit/concurrency v0.4.0 h1:K8Zuj0n2lBOd+YLWM0/8WMl7yRvSRBjloBLJWNYOCiE=
 github.com/oekit/concurrency v0.4.0/go.mod h1:x6fIjMPnTvbHQRXEXvoz9fxh4CfSSxJwGZyJoIGr4II=
-github.com/oekit/logx v0.2.0 h1:DwSw3zqWELpdKBorQie/J9Fvcs8+rVXj1zjCz8rXbco=
-github.com/oekit/logx v0.2.0/go.mod h1:gvkjNJi5LAN1yA0wc771p/29zi607GxPnTkLQWjHDaQ=
-github.com/oekit/pkg v0.7.0 h1:Wc9uYHSdN9DpYR6ieSg9UWC4YVjFJ1qz53VNrKA+1vA=
-github.com/oekit/pkg v0.7.0/go.mod h1:Yh612jw/kb3vwePNZnVNxGQIo7lV83DhfntFdvNt5jM=
+github.com/oekit/logx v0.4.0 h1:crw2GE0fg9qrniJCjDrtjUS/KLAIApYIZYkIwcKbcOk=
+github.com/oekit/logx v0.4.0/go.mod h1:x3wn+/0aYDrcs7EavWWAz8qUbwtysTB/gvuLZxtl2B0=
+github.com/oekit/pkg v0.9.0 h1:QLa1y9vKhQLgJqfuIIK9jRbi12xgXHnG417hlcYWx04=
+github.com/oekit/pkg v0.9.0/go.mod h1:Yh612jw/kb3vwePNZnVNxGQIo7lV83DhfntFdvNt5jM=
 github.com/oklog/ulid/v2 v2.1.2 h1:IEclFb9JNvzYA6MW2SCxbLzcHTVsfqm3PrqGQJH5zec=
 github.com/oklog/ulid/v2 v2.1.2/go.mod h1:rcEKHmBBKfef9DhnvX7y1HZBYxjXb0cP5ExxNsTT1QQ=
 github.com/onsi/gomega v1.34.1 h1:EUMJIKUjM8sKjYbtxQI9A4z2o+rruxnzNvpknOXie6k=
@@ -195,8 +195,6 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=
 gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c/go.mod h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=
-gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
-gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
 gopkg.in/warnings.v0 v0.1.2 h1:wFXVbFY8DY5/xOe1ECiWdKCzZlxgshcYVNkBHstARME=
 gopkg.in/warnings.v0 v0.1.2/go.mod h1:jksf8JmL6Qr/oQM2OXTHunEvvTAsrWBLb6OOjuVWRNI=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
