@@ -33,9 +33,9 @@ func TestDebugEnabled(t *testing.T) {
 		t.Fatal("LoggerFunc (no Enabled) must conservatively report true")
 	}
 	// logx-backed loggers answer via LevelEnabler with lazy resolution.
-	// The process default is NOT assumed here: logx's std backend currently
-	// starts at DEBUG (upstream default-level issue), so this test installs
-	// its own backends explicitly for both directions.
+	// The process default is not assumed even though logx v0.5.1 fixed it to
+	// INFO (upstream issue #11): tests elsewhere may swap the global, so
+	// this test installs its own backends explicitly for both directions.
 	logx.SetDefault(logx.NewStdLogger("t", logx.LevelInfo))
 	if DebugEnabled(NewLogxLogger("t")) {
 		t.Fatal("logx INFO default must not be debug-enabled")

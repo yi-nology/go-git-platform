@@ -10,7 +10,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.5.4
-	github.com/oekit/logx v0.5.0
+	github.com/oekit/logx v0.5.1
 	github.com/oekit/pkg v0.11.0
 	github.com/stretchr/testify v1.12.1
 	github.com/studyzy/gongfeng-sdk-go v0.6.0

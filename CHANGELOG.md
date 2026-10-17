@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.90.1] - 2026-10-17
+
+### Changed
+
+- `oekit/logx` v0.5.0→**v0.5.1**(主模块与 mcp 同步)——**上游修复本仓
+  提的 [logx#11](https://github.com/oekit/logx/issues/11)**: `NewStdLogger`
+  无参默认从 `LevelDebug`(iota 零值陷阱)改为 `LevelInfo`,与文档"默认
+  INFO"及 `NewSlogLogger` 行为对齐。本仓测试已自备状态不受影响,仅更新
+  过期注释;`pkg` v0.11.0/`concurrency` v0.5.4 无新版
+
+> 说明:该版本发布时 goproxy.cn/proxy.golang.org 尚未同步 v0.5.1,本仓经
+> 上游 tag tarball 手工构造模块 zip(剔除 hlog/kitexlog/hertzlog/sink 四
+> 个嵌套模块,与代理规范一致)本地安装;go.sum 的 `h1:` hash 仅含文件路径
+> 与内容,后续 proxy 同步后 hash 一致,下游无需任何操作。
+
 ## [0.90.0] - 2026-10-17
 
 ### Changed
