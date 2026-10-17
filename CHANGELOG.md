@@ -4,6 +4,39 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.90.0] - 2026-10-17
+
+### Changed
+
+oekit 升级适配(主模块与 mcp 同步)。上轮提的三个 issue 本轮全部随新版
+落地,实现与本仓建议一致:
+
+- **依赖**: `oekit/pkg` v0.9.0→**v0.11.0**、`oekit/concurrency`
+  v0.4.0→**v0.5.4**、`oekit/logx` v0.4.0→**v0.5.0**
+- **concurrency#4 落地**: `retry.Config` 新增 `Exponential bool` +
+  `Jitter time.Duration`(指数退避+抖动,MaxDelay 封顶,溢出饱和)——
+  本仓暂无收编点(transport/retry.go 为 HTTP 特化,红线保留;gitbackend
+  无手写退避),待未来场景出现直接可用
+- **pkg#5 落地**: `MultiError.Errors()` 改 `slices.Clone` 防御拷贝
+- **logx#9 落地**: 新增 `LevelEnabler` 接口 + `logx.Enabled` 判定——
+  **本仓收编**: transport 新增 `DebugEnabled(logger)`(nil/未实现→保守
+  true;logx-backed/SlogLogger 按级别判定),`Client.do` 的 debug 事件
+  块抽为 `logRequestDebug` 并以 `logger != nil && DebugEnabled` 守卫——
+  真实 logger 但 Debug 被级别过滤时,kv 参数(含响应体拷贝)不再求值;
+  `SlogLogger` 补 `Enabled(logx.Level)` 方法(struct 方法,非接口变更,
+  映射到 handler 级别)
+
+### Fixed
+
+- transport `Client.do` 复杂度超限(gocyclo 16>15)——debug 事件块抽成
+  `logRequestDebug` 方法
+
+### Known upstream issue
+
+- 升级中发现 logx 进程默认 logger 起始级别实为 DEBUG(与文档"默认
+  INFO"矛盾,iota 零值陷阱),已提 [oekit/logx#11](https://github.com/oekit/logx/issues/11);
+  本仓测试已改为显式自备状态,不依赖文档承诺的默认值
+
 ## [0.89.0] - 2026-10-17
 
 ### Changed

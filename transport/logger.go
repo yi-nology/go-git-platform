@@ -1,9 +1,12 @@
 package transport
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/oekit/logx"
 )
 
 // Logger is a minimal logging interface compatible with log/slog, zap,
@@ -40,6 +43,26 @@ func NoopLogger() Logger { return noopLogger{} }
 
 // SlogLogger adapts a *slog.Logger to the Logger interface.
 type SlogLogger struct{ Logger *slog.Logger }
+
+// Enabled reports whether the handler would emit the given level, so hot
+// paths can skip expensive kv argument evaluation for filtered events
+// (logx.LevelEnabler shape). Map onto slog's level scale; debug events
+// bound for NewDebugLogger therefore honor GO_GIT_PLATFORM_DEBUG.
+func (l SlogLogger) Enabled(level logx.Level) bool {
+	if l.Logger == nil {
+		return false
+	}
+	sl := slog.LevelInfo
+	switch level {
+	case logx.LevelDebug:
+		sl = slog.LevelDebug
+	case logx.LevelWarn:
+		sl = slog.LevelWarn
+	case logx.LevelError:
+		sl = slog.LevelError
+	}
+	return l.Logger.Enabled(context.Background(), sl)
+}
 
 // Debug implements Logger.
 func (l SlogLogger) Debug(msg string, kv ...any) {

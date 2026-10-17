@@ -308,26 +308,12 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return nil, err
 	}
 
-	// Debug events are only worth their argument cost when a real logger is
-	// attached: with the default noop these calls would still evaluate their
-	// kv pairs — including truncateForLog's full-body string copy on every
-	// successful request.
-	if c.logger != nil {
-		c.logger.Debug("transport request ok",
-			"method", req.Method,
-			"path", req.Path,
-			"status", resp.StatusCode,
-			"duration", duration,
-			"body_size", len(body),
-		)
-		if len(body) > 0 {
-			c.logger.Debug("transport response body",
-				"method", req.Method,
-				"path", req.Path,
-				"body", truncateForLog(body, 2048),
-			)
-		}
-	}
+	// Debug events are only worth their argument cost when a real logger
+	// is attached AND debug passes its level filter: with the default noop
+	// these calls would still evaluate their kv pairs — including
+	// truncateForLog's body copy — and with a level-filtered logger the
+	// evaluation would be discarded downstream anyway.
+	c.logRequestDebug(req, resp.StatusCode, duration, body)
 
 	if resp.StatusCode >= 400 {
 		// The RoundTripper layer has logged and hooked the error response;
@@ -350,6 +336,30 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 		return out, oekiterrors.Wrap(err, "transport: decode response")
 	}
 	return out, nil
+}
+
+// logRequestDebug emits the per-request debug events when a real logger is
+// attached and debug passes its level filter (DebugEnabled): with the
+// default noop, or with a level-filtered logger, the kv arguments —
+// including truncateForLog's body copy — are not evaluated at all.
+func (c *Client) logRequestDebug(req *Request, status int, duration time.Duration, body []byte) {
+	if c.logger == nil || !DebugEnabled(c.logger) {
+		return
+	}
+	c.logger.Debug("transport request ok",
+		"method", req.Method,
+		"path", req.Path,
+		"status", status,
+		"duration", duration,
+		"body_size", len(body),
+	)
+	if len(body) > 0 {
+		c.logger.Debug("transport response body",
+			"method", req.Method,
+			"path", req.Path,
+			"body", truncateForLog(body, 2048),
+		)
+	}
 }
 
 // buildRequest assembles the http.Request for a transport Request: URL join,

@@ -20,3 +20,20 @@ var _ Logger = logx.Delegating("")
 func NewLogxLogger(component string) Logger {
 	return logx.Delegating(component)
 }
+
+// DebugEnabled reports whether l would emit debug-level events, so hot
+// paths can skip expensive kv argument evaluation for filtered events.
+// Loggers backed by oekit/logx (NewLogxLogger) answer through its
+// LevelEnabler; SlogLogger checks its handler's level. Anything else
+// conservatively returns true — paying the evaluation cost is the status
+// quo ante, and no event is ever dropped by this check. A nil logger
+// never emits.
+func DebugEnabled(l Logger) bool {
+	if l == nil {
+		return false
+	}
+	if le, ok := l.(interface{ Enabled(logx.Level) bool }); ok {
+		return le.Enabled(logx.LevelDebug)
+	}
+	return true
+}
