@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.92.0] - 2026-10-18
+
+### Changed
+
+oekit 升级(pkg v0.13.0 / concurrency v0.12.0 / logx v0.7.0 不变)+ HTTP
+重试判定谓词收编上游:
+
+- **transport 重试判定收编 `retry/httpx`**(上轮提的
+  [concurrency#22](https://github.com/oekit/concurrency/issues/22) 已在
+  v0.12.0 落地,方案与本仓提议一致): `ShouldRetry` 的 429/5xx 核心换
+  `httpx.Retryable`;错误构造与重试门控共用的限流谓词
+  `isRateLimitedStatus` 换 `httpx.RetryableWithHeaders`(403 +
+  Retry-After / X-RateLimit-Remaining: 0 可重试)。语义并集逐项核对等价
+  (`ShouldRetry ∪ isRateLimitedStatus ≡ RetryableWithHeaders ∪ 自定义
+  Statuses`),幂等方法门控/RetryWrite/body rewind 仍本仓自持。
+  单一谓词包装保留(错误构造与门控不漂移的契约不变)
+- **已知上游差异**(表驱动用例钉住): httpx 对
+  `X-RateLimit-Remaining` 精确比较不做 OWS trim——真实 net/http 解析按
+  RFC 7230 已剥离,仅人造头受影响;已提
+  [concurrency#26](https://github.com/oekit/concurrency/issues/26) 建议
+  补 TrimSpace
+
 ## [0.91.0] - 2026-10-18
 
 ### Changed

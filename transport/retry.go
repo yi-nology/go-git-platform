@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/oekit/concurrency/retry/httpx"
 )
 
 // RetryConfig controls exponential-backoff retry on transient HTTP failures.
@@ -146,14 +148,12 @@ func (rc *RetryConfig) canRetryNetworkError(req *http.Request, err error) bool {
 
 // ShouldRetry reports whether the given status code should trigger a retry.
 // This is the status-only predicate; call sites that know the request must
-// additionally gate on the method via canRetryStatus. Rate-limited 403s are
+// additionally gate on the method via canRetryStatus. The 429/5xx core is
+// delegated to httpx.Retryable (oekit/concurrency#15); Rate-limited 403s are
 // deliberately absent here — they depend on response headers and are handled
 // by canRetryResponse, keeping this exported signature status-only.
 func (rc *RetryConfig) ShouldRetry(status int) bool {
-	if status == http.StatusTooManyRequests {
-		return true
-	}
-	if status >= 500 && status <= 599 {
+	if httpx.Retryable(status) {
 		return true
 	}
 	for _, s := range rc.Statuses {

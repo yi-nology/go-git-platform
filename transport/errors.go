@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/oekit/concurrency/retry/httpx"
 )
 
 // NewStatusError builds an error for an HTTP response with status >= 400. The
@@ -63,17 +64,14 @@ func NewStatusErrorWithHeaders(method, path string, status int, body []byte, hea
 //
 // A bare 403 is an authorization failure, not throttling — retrying it can
 // never succeed and would only amplify load.
+//
+// Delegated to httpx.RetryableWithHeaders (oekit/concurrency#22): 429/5xx
+// retryable, 403 retryable only with Retry-After or X-RateLimit-Remaining
+// exactly "0". Header values arrive textproto-parsed (OWS already trimmed
+// per RFC 7230), matching httpx's exact comparison; the transport kept the
+// wrapper so the single-predicate contract above stays in one place.
 func isRateLimitedStatus(status int, h http.Header) bool {
-	if status == http.StatusTooManyRequests {
-		return true
-	}
-	if status != http.StatusForbidden || h == nil {
-		return false
-	}
-	if h.Get("Retry-After") != "" {
-		return true
-	}
-	return strings.TrimSpace(h.Get("X-RateLimit-Remaining")) == "0"
+	return httpx.RetryableWithHeaders(status, h)
 }
 
 // Error is the structured error returned by Client when a request completes

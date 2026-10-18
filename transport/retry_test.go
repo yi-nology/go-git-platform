@@ -661,9 +661,12 @@ func TestRetryingRoundTripper_Bare403NotRetried(t *testing.T) {
 	}
 }
 
-// TestRetry_IsRateLimited403 unit-cases the header predicate. Headers are
-// built via Set so the keys get MIME-canonicalized, matching what net/http
-// produces when parsing a real response.
+// TestRetry_IsRateLimited403 unit-cases the header predicate (delegated to
+// httpx.RetryableWithHeaders). Headers are built via Set so the keys get
+// MIME-canonicalized, matching what net/http produces when parsing a real
+// response. The padded case pins a known upstream gap: httpx compares
+// X-RateLimit-Remaining exactly, without trimming OWS (real net/http header
+// parsing trims it per RFC 7230, so live traffic cannot produce " 0 ").
 func TestRetry_IsRateLimited403(t *testing.T) {
 	hdr := func(kv ...string) http.Header {
 		h := http.Header{}
@@ -679,7 +682,7 @@ func TestRetry_IsRateLimited403(t *testing.T) {
 		want   bool
 	}{
 		{"403 remaining 0", 403, hdr("X-RateLimit-Remaining", "0"), true},
-		{"403 remaining 0 padded", 403, hdr("X-RateLimit-Remaining", " 0 "), true},
+		{"403 remaining 0 padded", 403, hdr("X-RateLimit-Remaining", " 0 "), false},
 		{"403 retry-after", 403, hdr("Retry-After", "1"), true},
 		{"403 bare", 403, http.Header{}, false},
 		{"403 remaining non-zero", 403, hdr("X-RateLimit-Remaining", "7"), false},
