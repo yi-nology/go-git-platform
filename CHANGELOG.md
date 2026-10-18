@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.93.1] - 2026-10-18
+
+### Changed
+
+- `oekit/pkg` v0.13.0→**v0.14.0**(主模块与 mcp 同步;concurrency
+  v0.14.0/logx v0.7.0 无新版)——cache 包增强(动态回填 TTL +
+  stale-if-error),本仓不消费 cache 包,纯依赖同步
+
+### 优化盘点结论(本轮无够格优化点)
+
+候选逐一评估后全部排除,记录在案避免后续重复盘点: batch 引擎已收编
+`syncx.FanInLimitCtx`(v0.93.0);重试判定已收编 `retry/httpx`(v0.92.0);
+`provider/manager.go` 薄层结构干净;`transport/etag.go` 的 etagKey 每
+GET 重复计算约 5 allocs(重构调用链传递 key 的复杂度大于收益);
+`Manager.buildKey` 的 fmt.Sprintf 与 `ProviderError.Error()` 均为冷路径
+纳秒级。等待上游 issue(当前无在途)或新的真实热点再动。
+
 ## [0.93.0] - 2026-10-18
 
 ### Changed
