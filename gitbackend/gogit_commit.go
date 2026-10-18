@@ -2,7 +2,6 @@ package gitbackend
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -81,7 +80,7 @@ func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, desce
 // errCannotResolveRev marks a revision that resolves to nothing. Callers wrap
 // it (with op/path) in a GitError; matching via errors.Is keeps the cause
 // recognizable through the wrap.
-var errCannotResolveRev = errors.New("cannot resolve rev")
+var errCannotResolveRev = oekiterrors.New("cannot resolve rev")
 
 // resolveRev is the single entry point every gogit operation must use to turn
 // a user-provided revision (branch name, tag, HEAD, rev expression, short or

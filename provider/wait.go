@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -38,7 +37,7 @@ type WaitOptions struct {
 
 // ErrWaitTimedOut is returned by WaitForCommitStatus when the commit
 // stays non-terminal past WaitOptions.Timeout.
-var ErrWaitTimedOut = errors.New("commit status did not reach a terminal state before the timeout")
+var ErrWaitTimedOut = oekiterrors.New("commit status did not reach a terminal state before the timeout")
 
 // WaitForCommitStatus polls ListCommitStatuses until the commit's
 // combined state is terminal (success/failure/error/canceled) and returns
@@ -87,7 +86,7 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 			// A definitive miss is a diagnosis, not a reason to wait:
 			// a wrong SHA (or lost permissions) would otherwise burn the
 			// whole budget and surface as a misleading ErrWaitTimedOut.
-			if errors.Is(err, ErrNotFound) {
+			if oekiterrors.Is(err, ErrNotFound) {
 				return "", err
 			}
 			// Transient read errors (5xx, rate limits already retried by

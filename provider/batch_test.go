@@ -5,10 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/oekit/concurrency/async"
 )
 
 func TestBatchResultOrderAndAttribution(t *testing.T) {
@@ -155,8 +156,15 @@ func TestBatchPanicBecomesItemError(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2", len(got))
 	}
-	if got[0].Err == nil || !strings.Contains(got[0].Err.Error(), "panicked") {
-		t.Fatalf("panicking item err = %v, want panic converted to error", got[0].Err)
+	// The batch engine delegates panic conversion to async.RunSafeRet, so a
+	// panicking item fails with a typed *async.PanicError carrying the
+	// original value and the capture stack.
+	var pe *async.PanicError
+	if got[0].Err == nil || !errors.As(got[0].Err, &pe) {
+		t.Fatalf("panicking item err = %v, want typed *async.PanicError", got[0].Err)
+	}
+	if pe.Stack == nil {
+		t.Fatal("PanicError.Stack is empty")
 	}
 	if got[1].Err != nil || got[1].Value != "content:bb" {
 		t.Fatalf("sibling item = %+v, want unaffected success", got[1])

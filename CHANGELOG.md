@@ -4,6 +4,35 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.91.0] - 2026-10-18
+
+### Changed
+
+oekit 升级(pkg v0.12.0 / concurrency v0.10.0 / logx v0.7.0,主模块与 mcp
+同步)+ 新能力收编:
+
+- **provider/batch panic 收编上游化**: 手写 per-item recover 的
+  `fmt.Errorf("batch: fn panicked: ...")` 换成 `async.RunSafeRet`——
+  panic 转为 typed `*async.PanicError`(携带原始值与捕获堆栈,可
+  `errors.As` 结构化检查);worker goroutine 经 `GoSafeLabeled` 启动,
+  panic 汇报带 `task=batch-worker` 归属;janitor 同步换
+  `GoSafeLabeled("janitor")`。行为增强:panic 转为 item Err 的同时经
+  PanicHandler 汇报堆栈,不再静默
+- **errors 双 import 收敛**: pkg v0.12.0 的
+  `oekiterrors.New/Is/As/Unwrap` 与 stdlib 同型透传(纯转发,哨兵类型
+  逐字节一致)——gitbackend/provider/mcp 共 7 个文件删除 stdlib
+  `errors` import,统一经 oekiterrors 执行"类型同一性红线";
+  `provider/errors.go` 的哨兵 var 块保持原样(公共契约,文件内本就
+  单一 errors 包)
+
+### 需求反馈
+
+- 本仓 transport/retry.go 的 GitHub 403 次级限流判定
+  (`403 + X-RateLimit-Remaining: 0 / Retry-After` 可重试)在
+  `concurrency/retry/httpx` 中无对应物,已提
+  [concurrency#22](https://github.com/oekit/concurrency/issues/22)——
+  采纳前保留自实现(HTTP 特化红线不变)
+
 ## [0.90.1] - 2026-10-17
 
 ### Changed

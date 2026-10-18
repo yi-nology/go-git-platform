@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 
 	oekiterrors "github.com/oekit/pkg/errors"
 )
@@ -17,14 +16,14 @@ const DefaultIterMaxPages = 100
 
 // ErrStopIteration is the sentinel a Each callback returns to stop the walk
 // early without reporting an error. Everything fetched so far stands.
-var ErrStopIteration = errors.New("iteration stopped")
+var ErrStopIteration = oekiterrors.New("iteration stopped")
 
 // ErrPageBudgetExceeded is returned when the walk hits its MaxPages bound
 // before the platform returns an empty page. Either the list is genuinely
 // longer than the budget, or (more likely) the platform ignores the page
 // parameter. Retry with a higher bound via EachBounded/CollectBounded if
 // the former.
-var ErrPageBudgetExceeded = errors.New("page budget exceeded before an empty page")
+var ErrPageBudgetExceeded = oekiterrors.New("page budget exceeded before an empty page")
 
 // PageFetch fetches one page of a paginated list. page is the 1-based page
 // number; the implementation must forward it into the platform call's
@@ -75,7 +74,7 @@ func EachBounded[T any](ctx context.Context, fetch PageFetch[T], maxPages int, f
 		}
 		for _, item := range batch {
 			if err := fn(item); err != nil {
-				if errors.Is(err, ErrStopIteration) {
+				if oekiterrors.Is(err, ErrStopIteration) {
 					return nil
 				}
 				return err

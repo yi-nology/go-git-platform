@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -121,7 +120,7 @@ func (HMACSHA256Validator) Name() string { return "hmac-sha256" }
 // "sha256=<hex>" or just "<hex>". Comparison is done in constant time.
 func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret string) error {
 	if h.Header == "" {
-		return errors.New("hmac-sha256 validator: empty header")
+		return oekiterrors.New("hmac-sha256 validator: empty header")
 	}
 	header := r.Header.Get(h.Header)
 	if header == "" {
@@ -198,7 +197,7 @@ func (StaticTokenValidator) Name() string { return "static-token" }
 // Validate implements WebhookValidator.
 func (s StaticTokenValidator) Validate(r *http.Request, body []byte, secret string) error {
 	if s.Header == "" {
-		return errors.New("static-token validator: empty header")
+		return oekiterrors.New("static-token validator: empty header")
 	}
 	got := r.Header.Get(s.Header)
 	if got == "" {

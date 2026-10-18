@@ -37,10 +37,11 @@ func (j *janitor) start(ctx context.Context, interval time.Duration) {
 	doneCh := make(chan struct{})
 	j.stop = stopCh
 	j.done = doneCh
-	// async.GoSafe recovers a panicking cleanup: the defers below still run
-	// (done closed, state cleared), so the janitor stops cleanly instead of
-	// crashing the host process, and start can relaunch it.
-	async.GoSafe(func() {
+	// async.GoSafeLabeled recovers a panicking cleanup: the defers below
+	// still run (done closed, state cleared), so the janitor stops cleanly
+	// instead of crashing the host process, and start can relaunch it.
+	// The label routes panic reports as task=janitor for aggregation.
+	async.GoSafeLabeled("janitor", func() {
 		defer close(doneCh)
 		// Reset the janitor state before signalling exit so start can
 		// relaunch after this goroutine dies (e.g. via ctx cancellation).

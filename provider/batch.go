@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -74,14 +73,16 @@ func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func
 	//   - at most `workers` calls to fn are in flight;
 	//   - cancellation fails every not-yet-run item with ctx.Err() while
 	//     in-flight items run to completion;
-	//   - a panicking fn becomes that item's Err and the worker moves on,
-	//     so one bad item neither crashes the process nor starves the rest.
+	//   - a panicking fn becomes that item's Err via async.RunSafeRet
+	//     (typed *async.PanicError carrying the stack) and the worker
+	//     moves on, so one bad item neither crashes the process nor
+	//     starves the rest.
 	workers := opts.normalized()
 	var next atomic.Int64
 	var wg sync.WaitGroup
 	wg.Add(workers)
 	for range workers {
-		async.GoSafe(func() {
+		async.GoSafeLabeled("batch-worker", func() {
 			defer wg.Done()
 			for {
 				i := int(next.Add(1)) - 1
@@ -92,16 +93,11 @@ func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func
 					results[i].Err = err
 					continue
 				}
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							results[i].Err = fmt.Errorf("batch: fn panicked: %v", r)
-						}
-					}()
-					v, err := fn(ctx, items[i])
-					results[i].Value = v
-					results[i].Err = err
-				}()
+				v, err := async.RunSafeRet(func() (R, error) {
+					return fn(ctx, items[i])
+				})
+				results[i].Value = v
+				results[i].Err = err
 			}
 		})
 	}

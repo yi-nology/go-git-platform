@@ -31,7 +31,6 @@ package main
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -166,7 +165,7 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 	async.GoSafeWithErrChannel(errCh, func() error { return server.ListenAndServe() })
 	select {
 	case err := <-errCh:
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && !oekiterrors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 		return nil

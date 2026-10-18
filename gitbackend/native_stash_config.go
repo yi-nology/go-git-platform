@@ -2,7 +2,6 @@ package gitbackend
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -114,7 +113,7 @@ func (b *NativeGitBackend) GetConfig(ctx context.Context, repoPath, key string) 
 		// documented not-found signal. stderr is localized and usually
 		// empty, so the exit code (not its text) is the contract.
 		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		if oekiterrors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return "", newGitError("GetConfig", repoPath, stderr,
 				oekiterrors.Wrap(ErrConfigKeyNotFound, "git config exited 1", "key", key))
 		}
