@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.92.1] - 2026-10-18
+
+### Changed
+
+- `oekit/concurrency` v0.12.0→**v0.13.1**(主模块与 mcp 同步)——**上游修复
+  本仓提的 [concurrency#26](https://github.com/oekit/concurrency/issues/26)**:
+  `RetryableWithHeaders` 对 `X-RateLimit-Remaining`/`Retry-After` 头值套
+  `TrimSpace`——自造头(测试桩/代理注入/配置还原)与非 textproto 客户端的
+  带空白值统一语义。v0.92.0 翻为 false 的 padded 用例恢复 true(原防御
+  行为回归);`pkg` v0.13.0/`logx` v0.7.0 无新版
+
+### 需求反馈
+
+- `syncx.FanInLimit` 无 ctx 参数,表达不了「取消后剩余槽位引擎级
+  fail-fast」——已提 [concurrency#27](https://github.com/oekit/concurrency/issues/27)
+  (提议 `FanInLimitCtx`);采纳后本仓 batch 的自维护 worker pool 可整体
+  删除收编
+
 ## [0.92.0] - 2026-10-18
 
 ### Changed

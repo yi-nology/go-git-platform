@@ -79,8 +79,8 @@ github.com/modelcontextprotocol/go-sdk v1.8.0 h1:KIvahhYqwtbeniWVPs3TcXEA7b8jEtw
 github.com/modelcontextprotocol/go-sdk v1.8.0/go.mod h1:dL7u98E/zjJTGzEq+j30jQ8K2k1mb6LeAH4inEcSGts=
 github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18 h1:hMf3u2RMBoIjRCxJiFXMA1N4pB9joRA6fSiQ5WXqfao=
 github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18/go.mod h1:GvqteloYLLcJ0N3W6n+qNQXV/voE1Vuo3x7o/5H8EqM=
-github.com/oekit/concurrency v0.12.0 h1:ZvFxS9IzX47uF9fIYd7Io0Ufh+QFcHUIEp1ghs7MgZo=
-github.com/oekit/concurrency v0.12.0/go.mod h1:K5wV2UwkfvYUQFOawBCmaE29AGhWTGs3hsKu2vvKw4Y=
+github.com/oekit/concurrency v0.13.1 h1:fXZz2BmzDovUO7eLw0O1B1rsQSezhpS7XYBNLB/DIus=
+github.com/oekit/concurrency v0.13.1/go.mod h1:K5wV2UwkfvYUQFOawBCmaE29AGhWTGs3hsKu2vvKw4Y=
 github.com/oekit/logx v0.7.0 h1:CHyzcS6uR2Gq2JkOIqW0b04mHhu48+4ESm7dQvlk1RA=
 github.com/oekit/logx v0.7.0/go.mod h1:x3wn+/0aYDrcs7EavWWAz8qUbwtysTB/gvuLZxtl2B0=
 github.com/oekit/pkg v0.13.0 h1:8liA4F0n3VXTJXSF6ahH/4U7alw57rWEKSyB/Le462k=
