@@ -2,10 +2,8 @@ package provider
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
 
-	"github.com/oekit/concurrency/async"
+	"github.com/oekit/concurrency/syncx"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -53,8 +51,14 @@ type BatchResult[T any] struct {
 // batch runs fn over items with bounded concurrency and returns results
 // in input order. The context is honored: after cancellation, remaining
 // items fail fast with the context error instead of being started —
-// workers check ctx before running each item, so an already-cancelled
+// the engine checks ctx before running each item, so an already-cancelled
 // batch drains in one pass.
+//
+// The engine is syncx.FanInLimitCtx (oekit/concurrency#27): at most
+// opts.normalized() calls to fn are in flight, results land by index so
+// order follows input, and a panicking fn becomes that item's Err as a
+// typed *async.PanicError (carrying the stack) while the other items
+// continue — one bad item neither crashes the process nor starves the rest.
 func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func(T) string, fn func(context.Context, T) (R, error)) []BatchResult[R] {
 	results := make([]BatchResult[R], len(items))
 	if len(items) == 0 {
@@ -64,44 +68,14 @@ func batch[T, R any](ctx context.Context, items []T, opts BatchOptions, key func
 		results[i].Key = key(item)
 	}
 
-	// Fixed worker pool: `workers` long-lived goroutines pull the next
-	// index, instead of spawning one goroutine per item behind a
-	// semaphore. Goroutine creation drops from O(items) to O(workers) —
-	// a 10k-item batch used to create 10k goroutines. Semantics carried
-	// over from the per-item version:
-	//   - results land by index, so order follows input;
-	//   - at most `workers` calls to fn are in flight;
-	//   - cancellation fails every not-yet-run item with ctx.Err() while
-	//     in-flight items run to completion;
-	//   - a panicking fn becomes that item's Err via async.RunSafeRet
-	//     (typed *async.PanicError carrying the stack) and the worker
-	//     moves on, so one bad item neither crashes the process nor
-	//     starves the rest.
-	workers := opts.normalized()
-	var next atomic.Int64
-	var wg sync.WaitGroup
-	wg.Add(workers)
-	for range workers {
-		async.GoSafeLabeled("batch-worker", func() {
-			defer wg.Done()
-			for {
-				i := int(next.Add(1)) - 1
-				if i >= len(items) {
-					return
-				}
-				if err := ctx.Err(); err != nil {
-					results[i].Err = err
-					continue
-				}
-				v, err := async.RunSafeRet(func() (R, error) {
-					return fn(ctx, items[i])
-				})
-				results[i].Value = v
-				results[i].Err = err
-			}
+	slots := syncx.FanInLimitCtx(ctx, len(items), opts.normalized(),
+		func(ctx context.Context, i int) (R, error) {
+			return fn(ctx, items[i])
 		})
+	for i, s := range slots {
+		results[i].Value = s.Val
+		results[i].Err = s.Err
 	}
-	wg.Wait()
 	return results
 }
 

@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.93.0] - 2026-10-18
+
+### Changed
+
+- `oekit/concurrency` v0.13.1→**v0.14.0**(主模块与 mcp 同步;pkg v0.13.0/
+  logx v0.7.0 无新版)——**上游采纳本仓
+  [concurrency#27](https://github.com/oekit/concurrency/issues/27) 落地
+  `FanInLimitCtx`**,批量引擎整体收编: `provider/batch` 删除自维护
+  worker pool(atomic index + GoSafeLabeled + RunSafeRet 组合,约 40 行),
+  换 `syncx.FanInLimitCtx(ctx, n, limit, fn)` 调用(约 10 行胶水)。
+  三条取消契约(已取消项 fn 一次不调/剩余槽一次遍历快速排空 ctx.Err/
+  在飞项跑完落槽)与 panic→typed `*async.PanicError` 均由引擎契约测试
+  与本仓语义钉子双向锁定,全部原样通过;batch 语义从此跟随上游引擎
+  演进,不再自维护
+
 ## [0.92.1] - 2026-10-18
 
 ### Changed
