@@ -42,10 +42,19 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
 
 - `BizError` / `mw.Fail`——HTTP 服务层概念，本 SDK 没有这一层；
 - `oekit/concurrency/retry` 替换 `transport/retry.go`——后者是 HTTP 特化
-  （Retry-After 头、GitHub 403 次级限流判定），通用原语会丢能力；未来若
-  gitbackend 出现手写退避循环可考虑 `retry.Do`；
+  （Retry-After 头、GitHub 403 次级限流判定，判定核心已收编
+  `retry/httpx`），通用原语会丢能力；
 - `logx` 的 hertz/zap/zerolog 子包——根包只多带 lumberjack 一个依赖，子包会把
-  整个 Hertz 栈拖进 go.mod。
+  整个 Hertz 栈拖进 go.mod；
+- **`oagentkit/*`（姊妹矩阵，2026-10-18 全量评估后不引入）**：tier2+ 的
+  llm/mcpkit/rag/agent/tools/skillkit/toolgate/obs/queue 拖 eino 全家（公共
+  SDK 依赖面不可接受）；tier0 的 `runtime/procx` 环境白名单会砍
+  SSH_AUTH_SOCK/GIT_* 破坏 SSH agent 认证与 hermetic 测试（SDK 的 git 子进程
+  操作用户自己的仓库，威胁模型与 agent 跑不可信代码不同）；`guardx/egress`
+  SSRF 防护不适用（BaseURL 由消费方控制，self-hosted 必须允许私网）；
+  `guardx/permgate` 运行时逐调用判定与本仓 mcp 注册期裁剪（mutating 工具不
+  挂载）形态不同；`textx/diffx` 上游明确划界（解析 vs 本仓 diff 生成领域）。
+  上游若新增 tier0 原语再评估。
 
 ## 规则二：公共契约红线
 

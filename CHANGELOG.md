@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.94.0] - 2026-10-20
+
+### Changed
+
+- **oekit 升到真最新**: `concurrency` v0.14.0→**v0.18.0**、`pkg`
+  v0.14.0→**v0.17.0**(主模块与 mcp 同步;logx v0.7.0 无新版)。pkg
+  v0.17.0 的 stringx.Masker BREAKING(短值改整段打码)对本仓无影响
+  (不消费 stringx);concurrency v0.18.0 的 `DoValue` 泛型伴生暂无
+  消费点(本仓重试走 transport/retry.go 自持路径)
+
+### 姊妹矩阵 oagentkit 全量评估(不引入,结论备案)
+
+oagentkit(github.com/oagentkit/*,13 模块 agent/LLM 工具链,依赖 oekit
+底层)逐模块评估后**不引入**,避免后续重复评估(完整结论已固化
+AGENTS.md"明确不引入"):
+
+- tier2+ 的 llm/mcpkit/rag/agent/tools/skillkit/toolgate/obs/queue 拖
+  eino 全家——公共 SDK 依赖面不可接受
+- tier0 `runtime/procx`: 子进程环境白名单会砍 SSH_AUTH_SOCK/GIT_*——
+  SDK 的 git 子进程操作用户自己的仓库,威胁模型与 agent 跑不可信代码
+  不同,且会破坏 SSH agent 认证与 hermetic 测试基建
+- `guardx/egress` SSRF 防护不适用(BaseURL 消费方控制,self-hosted 必须
+  允许私网);`guardx/permgate` 运行时逐调用判定与本仓 mcp 注册期裁剪
+  形态不同;`guardx/invoke` 解决"装饰被绕过",本仓注册期裁剪已是结构
+  保证;`textx/diffx` 上游明确划界(解析 vs 本仓 diff 生成领域)
+
 ## [0.93.1] - 2026-10-18
 
 ### Changed
