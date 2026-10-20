@@ -43,6 +43,26 @@ type WebhookValidator interface {
 	Validate(r *http.Request, body []byte, secret string) error
 }
 
+// SkipValidationSecret is the sentinel secret that makes
+// WebhookEnvelope.Read skip the platform's signature validator.
+//
+// It exists for hosts that verify the webhook signature themselves and then
+// reuse the SDK purely as a payload parser. Two situations need it:
+//
+//   - The platform's header convention differs from the SDK's model (e.g. a
+//     GitLab-family payload delivered by a platform that brands its own token
+//     header).
+//   - The host validates the signature before dispatch, so the SDK's
+//     validation would be a redundant second check on an already-trusted
+//     request.
+//
+// The sentinel is intentionally unusable as a real secret: it contains a NUL
+// byte, which no HTTP header value or config file can carry. It is honoured
+// only inside WebhookEnvelope.Read; ValidateWebhookWithRegistry and
+// Provider.ValidateWebhookSignature always run the real validator, so
+// passing the sentinel there does NOT bypass signature checking.
+const SkipValidationSecret = "\x00skip-signature-validation"
+
 // ValidatorFunc adapts a plain function into a WebhookValidator.
 type ValidatorFunc struct {
 	N  string
@@ -434,6 +454,9 @@ type WebhookEnvelope struct {
 // Error ops mirror the historical hand-written sequence: body-read failures
 // surface under ParseWebhookEvent, validation failures under
 // ValidateWebhookSignature.
+//
+// Passing secret == SkipValidationSecret skips the signature validation
+// step: see that constant for the hosts that need parse-only access.
 func (e WebhookEnvelope) Read(r *http.Request, secret string) (string, []byte, error) {
 	body, err := ReadAndRestoreBody(r)
 	if err != nil {
@@ -441,8 +464,10 @@ func (e WebhookEnvelope) Read(r *http.Request, secret string) (string, []byte, e
 		// failure surfaces under ValidateWebhookSignature.
 		return "", nil, Wrap(e.Platform, "ValidateWebhookSignature", err)
 	}
-	if err := defaultWebhookRegistry.Validate(e.Platform, r, body, secret); err != nil {
-		return "", nil, Wrap(e.Platform, "ValidateWebhookSignature", err)
+	if secret != SkipValidationSecret {
+		if err := defaultWebhookRegistry.Validate(e.Platform, r, body, secret); err != nil {
+			return "", nil, Wrap(e.Platform, "ValidateWebhookSignature", err)
+		}
 	}
 	for _, h := range e.EventHeaders {
 		if v := r.Header.Get(h); v != "" {

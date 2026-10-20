@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.95.0] - 2026-10-20
+
+### Added
+
+- **`provider.SkipValidationSecret`：显式 parse-only 入口**。宿主方已自行完成
+  签名校验、只想把 SDK 当 payload 解析器用时，把该哨兵传给
+  `ParseWebhookEvent` / `WebhookEnvelope.Read`，SDK 跳过内部签名校验，只做
+  body 还原与事件头读取。
+
+  背景：v0.77.0 起各平台校验器不再接受空 secret（`StaticTokenValidator` 与
+  `HMACSHA256Validator` 均在空 secret 或缺签名头时直接报错），此前"传空
+  secret 让 SDK 隐式跳过校验"的写法全面失效，依赖该写法的消费方（如
+  review-service 的 `internal/service/webhook`）在解析入口报
+  `missing token header`——**五个平台的 webhook 解析同时失效**，且因为是
+  空 secret 语义变更而没有破坏性提示，只能靠消费方测试暴露。
+
+  哨兵取值含 NUL 字节，不可能是真实 secret（HTTP 头与配置文件都承载不了），
+  只在 `WebhookEnvelope.Read` 内生效：`ValidateWebhookWithRegistry` 与
+  `Provider.ValidateWebhookSignature` 仍走真校验器，**不构成签名绕过开关**。
+  该变更向后兼容：非哨兵 secret 的行为完全不变。
+
 ## [0.94.0] - 2026-10-20
 
 ### Changed
