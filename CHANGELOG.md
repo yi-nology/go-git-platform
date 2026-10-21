@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.96.0] - 2026-10-21
+
+### Changed
+
+- **oekit 升到真最新**：`pkg` v0.17.0→**v0.20.0**、`concurrency`
+  v0.18.0→**v0.19.0**、`logx` v0.7.0→**v0.7.1**（主模块与 mcp 同步）。
+  逐项评估收编面：
+
+  - **收编 `errors.Errorf`**（pkg v0.19.0）：带 `%w`（可多个）的格式化错误
+    构造入口，规则一已固化——今后格式化构造一律 Errorf；存量无 cause 的
+    `fmt.Errorf`（59 处）不强制迁移。审计确认 `%w` 仅存在于
+    `provider/errors.go` 的 3 处永久例外，无 Sprintf-then-Wrap 形态。
+  - **同族 bug 免疫核查**：concurrency v0.19.0（httpjson 退避移位溢出绕过
+    MaxDelay 封顶）与 v0.18.1（retry 抖动幅度 0 时 `rand.Int63n(0)`
+    panic）修复的两类 bug，本仓 `transport/retry.go` 的 float64 pow +
+    双侧钳制（`> maxd || < 0`）+ 乘法抖动实现均不存在；新增
+    `TestRetry_BackoffExtremeAttemptsStayClamped`（attempt 至 1000 钳制与
+    正号）与 `TestRetry_BackoffRetryAfterZeroIsImmediate` 钉住免疫性。
+  - **无消费点不引入**（结论固化 AGENTS.md）：`pathx.SanitizeRel` /
+    `urlguard.WithExactHosts` / `jsonrepair.ExtractArray` / httpjson /
+    `syncx.Gate` / `DoValue`——本仓无对应手写实现或调用形态，不硬凑。
+- **go 指令 1.27.2→1.27.3**（主模块与 mcp 同步）：标准库漏洞库新收录
+  GO-2026-6809（crypto/x509 不信任被攻陷的中间证书，go1.27.3 修复），
+  CI govulncheck 腿随库更新转红；沿 v0.79.x 先例把 go 行升到修复版，
+  CI `go-version-file` 自动带动 runner 工具链。
+
 ## [0.95.1] - 2026-10-21
 
 ### Fixed

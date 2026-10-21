@@ -194,6 +194,37 @@ func TestRetry_RetryAfterCappedAtMaxDelay(t *testing.T) {
 	}
 }
 
+// --- Immunity to the shift-overflow / zero-amplitude-jitter panic class that
+// oekit/concurrency fixed in v0.19.0 (httpjson backoff overflow) and v0.18.1
+// (rand.Int63n(0) panic): this implementation uses float64 pow + a
+// double-sided clamp + multiplicative jitter, and these tests pin that the
+// clamp holds and no panic or non-positive delay is possible at extreme
+// attempt counts. ---
+
+func TestRetry_BackoffExtremeAttemptsStayClamped(t *testing.T) {
+	rc := DefaultRetryConfig() // BaseDelay 500ms, MaxDelay 30s
+	for _, attempt := range []int{1, 2, 37, 39, 40, 63, 64, 100, 1000} {
+		delay := rc.Backoff(attempt, nil)
+		if delay <= 0 {
+			t.Fatalf("attempt %d: delay %v is non-positive (overflow class)", attempt, delay)
+		}
+		// Multiplicative jitter is uniform in [0.75, 1.25] around the clamped
+		// base delay, so 1.25*MaxDelay is the hard upper bound.
+		if max := time.Duration(1.25 * float64(30*time.Second)); delay > max {
+			t.Fatalf("attempt %d: delay %v exceeds jittered MaxDelay bound %v", attempt, delay, max)
+		}
+	}
+}
+
+func TestRetry_BackoffRetryAfterZeroIsImmediate(t *testing.T) {
+	rc := DefaultRetryConfig()
+	resp := &http.Response{Header: http.Header{}}
+	resp.Header.Set("Retry-After", "0")
+	if delay := rc.Backoff(1, resp); delay != 0 {
+		t.Errorf("Retry-After: 0 must yield an immediate retry (0 delay), got %v", delay)
+	}
+}
+
 func TestRetry_RetryAfterHTTPDate(t *testing.T) {
 	rc := RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 2 * time.Second}
 	resp := &http.Response{Header: http.Header{}}
