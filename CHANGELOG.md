@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.95.1] - 2026-10-21
+
+### Fixed
+
+- **transport 轮询日志分级**：状态 ≥400 不再一律 Warn——5xx 与 429（服务端
+  故障/限流信号，与重试引擎的可重试分类一致）保留 Warn，其余 4xx 降为
+  Debug；kv 字段（method/url(redacted)/status/duration）不变
+  （[#25](https://github.com/yi-nology/go-git-platform/issues/25)）。
+
+  背景：4xx 在本 SDK 契约里不是错误——`RoundTripper` 正常返回完整响应，
+  严重度判定权归有上下文的调用方。argus 等消费方的规范文件存在性探测
+  （404 即预期缺省）在 215 试点环境单次进程启动即产生 25+ 条噪声 WARN，
+  淹没真正的限流/权限告警。路径写错的 404 仍可在 Debug 级别看到，响应
+  对象不变，调用方可自行按业务告警。
+
 ## [0.95.0] - 2026-10-20
 
 ### Added

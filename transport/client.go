@@ -570,12 +570,26 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		rt.client.log().Warn("transport roundtrip error",
+		// Level by who owns the semantics: 5xx/429 are server-side failure
+		// signals (the retry engine classifies exactly these as retryable),
+		// so they stay Warn. Other 4xx are contract-level "response with a
+		// status" — RoundTrip hands the caller the full response and the
+		// caller decides (existence probes treat 404 as the expected
+		// default); the transport cannot tell a probe miss from a wrong
+		// path, so it stays observable at Debug only.
+		lg := rt.client.log()
+		event := []any{
 			"method", req.Method,
 			"url", redactURL(*req.URL),
 			"status", resp.StatusCode,
 			"duration", duration,
-		)
+		}
+		switch {
+		case resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests:
+			lg.Warn("transport roundtrip error", event...)
+		default:
+			lg.Debug("transport roundtrip error", event...)
+		}
 	}
 	return resp, nil
 }

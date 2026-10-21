@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -528,5 +529,133 @@ func TestRedactURL_MultipleParamsCoexist(t *testing.T) {
 	}
 	if strings.Contains(got, "sec") {
 		t.Errorf("credential value leaked into logged URL %q", got)
+	}
+}
+
+// logEvent is one captured Logger call.
+type logEvent struct {
+	level string
+	msg   string
+	kv    []any
+}
+
+// captureLogger records every call so tests can assert on levels and kv shape.
+type captureLogger struct {
+	mu     sync.Mutex
+	events []logEvent
+}
+
+// Debug implements Logger.
+func (l *captureLogger) Debug(msg string, kv ...any) { l.add("DEBUG", msg, kv) }
+
+// Info implements Logger.
+func (l *captureLogger) Info(msg string, kv ...any) { l.add("INFO", msg, kv) }
+
+// Warn implements Logger.
+func (l *captureLogger) Warn(msg string, kv ...any) { l.add("WARN", msg, kv) }
+
+// Error implements Logger.
+func (l *captureLogger) Error(msg string, kv ...any) { l.add("ERROR", msg, kv) }
+
+func (l *captureLogger) add(level, msg string, kv []any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.events = append(l.events, logEvent{level: level, msg: msg, kv: kv})
+}
+
+func (l *captureLogger) byLevel(level, msg string) []logEvent {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []logEvent
+	for _, e := range l.events {
+		if e.level == level && e.msg == msg {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// TestClientRoundTripper_StatusCodeLogLevel pins the roundtrip error event
+// level split (issue #25): 5xx/429 are server-side failure signals and stay
+// Warn, other 4xx are contract-level statuses the caller ranks — existence
+// probes treat a 404 as the expected default and must not WARN — and 2xx
+// logs nothing.
+func TestClientRoundTripper_StatusCodeLogLevel(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		wantLvl string // "WARN", "DEBUG", or "" for no event
+	}{
+		{"404 existence-probe default drops to Debug", http.StatusNotFound, "DEBUG"},
+		{"403 caller-ranked 4xx drops to Debug", http.StatusForbidden, "DEBUG"},
+		{"429 rate limit stays Warn", http.StatusTooManyRequests, "WARN"},
+		{"500 server error stays Warn", http.StatusInternalServerError, "WARN"},
+		{"503 service unavailable stays Warn", http.StatusServiceUnavailable, "WARN"},
+		{"200 logs no roundtrip error", http.StatusOK, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+			}))
+			defer srv.Close()
+
+			log := &captureLogger{}
+			c := NewClient(srv.URL, None{}, WithLogger(log))
+			req, err := http.NewRequest(http.MethodGet, srv.URL+"/probe/AGENTS.md", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := c.RoundTripper().RoundTrip(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != tc.status {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.status)
+			}
+
+			warns := log.byLevel("WARN", "transport roundtrip error")
+			debugs := log.byLevel("DEBUG", "transport roundtrip error")
+			switch tc.wantLvl {
+			case "":
+				if len(warns)+len(debugs) != 0 {
+					t.Fatalf("2xx must not emit a roundtrip error event: warns=%d debugs=%d", len(warns), len(debugs))
+				}
+			case "WARN":
+				if len(warns) != 1 || len(debugs) != 0 {
+					t.Fatalf("want exactly 1 Warn and 0 Debug, got warns=%d debugs=%d", len(warns), len(debugs))
+				}
+				assertRoundTripEvent(t, warns[0], tc.status, srv.URL)
+			case "DEBUG":
+				if len(warns) != 0 || len(debugs) != 1 {
+					t.Fatalf("want exactly 1 Debug and 0 Warn, got warns=%d debugs=%d", len(warns), len(debugs))
+				}
+				assertRoundTripEvent(t, debugs[0], tc.status, srv.URL)
+			}
+		})
+	}
+}
+
+// assertRoundTripEvent pins the kv shape (method / redacted url / status /
+// duration) — issue #25's acceptance surface keeps these fields stable
+// across the level change.
+func assertRoundTripEvent(t *testing.T, e logEvent, status int, baseURL string) {
+	t.Helper()
+	got := map[string]any{}
+	for i := 0; i+1 < len(e.kv); i += 2 {
+		got[fmt.Sprint(e.kv[i])] = e.kv[i+1]
+	}
+	if got["method"] != http.MethodGet {
+		t.Errorf("method kv = %v, want GET", got["method"])
+	}
+	if want := baseURL + "/probe/AGENTS.md"; got["url"] != want {
+		t.Errorf("url kv = %v, want %q", got["url"], want)
+	}
+	if got["status"] != status {
+		t.Errorf("status kv = %v, want %d", got["status"], status)
+	}
+	if _, ok := got["duration"]; !ok {
+		t.Error("duration kv missing")
 	}
 }
