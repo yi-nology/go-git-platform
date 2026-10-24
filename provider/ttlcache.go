@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/oekit/concurrency/singleflight"
 	"github.com/oekit/pkg/cache"
 )
 
@@ -21,23 +20,22 @@ import (
 //
 // 两个上游原语各司其职：
 //   - oekit/pkg/cache.LocalCache —— 存储 + TTL/LRU 淘汰 + 观测计数；
-//   - oekit/concurrency/singleflight.Flight —— 回源去重：同一 key 的并发未命中
-//     只构造一个实例，所有调用方共享它（构造 Provider 会新建 http.Client 与
-//     连接池，N 份并发持有是真实的资源浪费）。
+//   - oekit/pkg/cache.SingleFlightCache —— 在 LocalCache 之上做回源去重：同一
+//     key 的并发未命中只构造一个实例，所有调用方共享它（构造 Provider 会新建
+//     http.Client 与连接池，N 份并发持有是真实的资源浪费）。
 //
 // 计数口径（对外契约）：读命中计 Hits、读未命中计 Misses，二者互斥——**每次
-// 查找各计一次**，与本仓历史实现一致。注意这里刻意**没有**用
-// cache.SingleFlightCache 装饰器：它的前置 Peek 会先计一次 Misses、内层
-// GetOrLoad 再计一次，一次未命中被计成两次，会破坏 Stats() 契约。
-// LocalCache.Get 不计 Misses、只计 Hits，因此计数由 LocalCache 单独负责。
+// 查找各计一次**，与本仓历史实现一致。装饰器的前置 Peek 计一次未命中、回源
+// 加载路径不再重复计（上游 pkg#90 修正）⇒ 一次查找恰好计入命中或未命中之一。
 //
-// 回源函数由**调用点注入**（LocalCache.GetOrLoadWithSource）：Manager.Get 的
-// 回源闭包捕获的是本次调用的 cfg（Provider 按 cfg 构造），构造期固定的 Source
-// 拿不到它。
+// 装饰器不提供 Clear/Size/Sweep（这三项只在内层有），因此内层句柄仍留着，
+// 由 remove/purge/len/cleanup 走内层。
+//
+// 回源函数由**调用点注入**（GetOrLoadWithSource）：Manager.Get 的回源闭包
+// 捕获的是本次调用的 cfg（Provider 按 cfg 构造），构造期固定的 Source 拿不到它。
 type ttlCache[V any] struct {
-	inner  *cache.LocalCache[V]
-	flight *singleflight.Flight[V]
-	ttl    time.Duration
+	inner *cache.LocalCache[V]       // 装饰器未透传 Clear/Size/Sweep，走内层
+	sf    *cache.SingleFlightCache[V] // 读路径 + 回源去重 + 计数
 
 	mu       sync.Mutex
 	baseline cache.Stats // ResetStats 时刻的计数基线（对外按差值暴露）
@@ -56,43 +54,42 @@ func newTTLCache[V any](ttl time.Duration, maxSize int) *ttlCache[V] {
 		NoBackgroundSweep: true,
 	})
 	return &ttlCache[V]{
-		inner:  inner,
-		flight: singleflight.New[V](),
-		ttl:    ttl,
+		inner: inner,
+		sf:    cache.NewSingleFlightCache[V](inner),
 	}
 }
 
 // getOrBuild 返回缓存值；未命中则用 build 构造并写入。
 //
-// 未命中时的构造经 singleflight 去重：同一 key 的并发调用只真正构造一次，
+// 未命中时的构造经上游 singleflight 去重：同一 key 的并发调用只真正构造一次，
 // 所有调用方拿到同一个实例——这与本仓历史实现的「双检收敛到同一个赢家」
 // 语义一致，且顺带省掉了 N-1 次重复构造。
 func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error) {
 	ctx := context.Background()
 
-	// 读路径交给 LocalCache：命中计 Hits、未命中计 Misses（每次查找各计一次）。
-	// Get 对过期条目走惰性删除（计入 Expirations，历史口径合并进 Evictions）。
-	if v, err := c.inner.Get(ctx, key); err == nil && v != nil {
-		return *v, nil
-	}
-
-	// 回源（单飞去重）：winner 构造一次并回填缓存，waiter 共享同一结果。
-	return c.flight.Do(ctx, key, func(context.Context) (V, error) {
+	value, err := c.sf.GetOrLoadWithSource(ctx, key, func(context.Context, string) (*V, error) {
 		built, err := build()
 		if err != nil {
-			var zero V
-			return zero, err
+			// 回源失败不写缓存（含 null marker）：失败必须能被下一次查找重试。
+			return nil, err
 		}
-		// 回填用构造期 TTL（ttl <= 0 = 永不过期，与上游 SetWithTTL 口径一致）。
-		// 回填失败不阻断主流程：值仍返回给调用方，只是下次要重新构造。
-		_ = c.inner.SetWithTTL(ctx, key, &built, c.ttl)
-		return built, nil
+		// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
+		return &built, nil
 	})
+	if err != nil {
+		var zero V
+		return zero, err
+	}
+	if value == nil {
+		var zero V
+		return zero, nil
+	}
+	return *value, nil
 }
 
 // remove 丢弃一个条目。
 func (c *ttlCache[V]) remove(key string) {
-	_ = c.inner.Del(context.Background(), key)
+	_ = c.sf.Del(context.Background(), key)
 }
 
 // purge 丢弃全部条目。
@@ -118,7 +115,7 @@ func (c *ttlCache[V]) cleanup() {
 // Evictions 口径与本仓历史实现保持一致：**容量淘汰 + TTL 过期回收都计入**
 // （上游把两者分列为 Evictions / Expirations，这里按历史口径合并）。
 func (c *ttlCache[V]) stats() cache.Stats {
-	cur := c.inner.Stats()
+	cur := c.sf.Stats()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return cache.Stats{
@@ -132,7 +129,7 @@ func (c *ttlCache[V]) stats() cache.Stats {
 
 // resetStats 把计数归零（上游计数单调不减，归零以「记基线」实现）。
 func (c *ttlCache[V]) resetStats() {
-	cur := c.inner.Stats()
+	cur := c.sf.Stats()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.baseline = cur

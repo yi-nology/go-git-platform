@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -51,8 +52,9 @@ func TestTTLCache_SingleFlightOnConcurrentMiss(t *testing.T) {
 // TestTTLCache_MissCountPerLookup 锁定对外 Stats() 的计数口径：每次查找各计
 // 一次（未命中计 Misses，命中计 Hits），互斥。
 //
-// 这里刻意不用上游 cache.SingleFlightCache 装饰器：它的前置 Peek 会先计一次
-// Misses、内层 GetOrLoad 再计一次，一次未命中被计成两次，会破坏该契约。
+// 收编到上游 cache.SingleFlightCache 装饰器后仍成立：装饰器的前置 Peek 计一次
+// 未命中、回源加载路径不再重复计（上游 pkg#90 修正）⇒ 一次查找恰好计入其中
+// 之一。
 func TestTTLCache_MissCountPerLookup(t *testing.T) {
 	c := newTTLCache[string](time.Minute, 0)
 	build := func() (string, error) { return "value", nil }
@@ -100,6 +102,30 @@ func TestTTLCache_ConcurrentMissCountsEachLookup(t *testing.T) {
 	}
 	if s.Hits != 0 {
 		t.Errorf("expected 0 hits, got %d", s.Hits)
+	}
+}
+
+// TestTTLCache_FailedBuildIsNotCached 锁定「回源失败不写缓存」：失败必须能被
+// 下一次查找重试，不能被 null marker 之类的空值标记挡住。
+func TestTTLCache_FailedBuildIsNotCached(t *testing.T) {
+	c := newTTLCache[string](time.Minute, 0)
+
+	var builds atomic.Int64
+	build := func() (string, error) {
+		if builds.Add(1) == 1 {
+			return "", errors.New("boom")
+		}
+		return "value", nil
+	}
+
+	if _, err := c.getOrBuild("k", build); err == nil {
+		t.Fatal("expected error from failing build")
+	}
+	if _, err := c.getOrBuild("k", build); err != nil {
+		t.Fatalf("second getOrBuild should retry the build: %v", err)
+	}
+	if got := builds.Load(); got != 2 {
+		t.Errorf("expected 2 builds (failure must not be cached), got %d", got)
 	}
 }
 

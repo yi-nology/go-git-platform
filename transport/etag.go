@@ -2,13 +2,14 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/oekit/pkg/cache"
 )
 
 // DefaultETagEntries is the default maximum number of responses kept in an
@@ -47,8 +48,12 @@ const cacheHitHeader = "X-Go-Git-Platform-Cache"
 //     not vary their API payloads on other request headers.
 //
 // An ETagCache is safe for concurrent use.
+//
+// 存储委托上游 oekit/pkg/cache 的 LocalCache（TTL=0 不过期 + 容量上限 + 读命中
+// 提升顺序的 LRU 淘汰），本类型只保留 ETag 语义（条件请求、304 回放、条目体积
+// 上限与 no-store 排除）。
 type ETagCache struct {
-	entries     *lru.Cache[string, etagEntry]
+	entries     *cache.LocalCache[etagEntry]
 	maxBodySize int64
 }
 
@@ -65,13 +70,19 @@ func NewETagCache(maxEntries int) *ETagCache {
 	if maxEntries <= 0 {
 		maxEntries = DefaultETagEntries
 	}
-	// lru.New returns an error only for non-positive sizes, handled above.
-	c, _ := lru.New[string, etagEntry](maxEntries)
-	return &ETagCache{entries: c, maxBodySize: DefaultMaxCachedBodySize}
+	return &ETagCache{
+		entries: cache.NewLocalCache[etagEntry](cache.LocalConfig[etagEntry]{
+			MaxSize:     maxEntries,
+			EvictPolicy: cache.EvictLRU,
+			// 条目不过期（TTL=0）⇒ 无需后台清扫协程，容量淘汰由 MaxSize 驱动。
+			NoBackgroundSweep: true,
+		}),
+		maxBodySize: DefaultMaxCachedBodySize,
+	}
 }
 
 // Len reports the number of cached responses (for tests and diagnostics).
-func (c *ETagCache) Len() int { return c.entries.Len() }
+func (c *ETagCache) Len() int { return c.entries.Size() }
 
 // etagKey scopes a cache entry to the exact request shape: method+URL plus
 // the Accept and Authorization headers. Authorization participates so a
@@ -92,7 +103,7 @@ func (c *ETagCache) applyConditional(req *http.Request) {
 	if c == nil || req.Method != http.MethodGet || req.Header.Get("If-None-Match") != "" {
 		return
 	}
-	if e, ok := c.entries.Get(etagKey(req)); ok {
+	if e, err := c.entries.Get(context.Background(), etagKey(req)); err == nil && e != nil {
 		req.Header.Set("If-None-Match", e.etag)
 	}
 }
@@ -134,11 +145,12 @@ func (c *ETagCache) store(req *http.Request, resp *http.Response, body []byte) {
 	h := resp.Header.Clone()
 	h.Del("Content-Encoding")
 	h.Del("Content-Length")
-	c.entries.Add(etagKey(req), etagEntry{
+	entry := etagEntry{
 		etag:   resp.Header.Get("ETag"),
 		header: h,
 		body:   append([]byte(nil), body...),
-	})
+	}
+	_ = c.entries.Set(context.Background(), etagKey(req), &entry)
 }
 
 // synthesize rebuilds a 200 response for a 304 using the cached entry. The
@@ -172,8 +184,8 @@ func (c *ETagCache) processRT(req *http.Request, resp *http.Response) (*http.Res
 		return resp, nil
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		e, ok := c.entries.Get(etagKey(req))
-		if !ok {
+		e, err := c.entries.Get(context.Background(), etagKey(req))
+		if err != nil || e == nil {
 			_ = resp.Body.Close()
 			return nil, fmt.Errorf("transport: conditional request for %s answered 304 but the cached entry is gone", redactURL(*req.URL))
 		}
