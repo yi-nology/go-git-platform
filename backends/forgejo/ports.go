@@ -2,9 +2,10 @@ package forgejo
 
 import (
 	"context"
-	"strings"
 
 	forgejo "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
+
+	"github.com/oekit/pkg/stringx"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -512,7 +513,7 @@ func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.FamilyIssueLis
 		KeyWord:     opt.KeyWord,
 		State:       forgejo.StateType(opt.State),
 		AssignedBy:  opt.Assignee,
-		Labels:      splitCSV(opt.Labels),
+		Labels:      stringx.SplitCSVNonEmpty(opt.Labels),
 		Type:        forgejo.IssueType(opt.Type),
 	})
 	return familyIssues(list), err
@@ -856,7 +857,7 @@ func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt gi
 		KeyWord:     opt.KeyWord,
 		State:       forgejo.StateType(opt.State),
 		AssignedBy:  opt.Assignee,
-		Labels:      splitCSV(opt.Labels),
+		Labels:      stringx.SplitCSVNonEmpty(opt.Labels),
 		Type:        forgejo.IssueType(opt.Type),
 	})
 	return familyIssues(list), err
@@ -1290,18 +1291,3 @@ var (
 	_ giteafamily.ReactionPort         = sdkPorts{}
 	_ giteafamily.BranchProtectionPort = sdkPorts{}
 )
-
-// splitCSV converts a comma-separated filter (the family's issue label
-// vocabulary) to a slice; empty input yields nil.
-func splitCSV(s string) []string {
-	if s == "" {
-		return nil
-	}
-	out := []string{}
-	for _, p := range strings.Split(s, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
