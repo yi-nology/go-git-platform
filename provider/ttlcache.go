@@ -1,171 +1,139 @@
 package provider
 
 import (
-	"fmt"
+	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/oekit/concurrency/singleflight"
+	"github.com/oekit/pkg/cache"
 )
 
-// ttlCache is the generic TTL+LRU cache behind Manager: TTL expiry, bounded
-// capacity with least-recently-used eviction, and atomic hit/miss/eviction
-// counters. It is internal (lowercase) — the Manager surface stays the only
-// public contract — and exists so the cache mechanics are one testable
-// component instead of five concerns folded into the Manager type.
+// ttlCache 是 Manager 背后的 TTL+LRU 缓存：TTL 过期、有界容量（最久未用者先
+// 淘汰）、命中/未命中/淘汰计数。它是内部类型（小写）——Manager 仍是唯一对外
+// 契约面——存在的意义是让缓存机制是一个可测组件，而不是把五件事揉进 Manager。
 //
-// Values mirror no shared state: build (the factory) runs OUTSIDE the lock,
-// and getOrBuild double-checks under the write lock so concurrent builders
-// converge on one winner.
+// 实现全部委托上游原语，本文件只做两件事：
+//   - 把 Manager 需要的操作面（getOrBuild / remove / purge / len / cleanup）
+//     映射到原语；
+//   - 保住「ResetStats 归零」语义：上游计数单调不减，ResetStats 改为记基线、
+//     Stats 读差值——对外可见的口径不变（归零后重新从 0 累计）。
+//
+// 两个上游原语各司其职：
+//   - oekit/pkg/cache.LocalCache —— 存储 + TTL/LRU 淘汰 + 观测计数；
+//   - oekit/concurrency/singleflight.Flight —— 回源去重：同一 key 的并发未命中
+//     只构造一个实例，所有调用方共享它（构造 Provider 会新建 http.Client 与
+//     连接池，N 份并发持有是真实的资源浪费）。
+//
+// 计数口径（对外契约）：读命中计 Hits、读未命中计 Misses，二者互斥——**每次
+// 查找各计一次**，与本仓历史实现一致。注意这里刻意**没有**用
+// cache.SingleFlightCache 装饰器：它的前置 Peek 会先计一次 Misses、内层
+// GetOrLoad 再计一次，一次未命中被计成两次，会破坏 Stats() 契约。
+// LocalCache.Get 不计 Misses、只计 Hits，因此计数由 LocalCache 单独负责。
+//
+// 回源函数由**调用点注入**（LocalCache.GetOrLoadWithSource）：Manager.Get 的
+// 回源闭包捕获的是本次调用的 cfg（Provider 按 cfg 构造），构造期固定的 Source
+// 拿不到它。
 type ttlCache[V any] struct {
-	mu      sync.RWMutex
-	entries map[string]ttlEntry[V]
-	ttl     time.Duration // 0 = never expires
-	maxSize int           // 0 = unlimited
+	inner  *cache.LocalCache[V]
+	flight *singleflight.Flight[V]
+	ttl    time.Duration
 
-	// order tracks access recency for capacity eviction and is non-nil only
-	// when maxSize > 0. Values mirror entries' key set; the LRU list is the
-	// single source of "least recently used" so eviction targets real usage
-	// (hits refresh recency), not creation time.
-	order *lru.Cache[string, struct{}]
-
-	// stats counters (atomic)
-	hits      atomic.Int64
-	misses    atomic.Int64
-	evictions atomic.Int64
+	mu       sync.Mutex
+	baseline cache.Stats // ResetStats 时刻的计数基线（对外按差值暴露）
 }
 
-type ttlEntry[V any] struct {
-	value     V
-	createdAt time.Time
-}
-
-// newTTLCache builds a cache with the given expiry and capacity
-// (ttl <= 0 means never expire; maxSize <= 0 means unlimited). Panics only
-// on an LRU construction failure, which cannot happen for maxSize > 0.
+// newTTLCache 构建缓存（ttl <= 0 表示不过期；maxSize <= 0 表示不限容量）。
+//
+// NoBackgroundSweep 置 true：清理由 Manager 自己的 janitor 驱动（cleanup →
+// Sweep），不在库层另起常驻 goroutine——与本仓原有的 janitor 口径一致。
+// EvictPolicy 取 EvictLRU：读命中也提升顺序，容量淘汰针对真实使用而非写入时间。
 func newTTLCache[V any](ttl time.Duration, maxSize int) *ttlCache[V] {
-	c := &ttlCache[V]{entries: map[string]ttlEntry[V]{}, ttl: ttl, maxSize: maxSize}
-	if maxSize > 0 {
-		order, err := lru.New[string, struct{}](maxSize)
-		if err != nil {
-			panic(fmt.Sprintf("provider: newTTLCache: %v", err))
-		}
-		c.order = order
+	inner := cache.NewLocalCache[V](cache.LocalConfig[V]{
+		TTL:               ttl,
+		MaxSize:           maxSize,
+		EvictPolicy:       cache.EvictLRU,
+		NoBackgroundSweep: true,
+	})
+	return &ttlCache[V]{
+		inner:  inner,
+		flight: singleflight.New[V](),
+		ttl:    ttl,
 	}
-	return c
 }
 
-// fresh reports whether the entry is still within its TTL.
-func (c *ttlCache[V]) fresh(e ttlEntry[V], now time.Time) bool {
-	return c.ttl == 0 || now.Sub(e.createdAt) < c.ttl
-}
-
-// get returns the cached value when present and fresh, refreshing access
-// recency. The second return reports a hit.
-func (c *ttlCache[V]) get(key string) (V, bool) {
-	c.mu.RLock()
-	e, ok := c.entries[key]
-	fresh := ok && c.fresh(e, time.Now())
-	c.mu.RUnlock()
-	if !fresh {
-		var zero V
-		return zero, false
-	}
-	// Refresh access recency on its own internal lock; lru.Cache is
-	// thread-safe, so hits stay independent of the entries map lock.
-	if c.order != nil {
-		c.order.Get(key)
-	}
-	c.hits.Add(1)
-	return e.value, true
-}
-
-// getOrBuild returns the cached value, or builds it via build (outside the
-// lock) and stores it. A concurrent builder that raced ahead wins the
-// double-check and its value is returned to both callers.
+// getOrBuild 返回缓存值；未命中则用 build 构造并写入。
+//
+// 未命中时的构造经 singleflight 去重：同一 key 的并发调用只真正构造一次，
+// 所有调用方拿到同一个实例——这与本仓历史实现的「双检收敛到同一个赢家」
+// 语义一致，且顺带省掉了 N-1 次重复构造。
 func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error) {
-	if v, ok := c.get(key); ok {
-		return v, nil
-	}
-	c.misses.Add(1)
+	ctx := context.Background()
 
-	v, err := build()
-	if err != nil {
-		var zero V
-		return zero, err
+	// 读路径交给 LocalCache：命中计 Hits、未命中计 Misses（每次查找各计一次）。
+	// Get 对过期条目走惰性删除（计入 Expirations，历史口径合并进 Evictions）。
+	if v, err := c.inner.Get(ctx, key); err == nil && v != nil {
+		return *v, nil
 	}
 
-	now := time.Now()
-	c.mu.Lock()
-	// Check again under write lock in case another goroutine raced ahead.
-	if e, ok := c.entries[key]; ok && c.fresh(e, now) {
-		c.mu.Unlock()
-		return e.value, nil
-	}
-	// Enforce max size by evicting the least recently used tracked entry.
-	if c.order != nil {
-		for c.order.Len() >= c.maxSize {
-			evKey, _, _ := c.order.RemoveOldest()
-			if _, stillCached := c.entries[evKey]; stillCached {
-				delete(c.entries, evKey)
-				c.evictions.Add(1)
-			}
-			if evKey == key {
-				break // re-inserting an existing key; nothing else to evict
-			}
+	// 回源（单飞去重）：winner 构造一次并回填缓存，waiter 共享同一结果。
+	return c.flight.Do(ctx, key, func(context.Context) (V, error) {
+		built, err := build()
+		if err != nil {
+			var zero V
+			return zero, err
 		}
-		c.order.Add(key, struct{}{})
-	}
-	c.entries[key] = ttlEntry[V]{value: v, createdAt: now}
-	c.mu.Unlock()
-
-	return v, nil
+		// 回填用构造期 TTL（ttl <= 0 = 永不过期，与上游 SetWithTTL 口径一致）。
+		// 回填失败不阻断主流程：值仍返回给调用方，只是下次要重新构造。
+		_ = c.inner.SetWithTTL(ctx, key, &built, c.ttl)
+		return built, nil
+	})
 }
 
-// remove drops one entry.
+// remove 丢弃一个条目。
 func (c *ttlCache[V]) remove(key string) {
-	c.mu.Lock()
-	delete(c.entries, key)
-	if c.order != nil {
-		c.order.Remove(key)
-	}
-	c.mu.Unlock()
+	_ = c.inner.Del(context.Background(), key)
 }
 
-// purge drops every entry.
+// purge 丢弃全部条目。
 func (c *ttlCache[V]) purge() {
-	c.mu.Lock()
-	c.entries = map[string]ttlEntry[V]{}
-	if c.order != nil {
-		c.order.Purge()
-	}
-	c.mu.Unlock()
+	c.inner.Clear()
 }
 
-// len reports the number of cached entries (including expired-but-not-yet-
-// collected ones).
+// len 报告缓存条目数（含已过期但尚未回收的）。
 func (c *ttlCache[V]) len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.entries)
+	return c.inner.Size()
 }
 
-// cleanup removes expired entries.
+// cleanup 回收过期条目。
 func (c *ttlCache[V]) cleanup() {
-	if c.ttl == 0 {
+	if c.inner == nil {
 		return
 	}
+	c.inner.Sweep(context.Background())
+}
+
+// stats 返回本轮（自上次 ResetStats 起）的计数快照。
+//
+// Evictions 口径与本仓历史实现保持一致：**容量淘汰 + TTL 过期回收都计入**
+// （上游把两者分列为 Evictions / Expirations，这里按历史口径合并）。
+func (c *ttlCache[V]) stats() cache.Stats {
+	cur := c.inner.Stats()
 	c.mu.Lock()
-	cutoff := time.Now().Add(-c.ttl)
-	for k, e := range c.entries {
-		if e.createdAt.Before(cutoff) {
-			delete(c.entries, k)
-			if c.order != nil {
-				c.order.Remove(k)
-			}
-			c.evictions.Add(1)
-		}
+	defer c.mu.Unlock()
+	return cache.Stats{
+		Hits:        cur.Hits - c.baseline.Hits,
+		Misses:      cur.Misses - c.baseline.Misses,
+		Evictions:   cur.Evictions - c.baseline.Evictions,
+		Expirations: cur.Expirations - c.baseline.Expirations,
+		Size:        cur.Size,
 	}
-	c.mu.Unlock()
+}
+
+// resetStats 把计数归零（上游计数单调不减，归零以「记基线」实现）。
+func (c *ttlCache[V]) resetStats() {
+	cur := c.inner.Stats()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseline = cur
 }

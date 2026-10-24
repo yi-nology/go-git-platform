@@ -128,21 +128,23 @@ func (m *Manager) Len() int {
 
 // Stats returns a snapshot of cache counters. The counters continue to
 // accumulate across calls; reset them with ResetStats.
+//
+// Evictions 口径与本仓历史实现一致：容量淘汰与 TTL 过期回收**都计入**
+// （上游 LocalCache 把两者分列为 Evictions / Expirations，此处按历史口径合并）。
 func (m *Manager) Stats() Stats {
+	s := m.cache.stats()
 	return Stats{
-		Hits:      m.cache.hits.Load(),
-		Misses:    m.cache.misses.Load(),
-		Evictions: m.cache.evictions.Load(),
-		Size:      m.cache.len(),
+		Hits:      s.Hits,
+		Misses:    s.Misses,
+		Evictions: s.Evictions + s.Expirations,
+		Size:      int(s.Size),
 	}
 }
 
 // ResetStats zeroes the hit/miss/eviction counters. Cache entries are not
 // affected.
 func (m *Manager) ResetStats() {
-	m.cache.hits.Store(0)
-	m.cache.misses.Store(0)
-	m.cache.evictions.Store(0)
+	m.cache.resetStats()
 }
 
 // Cleanup removes expired entries from the cache. Safe to call manually; also
