@@ -27,6 +27,9 @@ func NewGoGitBackend(opts Options) *GoGitBackend {
 	if logger == nil {
 		logger = NewNoopLogger()
 	}
+	// go-git 默认的 HTTP 传输没有超时(拨号/响应头都没有)⇒ 上游不可达时
+	// 一次克隆能挂两分钟。装上有界的传输(见 gogit_http.go)。
+	installGitHTTPTimeouts()
 	return &GoGitBackend{logger: logger}
 }
 

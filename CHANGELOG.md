@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.97.0] - 2026-10-24
+
+### Fixed
+
+- **git 传输加超时（gogit 后端）**：go-git 的默认 client 用 `http.DefaultTransport`
+  —— **没有拨号超时、没有响应头超时**。于是"上游连不上/连上不回"时，git 操作会
+  一直挂着，调用方只能等自己 context 的超时兜底。实测：GitHub 间歇性不可达时，
+  一次克隆卡到操作系统默认的 TCP 重试超时（约 2 分钟）才失败，期间连接一直
+  ESTABLISHED。
+  修法：gogit 后端构造时给 http/https 协议装上有界传输
+  （`GitHTTPDialTimeout` 30s / `GitHTTPResponseHeaderTimeout` 60s /
+  `GitHTTPTLSHandshakeTimeout` 15s，可按需调整）。
+  - **不设 `http.Client.Timeout`（总超时）**：大仓克隆的响应体可以流很久，
+    设总超时会把正常的大克隆打断。只卡"连不上"和"连上不回"这两种真挂死。
+  - **不影响 skip-TLS**：go-git 会在 Clone 出来的 transport 上叠加 endpoint 级设置
+    （`InsecureSkipTLS` 等），超时随之保留 —— 自建实例（自签/过期证书）照常可连。
+
 ## [0.96.0] - 2026-10-21
 
 ### Changed
