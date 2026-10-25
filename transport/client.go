@@ -300,7 +300,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	if err != nil {
 		c.log().Error("transport request failed",
 			"method", req.Method,
-			"path", req.Path,
+			"path", redactPath(req.Path),
 			"status", resp.StatusCode,
 			"duration", duration,
 			"err", err,
@@ -318,7 +318,7 @@ func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, 
 	if resp.StatusCode >= 400 {
 		// The RoundTripper layer has logged and hooked the error response;
 		// here it becomes the structured transport error for the Do caller.
-		return nil, NewStatusErrorWithHeaders(req.Method, req.Path, resp.StatusCode, body, resp.Header)
+		return nil, NewStatusErrorWithHeaders(req.Method, redactPath(req.Path), resp.StatusCode, body, resp.Header)
 	}
 
 	out := &Response{
@@ -348,7 +348,7 @@ func (c *Client) logRequestDebug(req *Request, status int, duration time.Duratio
 	}
 	c.logger.Debug("transport request ok",
 		"method", req.Method,
-		"path", req.Path,
+		"path", redactPath(req.Path),
 		"status", status,
 		"duration", duration,
 		"body_size", len(body),
@@ -356,7 +356,7 @@ func (c *Client) logRequestDebug(req *Request, status int, duration time.Duratio
 	if len(body) > 0 {
 		c.logger.Debug("transport response body",
 			"method", req.Method,
-			"path", req.Path,
+			"path", redactPath(req.Path),
 			"body", truncateForLog(body, 2048),
 		)
 	}
@@ -745,17 +745,61 @@ func readAndClose(resp *http.Response, maxBodySize int64) ([]byte, error) {
 func redactURL(u url.URL) string {
 	q := u.Query()
 	changed := false
-	for _, k := range []string{"access_token", "token", "private_token"} {
+	for _, k := range []string{
+		"access_token", "token", "private_token", "password", "passwd",
+		"secret", "api_key", "apikey", "key",
+	} {
 		if q.Get(k) != "" {
 			q.Set(k, "***")
 			changed = true
 		}
+	}
+	// **userinfo 也要脱敏**:https://user:pass@host/ 的密码部分同样进日志。
+	// (BuildAuthURL 这类构造带 userinfo 的 URL 目前没有调用点,但这是"改一行
+	// 就会泄漏"的形状 ⇒ 顺手堵上。)
+	if u.User != nil {
+		if name := u.User.Username(); name != "" {
+			u.User = url.UserPassword(name, "***")
+		} else {
+			u.User = url.User("***")
+		}
+		changed = true
 	}
 	if !changed {
 		return u.String()
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// redactPath 脱敏请求路径里的秘密。
+//
+// Request.Path **可能自带 query 串**(见 Request 注释)⇒ 日志里不能原样打:
+// 调用方把 token 放进 query 就会随日志与错误信息(→ 响应体)一起外泄。
+func redactPath(p string) string {
+	i := strings.IndexByte(p, '?')
+	if i < 0 {
+		return p
+	}
+	base, rawQuery := p[:i], p[i+1:]
+	q, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return base + "?***"
+	}
+	changed := false
+	for _, k := range []string{
+		"access_token", "token", "private_token", "password", "passwd",
+		"secret", "api_key", "apikey", "key",
+	} {
+		if q.Get(k) != "" {
+			q.Set(k, "***")
+			changed = true
+		}
+	}
+	if !changed {
+		return p
+	}
+	return base + "?" + q.Encode()
 }
 
 // truncateForLog returns a string representation of body, capped at maxLen

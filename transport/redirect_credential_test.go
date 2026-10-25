@@ -158,3 +158,27 @@ func TestStripSensitiveHeaders(t *testing.T) {
 	assert.Empty(t, req.Header.Get("X-Api-Key"))
 	assert.Equal(t, "keep-me", req.Header.Get("X-Request-Id"), "非敏感头必须保留")
 }
+
+// TestRedactURL_MasksUserInfo URL 里的 userinfo 密码不能进日志。
+//
+// 回归背景(P2,当前不可达但形状危险):`redactURL` 只处理 query ⇒
+// `https://user:pass@host/` 的密码会原样进日志。仓内构造带 userinfo 的 URL 的
+// 只有 `pkg/credential.BuildAuthURL`(暂无调用点)⇒ 这是"改一行就会泄漏"的形状。
+func TestRedactURL_MasksUserInfo(t *testing.T) {
+	u, err := http.NewRequest(http.MethodGet, "https://user:SECRET-PASS@host/path", nil)
+	require.NoError(t, err)
+	got := redactURL(*u.URL)
+	assert.NotContains(t, got, "SECRET-PASS", "userinfo 里的密码必须被脱敏")
+	assert.Contains(t, got, "host", "host 要保留")
+}
+
+// TestRedactPath_MasksSecretQuery 请求路径里的 query 秘密不能进日志。
+//
+// 回归背景(P2):`Request.Path` 可以自带 query 串 ⇒ 日志/错误信息里原样打出来。
+func TestRedactPath_MasksSecretQuery(t *testing.T) {
+	assert.Equal(t, "/api/v1/x", redactPath("/api/v1/x"))
+	assert.Equal(t, "/api/v1/x?page=2", redactPath("/api/v1/x?page=2"))
+	got := redactPath("/api/v1/x?access_token=SECRET&page=2")
+	assert.NotContains(t, got, "SECRET", "query 里的 token 必须被脱敏")
+	assert.Contains(t, got, "page=2", "非秘密参数要保留")
+}
