@@ -22,6 +22,13 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	if opts.Assignee != "" {
 		listOpts.Assignee = opts.Assignee
 	}
+	// 排序(增量备份要按 updated 排,否则"被改过的老 issue"捞不到)。
+	if opts.Sort != "" {
+		listOpts.Sort = opts.Sort
+	}
+	if opts.Direction != "" {
+		listOpts.Direction = opts.Direction
+	}
 	if opts.Labels != "" {
 		listOpts.Labels = []string{opts.Labels}
 	}

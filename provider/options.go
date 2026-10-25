@@ -320,6 +320,17 @@ type ListIssuesOptions struct {
 	Labels   string     `json:"labels,omitempty"`
 	Page     int        `json:"page,omitempty"`
 	PerPage  int        `json:"per_page,omitempty"`
+	// Sort 排序字段("created"|"updated"|"comments"),空 = 平台默认。
+	//
+	// **增量备份必须用它**:平台默认按 created 倒序 ⇒ "上次备份后被改动的
+	// **老** issue"正好被挤在第一页之外,客户端再按 updated 过滤也捞不到
+	// (捞到的永远是"最新创建"的那批)。
+	//
+	// 支持情况:GitHub 支持(sort=updated);Gitea/Forgejo 家族当前 SDK 不暴露该
+	// 参数 ⇒ 传入被忽略(调用方需自己兜底,见 core 的增量采集)。
+	Sort string `json:"sort,omitempty"`
+	// Direction 排序方向("asc"|"desc"),空 = 平台默认。
+	Direction string `json:"direction,omitempty"`
 }
 
 // CreateIssueOptions contains options for creating an issue.
