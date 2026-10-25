@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.1] - 2026-10-25
+
+### Fixed
+
+- **gogit 后端的 `GetCommitsBetween` 与 native 语义对齐（分叉场景）**：旧实现从 `to`
+  往回走 log、**只在遇到 `from` 本身时停** ⇒ `from` 与 `to` **分叉**时永远走不到
+  `from` ⇒ 一路往回走过 merge-base，把**共同祖先**也收进「目标侧独有提交」清单。
+  native 后端走 `git log from..to`（git 的范围语义自带「排除 from 可达的一切」）⇒
+  **两个后端在分叉场景给出不同的清单** ⇒ 同一个调用方拿到的「目标侧独有提交」
+  随 `git.backend` 配置而变：清单里混进共同祖先 ⇒ 运维看到的「将被覆盖的提交」
+  是误导的；用清单长度当「独有提交数」也会算多。
+  ⇒ 改用 **merge-base 作遍历边界**：`from` 是 `to` 的祖先时 merge-base == from
+  （旧行为**逐字不变** ✓）；分叉时停在共同祖先**之前** ⇒ 共同祖先不进结果 ✓。
+  没有共同祖先（无关历史）⇒ 不设边界（走到底），与 git 的范围语义一致 ✓。
+  ⇒ 附对拍用例 `TestGoGit_GetCommitsBetween_ForkParity`（gogit 与 native 逐条比对，
+  并显式断言共同祖先不在结果里）——旧实现在这条用例下红（gogit 2 条 / native 1 条）。
+- **两条门禁债**（`make check` 与 `golangci-lint run ./...` 恒红，已把 main 拖成红的）：
+  `provider/ttlcache.go` 的 gofmt 对齐、`provider/ttlcache_test.go` 的 unparam
+  （闭包签名由 `GetOrLoadWithSource` 的 func 类型钉死，error 位恒 nil 是本用例的事实）。
+
 ## [0.99.0] - 2026-10-25
 
 ### Added

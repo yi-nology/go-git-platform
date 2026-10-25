@@ -16,6 +16,7 @@ func TestTTLCache_SingleFlightOnConcurrentMiss(t *testing.T) {
 	c := newTTLCache[string](time.Minute, 0)
 
 	var builds atomic.Int64
+	//nolint:unparam // 闭包签名由 GetOrLoadWithSource 的 func 类型钉死，error 位恒 nil 是本用例的事实
 	build := func() (string, error) {
 		builds.Add(1)
 		// 拉长构造窗口，让并发调用确实落在同一个 flight 上。

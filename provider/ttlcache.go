@@ -34,7 +34,7 @@ import (
 // 回源函数由**调用点注入**（GetOrLoadWithSource）：Manager.Get 的回源闭包
 // 捕获的是本次调用的 cfg（Provider 按 cfg 构造），构造期固定的 Source 拿不到它。
 type ttlCache[V any] struct {
-	inner *cache.LocalCache[V]       // 装饰器未透传 Clear/Size/Sweep，走内层
+	inner *cache.LocalCache[V]        // 装饰器未透传 Clear/Size/Sweep，走内层
 	sf    *cache.SingleFlightCache[V] // 读路径 + 回源去重 + 计数
 
 	mu       sync.Mutex

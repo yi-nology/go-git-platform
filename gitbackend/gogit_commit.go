@@ -41,9 +41,25 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 	}
 	defer commitIter.Close()
 
+	// 边界用 **merge-base**，与 native 后端的 `git log from..to` 同语义：
+	//
+	//   - from 是 to 的祖先 ⇒ merge-base == from ⇒ 停在 from 之前（旧行为不变）；
+	//   - **from 与 to 分叉** ⇒ merge-base 是共同祖先 ⇒ 停在它之前，
+	//     于是**共同祖先不进结果**。
+	//
+	// 旧实现只在「遇到 from 本身」时停 ⇒ 分叉时永远走不到 from ⇒ 一路往回走过
+	// merge-base，把共同祖先也收进结果 ⇒ 与 native 的范围语义不一致
+	// （同一个调用方拿到的「目标侧独有提交」随 git.backend 配置而变）。
+	//
+	// 没有共同祖先（无关历史）⇒ 不设边界（走到底），与 git 的范围语义一致。
+	base, hasBase, baseErr := mergeBaseOf(repo, fromHash, toHash)
+	if baseErr != nil {
+		return nil, newGitError("GetCommitsBetween", repoPath, "", baseErr)
+	}
+
 	var commits []CommitInfo
 	err = commitIter.ForEach(func(c *object.Commit) error {
-		if c.Hash == fromHash {
+		if hasBase && c.Hash == base {
 			return io.EOF
 		}
 		commits = append(commits, CommitInfo{
@@ -58,6 +74,30 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 		return nil, newGitError("GetCommitsBetween", repoPath, "", err)
 	}
 	return commits, nil
+}
+
+// mergeBaseOf 求两个提交的共同祖先（对象级）。hasBase=false 表示**没有共同祖先**
+// （无关历史）——此时不设遍历边界。
+//
+// 为什么不用后端的 MergeBase 方法：那个方法按 ref 字符串重新开仓解析，
+// 这里两个 hash 已经在手（调用方刚解析过），走对象级更省一次开仓与两次解析。
+func mergeBaseOf(repo *git.Repository, a, b plumbing.Hash) (plumbing.Hash, bool, error) {
+	commitA, err := repo.CommitObject(a)
+	if err != nil {
+		return plumbing.ZeroHash, false, err
+	}
+	commitB, err := repo.CommitObject(b)
+	if err != nil {
+		return plumbing.ZeroHash, false, err
+	}
+	bases, err := commitA.MergeBase(commitB)
+	if err != nil {
+		return plumbing.ZeroHash, false, err
+	}
+	if len(bases) == 0 {
+		return plumbing.ZeroHash, false, nil
+	}
+	return bases[0].Hash, true, nil
 }
 
 func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error) {
