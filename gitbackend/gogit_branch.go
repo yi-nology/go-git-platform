@@ -308,7 +308,15 @@ func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, 
 
 	bases, err := branchCommit.MergeBase(upstreamCommit)
 	if err != nil || len(bases) == 0 {
-		return 0, 0, nil
+		// **无共同祖先**(历史被改写/强推过):不能返回 (0,0)。
+		// git 的 `rev-list --left-right --count A...B` 在这种情形下仍会给出
+		// 两侧各自的提交数;返回 (0,0) 会让上层(漂移检测 / 同步状态)
+		// **误判成"已同步"** —— 目标仓被别人强推改写历史后,漂移就再也检测不到。
+		ahead, behind, cerr := countUnrelatedCommits(repo, branchCommit, upstreamCommit)
+		if cerr != nil {
+			return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", cerr)
+		}
+		return ahead, behind, nil
 	}
 	baseHash := bases[0].Hash
 
@@ -338,5 +346,47 @@ func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, 
 		iter2.Close()
 	}
 
+	return ahead, behind, nil
+}
+
+// countUnrelatedCommits 统计两侧各自独有的提交数(两侧没有共同祖先时)。
+//
+// 等价 git 的 `rev-list --left-right --count A...B`:把对方可达的提交排除掉。
+func countUnrelatedCommits(repo *git.Repository, a, b *object.Commit) (int, int, error) {
+	bSet := make(map[plumbing.Hash]struct{})
+	iterB, err := repo.Log(&git.LogOptions{From: b.Hash})
+	if err != nil {
+		return 0, 0, err
+	}
+	err = iterB.ForEach(func(c *object.Commit) error {
+		bSet[c.Hash] = struct{}{}
+		return nil
+	})
+	iterB.Close()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	iterA, err := repo.Log(&git.LogOptions{From: a.Hash})
+	if err != nil {
+		return 0, 0, err
+	}
+	defer iterA.Close()
+	var ahead, common int
+	err = iterA.ForEach(func(c *object.Commit) error {
+		if _, ok := bSet[c.Hash]; ok {
+			common++
+			return nil
+		}
+		ahead++
+		return nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	behind := len(bSet) - common
+	if behind < 0 {
+		behind = 0
+	}
 	return ahead, behind, nil
 }

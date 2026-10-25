@@ -7,6 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestGoGitBackend 的夹具见同包的 gogit_branch_test.go。
@@ -231,4 +234,35 @@ func TestGoGit_Clone_Submodules_ClonesThem(t *testing.T) {
 	if !found {
 		t.Errorf("子模块内容未被克隆(Submodules:true 被忽略)—— 目录=%v", entries)
 	}
+}
+
+// TestGoGit_GetBranchSyncInfo_UnrelatedHistories 无共同祖先时不能报 (0,0)。
+//
+// 回归背景(P1,漂移检测会被漏判):两侧历史无关(目标仓被别人强推改写过)时,
+// 旧实现直接 `return 0, 0, nil` ⇒ 上层(漂移检测 / 同步状态)**误判成"已同步"**
+// ⇒ 目标仓被改写历史后漂移再也检测不到。
+// native 走 `git rev-list --left-right --count A...B`,会给出两侧各自的提交数。
+//
+// 这条用例是**反向验证**:把"无共同祖先 ⇒ 返回 (0,0)"改回去,本用例变红。
+func TestGoGit_GetBranchSyncInfo_UnrelatedHistories(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+
+	// 基线分支(夹具的默认分支名不一定是 main)
+	base := currentBranch(t, repo)
+	// 基线分支:一个提交
+	commitFile(t, repo, "a.txt", "a", "base commit")
+	// orphan:与基线分支无共同祖先的另一个历史
+	gitOutput(t, repo, "checkout", "--orphan", "orphan")
+	gitOutput(t, repo, "rm", "-rf", ".")
+	commitFile(t, repo, "b.txt", "b", "orphan commit")
+	gitOutput(t, repo, "checkout", base)
+
+	// 造一个远端跟踪 ref 指向 orphan 历史
+	gitOutput(t, repo, "update-ref", "refs/remotes/origin/"+base, "refs/heads/orphan")
+
+	ahead, behind, err := b.GetBranchSyncInfo(context.Background(), repo, base, "origin/"+base)
+	require.NoError(t, err)
+	assert.NotZero(t, ahead+behind,
+		"两侧历史无关时不能报 (0,0) —— 那会让上层误判成\"已同步\",漂移再也检测不到")
 }
