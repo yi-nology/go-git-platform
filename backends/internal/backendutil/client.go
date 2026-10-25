@@ -2,6 +2,7 @@ package backendutil
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
@@ -42,5 +43,17 @@ func SDKHTTPClient(tc *transport.Client, skipTLS bool) *http.Client {
 	return &http.Client{
 		Timeout:   transport.DefaultTimeout,
 		Transport: ChainTransport(HTTPTransport(skipTLS), tc.NewRetryingRoundTripper()),
+		// 跨 host 的重定向**不带凭据**。
+		//
+		// Go 只在"请求头已存在"时剥 Authorization/Cookie 等;
+		// 认证是在 RoundTripper 里每跳重新施加的(transport 侧另有拦截),
+		// 而非标准头(PRIVATE-TOKEN 等)Go 本来就不剥 ⇒ 这里统一兜底。
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) > 0 && via[len(via)-1].URL != nil && req.URL != nil &&
+				!strings.EqualFold(via[len(via)-1].URL.Host, req.URL.Host) {
+				transport.StripSensitiveHeaders(req)
+			}
+			return nil
+		},
 	}
 }

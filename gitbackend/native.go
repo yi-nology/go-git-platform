@@ -3,7 +3,6 @@ package gitbackend
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -149,10 +148,13 @@ func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args 
 	}
 	// configureAuth creates an ephemeral credential helper session for tokens;
 	// cleanup removes the temp token/script dir.
-	cleanupCred := b.configureAuth(cmd, pinAuth)
+	cleanupCred, cerr := b.configureAuth(cmd, pinAuth)
 	defer cleanupKey()
 	defer cleanupPin()
 	defer cleanupCred()
+	if cerr != nil {
+		return "", "", cerr
+	}
 
 	if len(extraEnv) > 0 {
 		// 追加而非替换：保留 configureAuth 注入的凭证/SSH 环境
@@ -211,7 +213,7 @@ func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
 // HTTPS 令牌走**临时 credential helper + ASKPASS**（gickup 模式）：
 // 令牌写入 0600 文件，git 进程只拿到 helper 路径，**argv/environ 均无令牌**。
 // 返回 cleanup：调用方在 git 命令结束后删除临时凭证目录。
-func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanup func()) {
+func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanup func(), err error) {
 	cleanup = func() {}
 	if cmd.Env == nil {
 		cmd.Env = cmd.Environ()
@@ -229,22 +231,23 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanu
 			username = "token"
 		}
 		if token == "" {
-			return cleanup
+			return cleanup, nil
 		}
 		sess, err := newCredSession(username, token)
 		if err != nil {
-			// 回退：无法建会话时仍用 extraheader（与旧行为一致），令牌仍不进 argv
-			b.logger.Warn("cred session unavailable, falling back to http.extraheader", "error", err)
-			cred := base64.StdEncoding.EncodeToString([]byte(username + ":" + token))
-			cmd.Env = append(cmd.Env,
-				"GIT_CONFIG_COUNT=1",
-				"GIT_CONFIG_KEY_0=http.extraheader",
-				fmt.Sprintf("GIT_CONFIG_VALUE_0=Authorization: Basic %s", cred),
-			)
-			return cleanup
+			// **不再回退到 extraheader**:那条路把
+			// `GIT_CONFIG_VALUE_0=Authorization: Basic <base64>` 放进 **git 进程的
+			// environ** ⇒ 同用户的 `ps eww` / `/proc/<pid>/environ` 直接可见,
+			// base64 原样可还原 ⇒ 与本文件自述的安全模型("argv/environ 均无令牌")
+			// 直接矛盾,而且这正是被它替换掉的旧做法。
+			//
+			// 建不出凭证会话(临时目录/文件建不了)本就不该继续跑 git ——
+			// 宁可直接报错,也不要带着明文凭据去执行命令。
+			b.logger.Error("cred session unavailable, refusing to continue", "error", err)
+			return cleanup, newGitError("configureAuth", cmd.Dir, "", err)
 		}
 		cmd.Env = append(cmd.Env, sess.env()...)
-		return sess.close
+		return sess.close, nil
 	case AuthSSH:
 		if auth.SSHKey != "" {
 			// %q keeps a caller-supplied key path from being interpreted by
@@ -254,7 +257,7 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanu
 			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
 		}
 	}
-	return cleanup
+	return cleanup, nil
 }
 
 // --- Output parsers ---

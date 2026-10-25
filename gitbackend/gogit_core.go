@@ -180,6 +180,12 @@ func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	if opts.Depth > 0 {
 		cloneOpts.Depth = opts.Depth
 	}
+	// **子模块**:以前 gogit 完全忽略 opts.Submodules ⇒ 生产的 gogit 后端下
+	// "递归同步子模块"这个开关**静默无效**(克隆出来的仓库里 submodule 目录是空的,
+	// 而 .gitmodules 在)。native 走 --recurse-submodules。
+	if opts.Submodules {
+		cloneOpts.RecurseSubmodules = git.DefaultSubmoduleRecursionDepth
+	}
 
 	_, err = git.PlainCloneContext(ctx, opts.Path, false, cloneOpts)
 	if err != nil {

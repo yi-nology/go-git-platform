@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/oekit/pkg/shellx"
 )
 
@@ -68,7 +70,8 @@ func TestConfigureAuth_TokenNotInArgvOrEnv(t *testing.T) {
 	b := &NativeGitBackend{gitPath: "git"}
 	cmd := exec.Command("git", "ls-remote", "https://example.com/o/r.git")
 	secret := "ghp_do_not_leak_this_token_xyz"
-	cleanup := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: secret})
+	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: secret})
+	require.NoError(t, cerr)
 	defer cleanup()
 
 	// argv 无令牌
@@ -130,7 +133,8 @@ func TestConfigureAuth_TokenFallbackOnCredSessionError(t *testing.T) {
 	// 空 token 不建会话，也不注入 extraheader
 	b := &NativeGitBackend{gitPath: "git"}
 	cmd := exec.Command("git", "status")
-	cleanup := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: ""})
+	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: ""})
+	require.NoError(t, cerr)
 	defer cleanup()
 	joined := strings.Join(cmd.Env, "\n")
 	if strings.Contains(joined, "http.extraheader") {

@@ -210,8 +210,25 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 	if headCommit != nil && branchCommit != nil {
 		isAncestor, _ := headCommit.IsAncestor(branchCommit)
 		if isAncestor {
+			// **快进不能只移动 ref**:工作区/索引仍是旧提交的内容 ⇒
+			// HEAD 与磁盘不一致(下一次 Add/Commit 会把"删除"当成待提交变更)。
+			// native 的 git merge 会同步更新工作区。
+			wt, werr := repo.Worktree()
+			if werr != nil {
+				return newGitError("Merge", repoPath, "", werr)
+			}
+			// 工作区脏时不硬覆盖(与 git 一致:会覆盖本地改动时拒绝)。
+			if st, serr := wt.Status(); serr == nil && !st.IsClean() {
+				return newGitError("Merge", repoPath, "", ErrDirtyWorktree)
+			}
 			newRef := plumbing.NewHashReference(head.Name(), ref.Hash())
-			return repo.Storer.SetReference(newRef)
+			if serr := repo.Storer.SetReference(newRef); serr != nil {
+				return newGitError("Merge", repoPath, "", serr)
+			}
+			if rerr := wt.Reset(&git.ResetOptions{Commit: ref.Hash(), Mode: git.HardReset}); rerr != nil {
+				return newGitError("Merge", repoPath, "", rerr)
+			}
+			return nil
 		}
 	}
 
@@ -341,6 +358,14 @@ func (b *GoGitBackend) CherryPick(ctx context.Context, repoPath, commitHash stri
 	wt, err := repo.Worktree()
 	if err != nil {
 		return newGitError("CherryPick", repoPath, "", err)
+	}
+
+	// **脏工作区不许 pick**:下面的 applyChangesToWorktree 是"按路径覆盖"式实现 ⇒
+	// 调用方未提交的修改会被直接覆盖并**提交成功**(本地工作静默丢失)。
+	// native 的 git cherry-pick 会拒绝("Your local changes … would be
+	// overwritten")⇒ 这里也必须拒绝(fail-closed)。
+	if st, serr := wt.Status(); serr == nil && !st.IsClean() {
+		return newGitError("CherryPick", repoPath, "", ErrDirtyWorktree)
 	}
 
 	if err := b.applyChangesToWorktree(repoPath, parentTree, commitTree, wt); err != nil {

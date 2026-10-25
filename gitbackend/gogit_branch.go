@@ -88,6 +88,13 @@ func (b *GoGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string
 		return err
 	}
 
+	// **不能删当前分支**:删掉后 HEAD 悬空 ⇒ 仓库直接不可用
+	// (native 报 "cannot delete branch 'main' used by worktree")。
+	if head, herr := repo.Head(); herr == nil &&
+		head.Name() == plumbing.NewBranchReferenceName(branch) {
+		return newGitError("DeleteBranch", repoPath, "", ErrBranchInUse)
+	}
+
 	err = repo.Storer.RemoveReference(plumbing.ReferenceName("refs/heads/" + branch))
 	if err != nil {
 		return newGitError("DeleteBranch", repoPath, "", ErrBranchNotFound)
@@ -109,9 +116,23 @@ func (b *GoGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newN
 		return newGitError("RenameBranch", repoPath, "", ErrBranchNotFound)
 	}
 
+	// **目标名已存在 ⇒ 拒绝**:否则会静默把别人的分支指针改掉
+	// (native 报 "already exists")。
+	if _, rerr := repo.Reference(newRefName, true); rerr == nil {
+		return newGitError("RenameBranch", repoPath, "", ErrBranchExists)
+	}
+
 	err = repo.Storer.SetReference(plumbing.NewHashReference(newRefName, ref.Hash()))
 	if err != nil {
 		return newGitError("RenameBranch", repoPath, "", err)
+	}
+
+	// **改的是当前分支 ⇒ HEAD 的符号引用要跟着改**:否则 HEAD 指向已删除的
+	// refs/heads/<old> ⇒ 仓库不可用(`git rev-parse HEAD` 直接失败)。
+	if head, herr := repo.Head(); herr == nil && head.Name() == oldRefName {
+		if serr := repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, newRefName)); serr != nil {
+			return newGitError("RenameBranch", repoPath, "", serr)
+		}
 	}
 
 	return repo.Storer.RemoveReference(oldRefName)
@@ -126,6 +147,15 @@ func (b *GoGitBackend) Checkout(ctx context.Context, repoPath, branch string) er
 	wt, err := repo.Worktree()
 	if err != nil {
 		return newGitError("Checkout", repoPath, "", err)
+	}
+
+	// **脏工作区不许切**:go-git 的 Checkout 先把 HEAD 切到目标分支、再 Reset
+	// 工作区 ⇒ 工作区脏时 Reset 失败,但 **HEAD 已经切走** ⇒ 调用方拿到错误
+	// 却面对"半切换"的仓库(HEAD=新分支、文件还是旧分支的内容)⇒
+	// 后续 Commit 会把旧分支的内容提交到新分支。
+	// ⇒ 先自查脏,脏就**不切**。
+	if st, serr := wt.Status(); serr == nil && !st.IsClean() {
+		return newGitError("Checkout", repoPath, "", ErrDirtyWorktree)
 	}
 
 	err = wt.Checkout(&git.CheckoutOptions{

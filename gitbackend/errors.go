@@ -23,6 +23,8 @@ var (
 	ErrInvalidGitArg     = oekiterrors.New("invalid git argument")
 	ErrConfigKeyNotFound = oekiterrors.New("config key not found")
 	ErrStashUnsupported  = oekiterrors.New("stash requires the native git backend")
+	// ErrBranchInUse 当前分支被占用(删/改它会让 HEAD 悬空 ⇒ 仓库不可用)。
+	ErrBranchInUse = oekiterrors.New("branch is currently checked out")
 )
 
 // GitError is a structured error from a git operation.

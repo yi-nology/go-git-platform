@@ -401,11 +401,74 @@ func (c *Client) buildRequest(ctx context.Context, req *Request) (*http.Request,
 // A rejecting request hook aborts the request: the error is returned to the
 // caller (matching the Client.do path) rather than silently discarded.
 func (c *Client) roundTripRequest(req *http.Request) error {
-	if err := applyAuth(req.Context(), c.auth, req); err != nil {
+	if err := c.applyAuthFor(req); err != nil {
 		return err
 	}
 	setUserAgentDefault(req)
 	return c.Hooks().ExecuteRequest(req.Context(), req)
+}
+
+// applyAuthFor 施加认证;**跨 host 的重定向跳一律不带凭据**。
+//
+// 为什么:认证是在 RoundTripper **内部**施加的(每一跳都重新加一次),
+// 而 Go 的 net/http 只对"请求头已存在"的情况做跨 host 剥离
+// (Authorization / Cookie / Www-Authenticate / Cookie2)⇒ 平台 302 到
+// 第三方主机时,令牌会跟着走 —— 实测 GitLab 的 archive 302 到对象存储
+// 就把 PRIVATE-TOKEN 发给了那个主机。
+//
+// 而 PRIVATE-TOKEN / X-Auth-Token 这类**非标准头 Go 本来就不剥**
+// ⇒ 必须在这里自己处理。
+func (c *Client) applyAuthFor(req *http.Request) error {
+	if CrossHostRedirect(req) {
+		StripSensitiveHeaders(req)
+		return nil
+	}
+	return applyAuth(req.Context(), c.auth, req)
+}
+
+// CrossHostRedirect 判断该请求是否是**跳到别的主机**的重定向请求。
+//
+// Go 的 net/http 在跟随重定向时会新建请求,并把上一跳的响应挂在
+// req.Response 上(Request.Response 文档:只在客户端重定向时有值)
+// ⇒ 用它识别"这是第几跳"。
+//
+// 判据用**完整 host(含端口)**:同一台机器上的不同端口也是不同源
+// (Go 的规则只比主机名,会把 127.0.0.1:A → 127.0.0.1:B 当成同主机)。
+func CrossHostRedirect(req *http.Request) bool {
+	if req == nil || req.Response == nil || req.Response.Request == nil {
+		return false
+	}
+	prev := req.Response.Request.URL
+	if prev == nil || req.URL == nil {
+		return false
+	}
+	return !strings.EqualFold(prev.Host, req.URL.Host)
+}
+
+// sensitiveHeaders 可能随重定向外泄的凭据头。
+//
+// Go 只剥 Authorization / Cookie / Www-Authenticate / Cookie2;
+// 其余的(PRIVATE-TO-TOKEN、X-Auth-Token、X-Api-Key …)Go 不管 ⇒ 统一处理。
+var sensitiveHeaders = []string{
+	"Authorization",
+	"Proxy-Authorization",
+	"Private-Token",
+	"X-Auth-Token",
+	"X-Access-Token",
+	"X-Api-Key",
+	"X-Gitlab-Token",
+	"Cookie",
+	"Www-Authenticate",
+}
+
+// StripSensitiveHeaders 删掉可能随跨 host 重定向外泄的凭据头。
+func StripSensitiveHeaders(req *http.Request) {
+	if req == nil {
+		return
+	}
+	for _, h := range sensitiveHeaders {
+		req.Header.Del(h)
+	}
 }
 
 // encodeBody returns the io.Reader for the request body, the content-type
