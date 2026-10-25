@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/oekit/pkg/shellx"
 )
 
 // credSession 短生命周期的 git 凭证会话。
@@ -61,7 +62,7 @@ func newCredSession(username, secret string) (*credSession, error) {
 		"if [ \"$1\" != \"get\" ]; then exit 0; fi\n"+
 		"echo username=%s\n"+
 		"echo password=$(cat %q)\n",
-		shellQuote(username), filepath.ToSlash(tokenPath))
+		shellx.Quote(username), filepath.ToSlash(tokenPath))
 	//nolint:gosec // G306: git 需要以 0700 可执行方式调用 helper
 	if err := os.WriteFile(helperPath, []byte(helper), 0o700); err != nil {
 		s.close()
@@ -78,7 +79,7 @@ func newCredSession(username, secret string) (*credSession, error) {
 		"  Password*|password*) cat %q ;;\n"+
 		"  *) echo %s ;;\n"+
 		"esac\n",
-		shellQuote(username), filepath.ToSlash(tokenPath), shellQuote(username))
+		shellx.Quote(username), filepath.ToSlash(tokenPath), shellx.Quote(username))
 	//nolint:gosec // G306: git 需要以 0700 可执行方式调用 askpass
 	if err := os.WriteFile(askPath, []byte(ask), 0o700); err != nil {
 		s.close()
@@ -112,9 +113,4 @@ func (s *credSession) env() []string {
 		"GIT_CONFIG_KEY_1=credential.helper",
 		"GIT_CONFIG_VALUE_1=" + filepath.ToSlash(s.helperPath),
 	}
-}
-
-// shellQuote 单引号包裹，供嵌入 sh 脚本的字面量使用。
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

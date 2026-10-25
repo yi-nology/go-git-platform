@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/oekit/pkg/shellx"
 )
 
 func TestNewCredSession_WritesSecureTokenFile(t *testing.T) {
@@ -99,12 +101,28 @@ func TestConfigureAuth_TokenNotInArgvOrEnv(t *testing.T) {
 	}
 }
 
-func TestShellQuote(t *testing.T) {
-	if got := shellQuote("ab"); got != "'ab'" {
-		t.Fatalf("got %s", got)
+// 转义语义由上游 shellx.Quote 负责（其 round-trip 由上游测试兜底），下游不再
+// 抄一份转义实现。这里钉的是**可观测**的那条性质：生成的 credential helper
+// 脚本经真实 sh 执行后，用户名仍是恰好一个参数——含空格与单引号的用户名既不会
+// 被拆成多个参数，也不会被 shell 解释掉。
+func TestCredHelperScriptPassesUsernameAsOneArg(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 无 sh：helper 脚本由 msys 执行，不在本测试的断言范围内")
 	}
-	if got := shellQuote("a'b"); got != `'a'\''b'` {
-		t.Fatalf("got %s", got)
+	const user = "user name'with-quote"
+	s, err := newCredSession(user, "s3cret-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+
+	out, err := exec.Command("sh", s.helperPath, "get").Output()
+	if err != nil {
+		t.Fatalf("执行 helper 脚本失败: %v", err)
+	}
+	want := "username=" + user
+	if !strings.Contains(string(out), want) {
+		t.Fatalf("helper 脚本未还原出完整用户名 %q，实际输出: %q", want, string(out))
 	}
 }
 
@@ -195,7 +213,7 @@ func TestCredSession_GitIntegration_HostHelperNotConsulted(t *testing.T) {
 	hostHelper := filepath.Join(dir, "hosthelper.sh")
 	hostLog := filepath.Join(dir, "host.log")
 	script := "#!/bin/sh\n" +
-		"echo \"$1\" >> " + shellQuote(filepath.ToSlash(hostLog)) + "\n" +
+		"echo \"$1\" >> " + shellx.Quote(filepath.ToSlash(hostLog)) + "\n" +
 		"[ \"$1\" = get ] && { echo username=hostuser; echo password=hostpass; }\n"
 	if err := os.WriteFile(hostHelper, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
