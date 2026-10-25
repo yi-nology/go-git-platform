@@ -3,6 +3,8 @@ package provider
 import (
 	"net/http"
 	"strconv"
+
+	"github.com/oekit/pkg/pagination"
 )
 
 const (
@@ -11,18 +13,17 @@ const (
 	MaxPerPage     = 100
 )
 
+// pagePolicy 本仓分页口径：默认每页 DefaultPerPage、上限 MaxPerPage、超限钳到上限。
+// 口径数字仍由本包的导出常量给出（对外 API 不变），归一化逻辑单源于
+// oekit/pkg/pagination.Policy。
+var pagePolicy = pagination.Policy{
+	DefaultPageSize: DefaultPerPage,
+	MaxPageSize:     MaxPerPage,
+}
+
 // NormalizePageOpts applies default values for page/perPage.
 func NormalizePageOpts(page, perPage int) (int, int) {
-	if page <= 0 {
-		page = DefaultPage
-	}
-	if perPage <= 0 {
-		perPage = DefaultPerPage
-	}
-	if perPage > MaxPerPage {
-		perPage = MaxPerPage
-	}
-	return page, perPage
+	return pagePolicy.Normalize(page, perPage)
 }
 
 // ParseTotalCountHeader reads X-Total-Count or X-Total from response headers.
