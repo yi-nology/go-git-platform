@@ -4,6 +4,46 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.4] - 2026-10-25
+
+### Fixed
+
+**P0 — 跨 host 重定向把平台令牌发给第三方主机**
+
+认证是在 RoundTripper **内部**施加的（每一跳都重新加一次），而 Go 的 net/http 只对
+「请求头已存在」的情况做跨 host 剥离（Authorization / Cookie / Www-Authenticate /
+Cookie2）⇒ 平台 302 到第三方主机时，令牌会跟着走。而 `PRIVATE-TOKEN` /
+`X-Auth-Token` 这类**非标准头 Go 本来就不剥**。
+
+实测形态：GitLab 的 archive 端点 302 到对象存储 ⇒ 目标主机收到 `PRIVATE-TOKEN`。
+
+- `transport`：跨 host 的重定向跳**不施加认证**，并剥掉敏感头（判据用**完整
+  host（含端口）**：Go 的规则只比主机名，会把 `127.0.0.1:A → 127.0.0.1:B`
+  当成同主机）。
+- `backendutil.SDKHTTPClient`：加 `CheckRedirect`，跨 host 时剥敏感头（兜底第三方
+  SDK 自带的认证头）。
+
+**gogit 后端：会破坏仓库的六处**（两个后端行为不一致，而生产用的是 gogit；全部实测复现）
+
+- **Checkout 半切换**（P0）：go-git 的 Checkout 先切 HEAD 再 Reset 工作区 ⇒ 工作区脏时
+  Reset 失败，但 **HEAD 已经切走** ⇒ 调用方拿到错误却面对「半切换」的仓库。
+  ⇒ 先自查脏，脏就不切。
+- **CherryPick 静默覆盖未提交改动**（P0）：pick 是「按路径覆盖」式实现 ⇒ 未提交的修改
+  被直接覆盖并**提交成功**（本地工作静默丢失）；native 会拒绝。⇒ 脏工作区 fail-closed。
+- **Merge 快进只移动 ref**（P0）：工作区/索引仍是旧内容 ⇒ HEAD 与磁盘不一致。
+  ⇒ 快进后同步 reset 工作区。
+- **DeleteBranch 删当前分支**（P0）：HEAD 悬空 ⇒ 仓库直接不可用。⇒ 拒绝。
+- **RenameBranch**（P0）：目标名已存在时**静默把别人的分支指针改掉**；重命名当前分支时
+  HEAD 仍指向已删除的旧 ref ⇒ 仓库不可用。⇒ 两条都加保护。
+- **Clone 忽略 Submodules**（P1）：生产的 gogit 后端下「递归同步子模块」**静默无效**
+  （clone 出来 submodule 目录是空的）。⇒ 设 `RecurseSubmodules`。
+
+**native 后端：凭据不再进 git 进程 environ**
+
+`newCredSession` 失败时回退到 `GIT_CONFIG_VALUE_0=Authorization: Basic <base64>`
+⇒ 同用户的 `ps eww` / `/proc/<pid>/environ` 可见 ⇒ 与本文件自述的安全模型直接矛盾。
+⇒ **不再回退**：建不出凭证会话就直接报错中断命令。
+
 ## [0.99.3] - 2026-10-25
 
 ### Fixed
