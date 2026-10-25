@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.6] - 2026-10-25
+
+### Fixed
+
+- **无共同祖先时 ahead/behind 不能报 (0,0)**：两侧历史无关（目标仓被别人强推
+  改写过）时，gogit 侧直接 `return 0, 0, nil` ⇒ 上层（漂移检测 / 同步状态）
+  **误判成「已同步」** ⇒ 目标仓被改写历史后，漂移再也检测不到。
+  native 走 `git rev-list --left-right --count A...B`，这种情形下仍会给出两侧
+  各自的提交数 ⇒ gogit 侧补齐同样的语义。
+  这条路径在 git-ferry 的镜像漂移检测里被用到（core 的 `GetBranchSyncInfo`）。
+
 ## [0.99.5] - 2026-10-25
 
 ### Fixed
