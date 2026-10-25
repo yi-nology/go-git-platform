@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.2] - 2026-10-25
+
+### Removed
+
+- **`gitbackend.hostKeyCallback(insecure bool)`**：旧签名的包装函数，注释自认
+  "兼容旧签名"。实际只有测试在用它，生产代码走
+  `hostKeyCallbackWithConfig(AuthConfig)`。函数未导出 ⇒ 对外无影响。
+  主机密钥校验策略本身（`InsecureSkipTLS` / 指纹钉扎 / `known_hosts` 三档）
+  一字未改。
+
 ## [0.99.1] - 2026-10-25
 
 ### Fixed
