@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.3] - 2026-10-25
+
+### Fixed
+
+- **入站 webhook 事件 ID 永不为空**（GitHub / GitCode 的 envelope 没有
+  `IDPrefix` ⇒ `NewEvent` 不写 ID ⇒ `NormalizedEvent.ID == ""`）。调用方按
+  `event_id` 做唯一索引 + 去重 ⇒ **第 2 条起的事件全部被静默丢弃**
+  （不建事件、不匹配规则、不触发同步）⇒ GitHub 入站同步从第 1 条之后就失效。
+  现在 `NewEvent` 在没有显式前缀时用平台名兜底（`github-<unixnano>-0`）。
+- **新增 `NewEventWithID`：优先用平台投递 ID 作事件 ID**（GitHub
+  `X-GitHub-Delivery`、GitLab `X-Gitlab-Event-UUID`、
+  Gitea/Forgejo `X-Gitea-Delivery`/`X-Forgejo-Delivery`、
+  GitCode `X-GitHub-Delivery`/`X-GitCode-Delivery`、Gitee `X-Gitee-Delivery`）。
+  投递 ID 是**真正的幂等键**（平台重投时值不变）⇒ 调用方能真正去重；
+  没有该头时回落到本地合成的 ID（仍非空）。
+  `WebhookEnvelope` 新增 `IDHeaders`（按顺序取第一个非空，与 `EventHeaders` 同风格）。
+
 ## [0.99.2] - 2026-10-25
 
 ### Removed
