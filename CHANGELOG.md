@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.0] - 2026-10-25
+
+### Added
+
+- **`provider.ListIssuesOptions` 增加 `Sort` / `Direction`**：平台的 issue 列表默认按
+  **created 倒序** ⇒ "上次备份后被改动的**老** issue"正好被挤在第一页之外，
+  客户端再按 updated 过滤也捞不到 ⇒ 增量备份漏数据而调用方无从察觉。
+  GitHub 后端透传（其 API 原生支持 `sort=updated`）；
+  Gitea/Forgejo 家族当前 SDK 不暴露该参数 ⇒ 传入被忽略，调用方需自己兜底。
+
 ## [0.98.0] - 2026-10-25
 
 ### Added
