@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.98.0] - 2026-10-25
+
+### Added
+
+- **`provider.Issue` 增加 `IsPullRequest bool`**：GitHub 的
+  `GET /repos/{owner}/{repo}/issues` **同时返回 issue 与 PR**(载荷里带
+  `pull_request` 字段的即是 PR)。此前 SDK 直接把它当 issue 返回,消费方
+  没有任何字段能把两者分开 ⇒
+  - 同一条记录既进 issue 快照、又进 pull_requests 快照(重复);
+  - **占掉 issue 的数量预算**(默认 500)⇒ PR 多的仓里真实 issue 可能整批
+    落在预算之外,快照缺项且无任何告警;
+  - 审计口径失真(`counts["issues"]` 被 PR 撑大)。
+
+  GitHub 后端按载荷的 `pull_request` 字段设置该标记;
+  Gitea/Forgejo 家族的列表端点本就有 `type=issues` 过滤、GitLab 的 issues
+  端点也不含 MR ⇒ 其余后端行为不变。
+
 ## [0.97.0] - 2026-10-24
 
 ### Fixed
