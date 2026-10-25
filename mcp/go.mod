@@ -4,9 +4,9 @@ go 1.27.3
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/oekit/concurrency v0.20.4
+	github.com/oekit/concurrency v0.21.0
 	github.com/oekit/logx v0.7.1
-	github.com/oekit/pkg v0.25.0
+	github.com/oekit/pkg v0.25.2
 	github.com/yi-nology/go-git-platform v0.61.0
 )
 
@@ -39,7 +39,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18 // indirect
 	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
