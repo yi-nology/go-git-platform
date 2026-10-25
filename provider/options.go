@@ -265,6 +265,16 @@ type Issue struct {
 	CreatedAt time.Time     `json:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at"`
 	ClosedAt  *time.Time    `json:"closed_at,omitempty"`
+	// IsPullRequest 标记这条"issue"其实是 PR。
+	//
+	// **GitHub 的 issue 列表端点会把 PR 一起返回**(同一条记录既是 issue 也是 PR),
+	// 不标记的话消费方没法把两者分开 ⇒ 同一个 PR 既进 issues 快照又进
+	// pull_requests 快照,而且**占掉 issue 的数量预算**(默认 500)
+	// ⇒ PR 多的仓里真实 issue 可能整批落在预算之外,快照缺项且无任何告警。
+	//
+	// Gitea/Forgejo 家族的列表端点有 type=issues 过滤(本来就不含 PR),
+	// GitLab 的 issues 端点也不含 MR ⇒ 只有 GitHub 需要这个标记。
+	IsPullRequest bool `json:"is_pull_request,omitempty"`
 }
 
 // MilestoneRef references a milestone from an issue. Number carries the

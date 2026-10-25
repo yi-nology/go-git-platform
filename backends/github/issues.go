@@ -238,6 +238,10 @@ func convertIssue(i *github.Issue) *provider.Issue {
 		Author:    convertUser(i.GetUser()),
 		Milestone: milestone,
 		WebURL:    i.GetHTMLURL(),
+		// GitHub 的 issue 列表端点**把 PR 一起返回**;
+		// 载荷里的 pull_request 字段是"这条其实是 PR"的唯一标记。
+		// 不标记的话消费方分不开 issue 与 PR。
+		IsPullRequest: i.PullRequestLinks != nil,
 	}
 	if s := i.GetState(); s != "" {
 		issue.State = provider.IssueState(s)
