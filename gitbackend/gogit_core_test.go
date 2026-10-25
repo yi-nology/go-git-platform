@@ -302,9 +302,9 @@ func TestInsecureHostKeyCallbackAcceptsAnyHost(t *testing.T) {
 	// The callback backs SkipTLS-style SSH against self-hosted forges: it
 	// must accept an arbitrary-looking host key without consulting known
 	// hosts — but only when the caller explicitly asked for insecure mode.
-	cb, err := hostKeyCallback(true)
+	cb, err := hostKeyCallbackWithConfig(AuthConfig{InsecureSkipTLS: true})
 	if err != nil {
-		t.Fatalf("hostKeyCallback(insecure): %v", err)
+		t.Fatalf("hostKeyCallbackWithConfig(insecure): %v", err)
 	}
 	if err := cb("git.example.com:22", nil, nil); err != nil {
 		t.Errorf("expected the insecure callback to accept any host key, got %v", err)
@@ -312,7 +312,7 @@ func TestInsecureHostKeyCallbackAcceptsAnyHost(t *testing.T) {
 
 	// Secure default: a missing known_hosts file must fail loudly instead
 	// of silently trusting unknown hosts.
-	if _, err := hostKeyCallback(false); err == nil {
+	if _, err := hostKeyCallbackWithConfig(AuthConfig{}); err == nil {
 		t.Skip("this environment has ~/.ssh/known_hosts; nothing to assert")
 	}
 }

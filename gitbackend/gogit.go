@@ -92,19 +92,6 @@ func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 	return nil, nil
 }
 
-// hostKeyCallback returns the SSH host-key verification strategy:
-//
-//   - InsecureSkipTLS: accept any host key (explicit opt-out);
-//   - otherwise: verify against ~/.ssh/known_hosts. A missing known_hosts
-//     file is an error with an actionable message — first-use MITM is the
-//     exact threat host-key verification exists for, so unknown hosts are
-//     never silently trusted.
-//
-// hostKeyCallback 返回主机密钥校验策略(兼容旧签名)。
-func hostKeyCallback(insecure bool) (ssh.HostKeyCallback, error) {
-	return hostKeyCallbackWithConfig(AuthConfig{InsecureSkipTLS: insecure})
-}
-
 // hostKeyCallbackWithConfig 按 AuthConfig 选择校验策略:
 //  1. InsecureSkipTLS: 跳过校验(显式不安全)
 //  2. HostKeyFingerprint: 指纹钉扎,必须匹配
