@@ -82,6 +82,8 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 var gitlabEnvelope = provider.WebhookEnvelope{
 	Platform: provider.PlatformGitLab,
 	IDPrefix: "gl",
+	// X-Gitlab-Event-UUID:GitLab 每次投递都带(重投时值不变)⇒ 真幂等键。
+	IDHeaders: []string{"X-Gitlab-Event-UUID"},
 }
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
@@ -151,7 +153,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	er.ID = pl.Project.ID
 	actor := &provider.CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
 
-	event := gitlabEnvelope.NewEvent(pl.ObjectAttributes.IID, body)
+	event := gitlabEnvelope.NewEventWithID(r, pl.ObjectAttributes.IID, body)
 	event.Actor = actor
 	event.Repo = er
 

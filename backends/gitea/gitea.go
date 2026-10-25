@@ -75,7 +75,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client:   client,
 		logger:   logger,
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
-		family: giteafamily.Family{Platform: provider.PlatformGitea, EventIDPrefix: "gt", EventHeader: "X-Gitea-Event", PageSize: listPageSize,
+		family: giteafamily.Family{Platform: provider.PlatformGitea, EventIDPrefix: "gt", EventHeader: "X-Gitea-Event", EventDeliveryHeaders: []string{"X-Gitea-Delivery"}, PageSize: listPageSize,
 			CRPointersHaveReviewers: true, PRWireHasDraft: true},
 		ports: sdkPorts{c: client},
 	}, nil

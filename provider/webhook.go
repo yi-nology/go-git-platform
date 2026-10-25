@@ -443,9 +443,17 @@ type WebhookEnvelope struct {
 	// object_kind) instead of a header.
 	EventHeaders []string
 	// IDPrefix prefixes generated event IDs ("<prefix>-<unixnano>-<key>").
-	// Empty skips the ID (platforms whose go-github/library path never set
-	// one keep that behavior).
+	// Empty falls back to the platform name — the ID is **never empty**
+	// (see NewEvent).
 	IDPrefix string
+	// IDHeaders are checked in order for the platform's **delivery ID**
+	// (e.g. GitHub's "X-GitHub-Delivery"); the first non-empty value wins.
+	//
+	// The delivery ID is a true idempotency key: the platform repeats the
+	// same value when it redelivers an event, so callers can deduplicate
+	// properly. Without it the ID is synthesized locally and differs on
+	// every delivery (no deduplication possible).
+	IDHeaders []string
 }
 
 // Read validates the signature via the platform's registered validator,
@@ -478,20 +486,53 @@ func (e WebhookEnvelope) Read(r *http.Request, secret string) (string, []byte, e
 }
 
 // NewEvent builds the event skeleton: Source, Timestamp, RawPayload — plus
-// ID "<IDPrefix>-<unixnano>-<idKey>" when IDPrefix is set. idKey is the
-// platform's payload identifier for the event (issue number, MR IID, ...).
-// Actor/Repo remain the caller's: they come from the payload the mapper
-// decodes.
+// ID "<prefix>-<unixnano>-<idKey>". idKey is the platform's payload identifier
+// for the event (issue number, MR IID, ...). Actor/Repo remain the caller's:
+// they come from the payload the mapper decodes.
+//
+// The ID is **never empty**: without an explicit IDPrefix the platform name is
+// used as the prefix. An empty event ID is not merely "missing data" — callers
+// commonly key their dedup table and their unique index on it, and an empty
+// key makes every later event collide with the first one (silently dropping
+// all events after the first).
 func (e WebhookEnvelope) NewEvent(idKey int64, body []byte) *NormalizedEvent {
 	ev := &NormalizedEvent{
 		Source:     e.Platform,
 		Timestamp:  time.Now(),
 		RawPayload: json.RawMessage(body),
 	}
-	if e.IDPrefix != "" {
-		ev.ID = fmt.Sprintf("%s-%d-%d", e.IDPrefix, time.Now().UnixNano(), idKey)
+	ev.ID = fmt.Sprintf("%s-%d-%d", e.idPrefix(), time.Now().UnixNano(), idKey)
+	return ev
+}
+
+// NewEventWithID behaves like NewEvent but prefers the platform's delivery ID
+// (X-GitHub-Delivery and friends) as the event ID.
+//
+// The delivery ID is a real idempotency key: the platform repeats it when it
+// redelivers the same event, so a caller keying dedup on the event ID can
+// actually suppress the duplicate. Falls back to NewEvent's synthesized ID
+// when the platform sends no such header.
+func (e WebhookEnvelope) NewEventWithID(r *http.Request, idKey int64, body []byte) *NormalizedEvent {
+	ev := e.NewEvent(idKey, body)
+	if r == nil {
+		return ev
+	}
+	for _, h := range e.IDHeaders {
+		if v := strings.TrimSpace(r.Header.Get(h)); v != "" {
+			ev.ID = e.idPrefix() + "-" + v
+			break
+		}
 	}
 	return ev
+}
+
+// idPrefix 返回事件 ID 的前缀:显式 IDPrefix 优先,否则用平台名
+// (保证 ID 前缀非空且可读)。
+func (e WebhookEnvelope) idPrefix() string {
+	if e.IDPrefix != "" {
+		return e.IDPrefix
+	}
+	return string(e.Platform)
 }
 
 // Pre-registered validators for the platforms the SDK ships with. These are

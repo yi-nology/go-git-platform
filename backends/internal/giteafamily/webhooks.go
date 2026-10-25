@@ -44,6 +44,10 @@ type Family struct {
 	// EventHeader is the event-type header of the family webhook dialect
 	// ("X-Gitea-Event"; Forgejo brands it "X-Forgejo-Event").
 	EventHeader string
+	// EventDeliveryHeaders are the delivery-ID headers of the family dialect
+	// ("X-Gitea-Delivery" / "X-Forgejo-Delivery"): the platform repeats the
+	// same value when it redelivers an event ⇒ a true idempotency key.
+	EventDeliveryHeaders []string
 	// PageSize is the per-page size for paginated family list fetches.
 	PageSize int
 
@@ -167,6 +171,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		Platform:     f.Platform,
 		EventHeaders: []string{f.EventHeader},
 		IDPrefix:     f.EventIDPrefix,
+		IDHeaders:    f.EventDeliveryHeaders,
 	}
 	eventType, body, err := env.Read(r, secret)
 	if err != nil {
@@ -225,7 +230,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 	er.ID = pl.Repository.ID
 	actor := &provider.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
-	event := env.NewEvent(int64(pl.Number), body)
+	event := env.NewEventWithID(r, int64(pl.Number), body)
 	event.Actor = actor
 	event.Repo = er
 

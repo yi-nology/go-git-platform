@@ -75,7 +75,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client:   client,
 		logger:   logger,
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
-		family:   giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt", EventHeader: "X-Forgejo-Event", PageSize: listPageSize},
+		family:   giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt", EventHeader: "X-Forgejo-Event", EventDeliveryHeaders: []string{"X-Forgejo-Delivery"}, PageSize: listPageSize},
 		ports:    sdkPorts{c: client},
 	}, nil
 }

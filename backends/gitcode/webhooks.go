@@ -69,6 +69,9 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 var gitcodeEnvelope = provider.WebhookEnvelope{
 	Platform:     provider.PlatformGitCode,
 	EventHeaders: []string{"X-Gitea-Event", "X-GitCode-Event"},
+	// 投递 ID(重投时值不变)⇒ 真幂等键;没有该头时回落到本地合成的 ID
+	// (仍保证非空 —— 空 ID 会让上层把第 2 条起的事件全挡掉)。
+	IDHeaders: []string{"X-GitHub-Delivery", "X-GitCode-Delivery"},
 }
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
@@ -77,7 +80,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		return nil, err
 	}
 
-	ne := gitcodeEnvelope.NewEvent(0, body)
+	ne := gitcodeEnvelope.NewEventWithID(r, 0, body)
 
 	switch eventType {
 	case "pull_request":

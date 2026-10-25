@@ -77,7 +77,13 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // githubEnvelope is GitHub's webhook dialect for the shared envelope steps.
 // The event header and payload decoding stay on the go-github library's
 // path; GitHub never set an event ID, so the prefix stays empty.
-var githubEnvelope = provider.WebhookEnvelope{Platform: provider.PlatformGitHub}
+var githubEnvelope = provider.WebhookEnvelope{
+	Platform: provider.PlatformGitHub,
+	// X-GitHub-Delivery:GitHub 每次投递都带(重投时值不变)⇒ 真正的幂等键。
+	// 以前 GitHub 的事件 ID 恒为空串 ⇒ 上层按 event_id 去重/唯一索引时,
+	// 第 2 条起的事件被静默丢弃(入站同步从第 2 条起完全失效)。
+	IDHeaders: []string{"X-GitHub-Delivery"},
+}
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
 	payload, err := github.ValidatePayload(r, []byte(secret))
@@ -90,7 +96,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 
-	ne := githubEnvelope.NewEvent(0, payload)
+	ne := githubEnvelope.NewEventWithID(r, 0, payload)
 
 	switch e := event.(type) {
 	case *github.PullRequestEvent:

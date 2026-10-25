@@ -94,6 +94,8 @@ var giteeEnvelope = provider.WebhookEnvelope{
 	Platform:     provider.PlatformGitee,
 	EventHeaders: []string{"X-Gitee-Event"},
 	IDPrefix:     "ge",
+	// 投递 ID(重投时值不变)⇒ 真幂等键;没有该头时回落到本地合成的 ID。
+	IDHeaders: []string{"X-Gitee-Delivery"},
 }
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
@@ -149,7 +151,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	er := provider.BuildEventRepo(pl.Repository.FullName)
 	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Login, Name: pl.User.Name}
 
-	event := giteeEnvelope.NewEvent(int64(pl.Number), body)
+	event := giteeEnvelope.NewEventWithID(r, int64(pl.Number), body)
 	event.Actor = actor
 	event.Repo = er
 
