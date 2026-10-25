@@ -6,7 +6,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/oekit/concurrency v0.21.0
 	github.com/oekit/logx v0.7.1
-	github.com/oekit/pkg v0.26.0
+	github.com/oekit/pkg v0.28.0
 	github.com/yi-nology/go-git-platform v0.61.0
 )
 
