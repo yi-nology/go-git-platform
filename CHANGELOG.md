@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.5] - 2026-10-25
+
+### Fixed
+
+- **日志里的 URL 再脱敏一层**：
+  - `redactURL` 只处理 query 里的 3 个参数名 ⇒ `https://user:pass@host/` 的**密码**
+    会原样进日志（仓内构造带 userinfo 的 URL 的只有 `pkg/credential.BuildAuthURL`，
+    目前无调用点 ⇒ 这是「改一行就会泄漏」的形状）。⇒ 秘密类查询参数补齐
+    （password / secret / api_key / apikey / key…），**userinfo 一并脱敏**。
+  - `Request.Path` **可以自带 query 串** ⇒ 日志的 `"path", req.Path` 与错误构造
+    `NewStatusErrorWithHeaders(…, req.Path, …)` 会把调用方放在 query 里的 token
+    原样带出去（错误信息还会进 HTTP 响应体）。⇒ 新增 `redactPath` 并接入。
+
 ## [0.99.4] - 2026-10-25
 
 ### Fixed
