@@ -4,6 +4,38 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.7] - 2026-10-26
+
+### Fixed
+
+- **跨 host 重定向泄漏 URL query 里的凭据**：跨 host 剥凭据此前只覆盖**请求头**
+  （Authorization / PRIVATE-TOKEN / Cookie…），但 go-gitee 的 `tokenTransport`
+  把令牌放在 **URL query**（`access_token`），且**每跳都重新加**（它包在
+  http.Client 的 Transport **外层**）⇒ 平台 302 到 CDN / 对象存储时，
+  **令牌会跟着 query 一起发给第三方主机**。
+  Go 的自动剥除只覆盖标准头，管不到 query；而剥除必须发生在 tokenTransport
+  **之内** ⇒ http.Client 的 CheckRedirect 里剥是无效的。
+  修法：transport 新增 `StripSensitiveQueryParams` / `StripSensitiveCredentials`，
+  在 transport 层剥掉凭据类 query 参数（access_token / private_token / token /
+  api_key / auth / signature…）；跨 host 才剥，同 host 的正常重定向继续带凭据。
+- **Gitee 的归档下载 100% 失败**：go-gitee 的 `Client.Do` 内部是
+  `defer resp.Body.Close()` ⇒ `DownloadTarball` / `DownloadZipball` 返回时
+  body **已经关闭**，后端再读只会拿到 `http: read on closed response body`。
+  修法：改用 SDK 同一个 http.Client 直接发请求（认证 / 重试 / 重定向策略
+  与 SDK 完全一致），body 生命周期由本方法自己持有。
+- **Gitee / GitCode 的文件内容返回 base64 串**：这两家内容端点返回 base64，
+  后端原样返回 ⇒ 调用方按 GitHub 直觉读文件全错（解析 YAML / JSON 直接失败）。
+  修法：新增 `provider.DecodeFileContent`，按响应里的 `Encoding` 决定解码还是
+  原文返回；Gitee / GitCode / 工蜂统一走它。
+- **`ListCRs` 的零值 State 在 giteafamily / Gitee / GitCode 被当成「只看 open」**：
+  上层传「不过滤」（零值）时，这三家只返回 open 的 CR ⇒ closed / merged 的 PR
+  全部丢失（备份、审计缺数据）。修法：零值 = 不过滤，显式给了状态才过滤。
+- **`ListIssues` 的 Sort / Direction 在五个后端被丢弃**：增量备份依赖「按更新
+  时间排序」，被丢弃后只能按创建时间取 ⇒ 增量窗口内的更新会漏。
+  只有 GitLab 的词汇已确证（`order_by=created_at|updated_at` + `sort=asc|desc`）
+  ⇒ 只在 GitLab 侧真传；Gitee / giteafamily / GitCode / 工蜂登记进 divergence
+  账本（传错词汇会让 API 直接 400，比静默忽略更糟）。
+
 ## [0.99.6] - 2026-10-25
 
 ### Fixed
