@@ -48,10 +48,14 @@ func SDKHTTPClient(tc *transport.Client, skipTLS bool) *http.Client {
 		// Go 只在"请求头已存在"时剥 Authorization/Cookie 等;
 		// 认证是在 RoundTripper 里每跳重新施加的(transport 侧另有拦截),
 		// 而非标准头(PRIVATE-TOKEN 等)Go 本来就不剥 ⇒ 这里统一兜底。
+		//
+		// query 也要剥:go-gitee 的 tokenTransport 把令牌放在
+		// `access_token` query 参数里,且**每一跳都重新加**(它包在
+		// http.Client 的 Transport 外层)⇒ 平台 302 到 CDN 时令牌会外泄。
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > 0 && via[len(via)-1].URL != nil && req.URL != nil &&
 				!strings.EqualFold(via[len(via)-1].URL.Host, req.URL.Host) {
-				transport.StripSensitiveHeaders(req)
+				transport.StripSensitiveCredentials(req)
 			}
 			return nil
 		},

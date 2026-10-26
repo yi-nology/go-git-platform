@@ -420,7 +420,7 @@ func (c *Client) roundTripRequest(req *http.Request) error {
 // ⇒ 必须在这里自己处理。
 func (c *Client) applyAuthFor(req *http.Request) error {
 	if CrossHostRedirect(req) {
-		StripSensitiveHeaders(req)
+		StripSensitiveCredentials(req)
 		return nil
 	}
 	return applyAuth(req.Context(), c.auth, req)
@@ -469,6 +469,60 @@ func StripSensitiveHeaders(req *http.Request) {
 	for _, h := range sensitiveHeaders {
 		req.Header.Del(h)
 	}
+}
+
+// sensitiveQueryParams 可能随跨 host 重定向外泄的**凭据 query 参数**。
+//
+// 为什么单列一组:有一类平台 SDK 把令牌放在 URL query 而不是请求头 ——
+// go-gitee 的 tokenTransport 每跳都 `q.Set("access_token", token)`,
+// 它包在 http.Client 的 Transport 外层 ⇒ 平台 302 到 CDN/对象存储时,
+// **令牌会跟着 query 一起发给第三方主机**。
+//
+// 头部的剥除帮不上忙(令牌根本不在头部),而 Go 也不会剥 query ⇒ 只能自己来。
+var sensitiveQueryParams = []string{
+	"access_token",
+	"private_token",
+	"token",
+	"api_key",
+	"apikey",
+	"auth",
+	"authorization",
+	"jwt",
+	"session",
+	"signature",
+	"sig",
+}
+
+// StripSensitiveQueryParams 删掉请求 URL 里可能随跨 host 重定向外泄的凭据参数。
+//
+// 只在**跨 host** 的重定向跳上调用:同 host 的正常重定向(改路径、http→https)
+// 必须继续带凭据,否则打断正常 API。
+func StripSensitiveQueryParams(req *http.Request) {
+	if req == nil || req.URL == nil {
+		return
+	}
+	q := req.URL.Query()
+	changed := false
+	for _, p := range sensitiveQueryParams {
+		if q.Has(p) {
+			q.Del(p)
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	req.URL.RawQuery = q.Encode()
+}
+
+// StripSensitiveCredentials 剥掉可能随跨 host 重定向外泄的凭据:
+// 请求头(Authorization / PRIVATE-TOKEN / Cookie …)+ URL query(access_token …)。
+//
+// 头与 query 是两条独立的泄漏面:SDK 可能把令牌放在任一处,
+// 而 Go 的自动剥除**只覆盖标准头**。
+func StripSensitiveCredentials(req *http.Request) {
+	StripSensitiveHeaders(req)
+	StripSensitiveQueryParams(req)
 }
 
 // encodeBody returns the io.Reader for the request body, the content-type

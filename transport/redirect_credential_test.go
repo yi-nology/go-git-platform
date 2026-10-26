@@ -159,6 +159,99 @@ func TestStripSensitiveHeaders(t *testing.T) {
 	assert.Equal(t, "keep-me", req.Header.Get("X-Request-Id"), "非敏感头必须保留")
 }
 
+// TestClient_CrossHostRedirect_QueryTokenNotLeaked 跨 host 重定向时
+// **URL query 里的凭据**也不得外泄。
+//
+// 回归背景(P0):有一类平台 SDK 把令牌放在 query 而不是请求头
+// (go-gitee 的 tokenTransport 每跳都 `q.Set("access_token", token)`,
+// 且它包在 http.Client 的 Transport **外层**)⇒ 平台 302 到 CDN 时
+// 令牌跟着 query 一起发给第三方主机。
+//
+// Go 的自动剥除只覆盖标准头 ⇒ 头部的保护对这种 SDK 无效。
+func TestClient_CrossHostRedirect_QueryTokenNotLeaked(t *testing.T) {
+	var seenQuery string
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer target.Close()
+
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/x", http.StatusFound)
+	}))
+	defer source.Close()
+
+	c := NewClient(source.URL, BearerToken{Token: "TOKEN"})
+	// 模拟 SDK 的 tokenTransport:它在 http.Client 的 Transport **外层**,
+	// 每跳重新把令牌塞进 query ⇒ 剥除必须发生在这一层**之内**。
+	outer := http.RoundTripper(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		r2 := r.Clone(r.Context())
+		q := r2.URL.Query()
+		q.Set("access_token", "SUPER-SECRET")
+		r2.URL.RawQuery = q.Encode()
+		return c.NewRetryingRoundTripper().RoundTrip(r2)
+	}))
+	httpCli := &http.Client{Transport: outer}
+
+	req, err := http.NewRequest(http.MethodGet, source.URL+"/x", nil)
+	require.NoError(t, err)
+	resp, err := httpCli.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.NotContains(t, seenQuery, "SUPER-SECRET",
+		"access_token 不得随跨 host 重定向外泄(实际 query=%q)", seenQuery)
+}
+
+// TestStripSensitiveQueryParams 只剥凭据参数,普通参数要留着。
+func TestStripSensitiveQueryParams(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/x?access_token=SECRET&page=2&ref=main", nil)
+	require.NoError(t, err)
+
+	StripSensitiveQueryParams(req)
+
+	q := req.URL.Query()
+	assert.False(t, q.Has("access_token"), "access_token 必须被剥掉")
+	assert.Equal(t, "2", q.Get("page"), "非凭据参数必须保留")
+	assert.Equal(t, "main", q.Get("ref"), "非凭据参数必须保留")
+}
+
+// TestSameHostRedirect_KeepsQueryToken 同 host 重定向**要**继续带 query 凭据。
+//
+// 否则会把正常 API 的 302(改路径、http→https)也打断。
+func TestSameHostRedirect_KeepsQueryToken(t *testing.T) {
+	var seenQuery string
+	var mux http.ServeMux
+	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/final", http.StatusFound)
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+		seenQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte(`{}`))
+	})
+	srv := httptest.NewServer(&mux)
+	defer srv.Close()
+
+	c := NewClient(srv.URL, BearerToken{Token: "TOKEN"})
+	outer := http.RoundTripper(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		r2 := r.Clone(r.Context())
+		q := r2.URL.Query()
+		q.Set("access_token", "KEEP-ME")
+		r2.URL.RawQuery = q.Encode()
+		return c.NewRetryingRoundTripper().RoundTrip(r2)
+	}))
+	httpCli := &http.Client{Transport: outer}
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/start", nil)
+	require.NoError(t, err)
+	resp, err := httpCli.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	assert.Contains(t, seenQuery, "KEEP-ME",
+		"同 host 重定向必须继续带 query 凭据(实际 query=%q)", seenQuery)
+}
+
 // TestRedactURL_MasksUserInfo URL 里的 userinfo 密码不能进日志。
 //
 // 回归背景(P2,当前不可达但形状危险):`redactURL` 只处理 query ⇒
