@@ -51,8 +51,15 @@ type CreateCROptions struct {
 
 // ListCROptions contains options for listing change requests.
 type ListCROptions struct {
-	Owner        string  `json:"owner"`
-	Repo         string  `json:"repo"`
+	Owner string `json:"owner"`
+	Repo  string `json:"repo"`
+	// State 过滤状态。**空 = 不过滤(全部)**。
+	//
+	// 各后端的原生词表不同(open/closed/merged 与 opened/closed)⇒ 平台层的
+	// "空" 语义必须统一,否则同一个调用在有的平台只拿到 open、在别的平台拿到全部
+	// —— 调用方无从察觉 closed/merged 的那部分**静默丢失**。
+	// (GitHub / GitLab / 工蜂 本来就是"空=不过滤";Gitee / Gitea / Forgejo /
+	//  GitCode 曾把空值映射成 open ⇒ 已对齐。)
 	State        CRState `json:"state,omitempty"`
 	SourceBranch string  `json:"source_branch,omitempty"`
 	TargetBranch string  `json:"target_branch,omitempty"`
@@ -326,8 +333,11 @@ type ListIssuesOptions struct {
 	// **老** issue"正好被挤在第一页之外,客户端再按 updated 过滤也捞不到
 	// (捞到的永远是"最新创建"的那批)。
 	//
-	// 支持情况:GitHub 支持(sort=updated);Gitea/Forgejo 家族当前 SDK 不暴露该
-	// 参数 ⇒ 传入被忽略(调用方需自己兜底,见 core 的增量采集)。
+	// 支持情况(逐后端登记在各自的 divergence 账本里):
+	//   - GitHub:支持(sort + direction);
+	//   - GitLab:支持(order_by=created_at|updated_at + sort=asc|desc);
+	//   - Gitee / Gitea / Forgejo / GitCode / 工蜂:当前 SDK 不暴露(或词表无法确证)
+	//     ⇒ 传入被忽略(调用方需自己兜底,见 core 的增量采集)。
 	Sort string `json:"sort,omitempty"`
 	// Direction 排序方向("asc"|"desc"),空 = 平台默认。
 	Direction string `json:"direction,omitempty"`

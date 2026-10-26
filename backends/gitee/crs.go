@@ -188,13 +188,18 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 var _ provider.ChangeRequestManager = (*Provider)(nil)
 
 // mapCRStateForGitee maps the SDK CRState to gitee's pull-list vocabulary.
+//
+// **未指定状态(零值)⇒ 不过滤**(平台上不加 state = 全部)。
+// 以前落到 "open" ⇒ closed/merged 的 CR **静默丢失**。
 func mapCRStateForGitee(s provider.CRState) string {
 	switch s {
 	case provider.CRStateClosed:
 		return "closed"
 	case provider.CRStateMerged:
 		return "merged"
-	default:
+	case provider.CRStateOpened:
 		return "open"
+	default:
+		return ""
 	}
 }

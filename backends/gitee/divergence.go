@@ -18,6 +18,8 @@ var divergences = []provider.Divergence{
 		Reason: "Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral)."},
 	{Capability: "CommitStatusManager", Method: "ListCommitStatuses", Field: "", Kind: provider.DivergenceMapping,
 		Reason: "Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty."},
+	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
+		Reason: "Gitee's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
 }
 
 // Divergences returns the registered divergence ledger for the Gitee backend.

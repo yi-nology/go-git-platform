@@ -2,10 +2,6 @@ package tencentcode
 
 import (
 	"context"
-	"encoding/base64"
-	"strings"
-
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 
@@ -25,15 +21,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformTencentCode, "GetFileContent", err)
 	}
-	if file.Encoding == "base64" {
-		content := strings.ReplaceAll(file.Content, "\n", "")
-		decoded, err := base64.StdEncoding.DecodeString(content)
-		if err != nil {
-			return "", provider.Wrap(provider.PlatformTencentCode, "GetFileContent", oekiterrors.Wrap(err, "decode base64 content"))
-		}
-		return string(decoded), nil
-	}
-	return file.Content, nil
+	return provider.DecodeFileContent(provider.PlatformTencentCode, file.Encoding, file.Content)
 }
 
 // CreateFile implements provider.FileManager.

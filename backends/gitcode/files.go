@@ -14,7 +14,9 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitCode, "GetFileContent", err)
 	}
-	return content.Content, nil
+	// **必须按 Encoding 解码**:GitCode 的内容端点返回 base64,
+	// 以前原样返回 ⇒ 调用方拿到的是 base64 串(读文件全错)。
+	return provider.DecodeFileContent(provider.PlatformGitCode, content.Encoding, content.Content)
 }
 
 // CreateFile implements provider.FileManager.

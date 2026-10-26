@@ -265,5 +265,7 @@ func Divergences(displayName string) []provider.Divergence {
 			Reason: fmt.Sprintf("%s payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request.", displayName)},
 		{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,
 			Reason: "See GetCR."},
+		{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("%s's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves).", displayName)},
 	}
 }

@@ -56,6 +56,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReleaseManager | CreateRelease | opts.Draft | ignore | Gitee's release create wire takes no draft flag. |
 | CommitStatusManager | CreateCommitStatus |  | mapping | Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral). |
 | CommitStatusManager | ListCommitStatuses |  | mapping | Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty. |
+| IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitee's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
 
 ## gitea
 
@@ -63,6 +64,7 @@ This document is generated from the backends' registered divergence ledgers
 |---|---|---|---|---|
 | ChangeRequestManager | GetCR | BaseSHA | mapping | Gitea payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
+| IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitea's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
 
 ## forgejo
 
@@ -70,6 +72,7 @@ This document is generated from the backends' registered divergence ledgers
 |---|---|---|---|---|
 | ChangeRequestManager | GetCR | BaseSHA | mapping | Forgejo payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
+| IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Forgejo's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
 
 ## gitcode
 
@@ -82,6 +85,7 @@ This document is generated from the backends' registered divergence ledgers
 | MilestoneManager | UpdateMilestone |  | detour | See CreateMilestone. |
 | IssueManager | ListIssueComments |  | detour | go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page. |
 | IssueManager | ListIssueLabels |  | detour | go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page. |
+| IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
 
 ## tencent_code
 
@@ -99,3 +103,4 @@ This document is generated from the backends' registered divergence ledgers
 | IssueManager | GetIssue | WebURL, ClosedAt | mapping | See ListIssues. |
 | LabelManager | ListLabels | Label.ID | mapping | Label IDs are not exposed by the wire; Label.ID is always 0. |
 | ReleaseManager | UpdateRelease | opts.Draft, opts.Prerelease | ignore | The release update endpoint takes no draft or prerelease flags. |
+| IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |

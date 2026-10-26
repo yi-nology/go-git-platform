@@ -21,7 +21,9 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	if len(contents) == 0 {
 		return "", provider.Wrapf(provider.PlatformGitee, "GetFileContent", "no content returned for %s", path)
 	}
-	return deref(contents[0].Content), nil
+	// **必须按 Encoding 解码**:Gitee 的内容端点返回 base64,
+	// 以前原样返回 ⇒ 调用方拿到的是 base64 串(读文件全错)。
+	return provider.DecodeFileContent(provider.PlatformGitee, deref(contents[0].Encoding), deref(contents[0].Content))
 }
 
 // CreateFile implements provider.FileManager.

@@ -149,12 +149,18 @@ func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROption
 // mapListState normalizes the provider-uniform CR state ("opened"/"closed"/
 // "merged") to the family's open/closed list filter. "merged" has no list
 // filter and is the closest superset ("closed").
+//
+// **未指定状态(零值)⇒ 不加过滤**:平台上"不加 state"= 全部。
+// 以前落到 "open" ⇒ 调用方只想"列出 CR"时,closed/merged 的 **静默丢失**
+// (GitHub / GitLab / 工蜂 都是"零值=不过滤",这里与它们不一致)。
 func mapListState(s provider.CRState) string {
 	switch s {
 	case provider.CRStateClosed, provider.CRStateMerged:
 		return "closed"
-	default:
+	case provider.CRStateOpened:
 		return "open"
+	default:
+		return ""
 	}
 }
 

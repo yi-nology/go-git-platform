@@ -30,6 +30,21 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 		lo := gitlab.LabelOptions(strings.Split(opts.Labels, ","))
 		listOpts.Labels = &lo
 	}
+	// **排序要真的传出去**:增量备份靠它捞"上次备份后被改过的老 issue"
+	// (平台默认按 created 排 ⇒ 被改过的老 issue 正好在第一页之外,客户端再按
+	// updated 过滤也捞不到)。
+	// GitLab 的词表是 created_at / updated_at,方向走 sort=asc|desc。
+	if opts.Sort != "" {
+		switch opts.Sort {
+		case "created":
+			listOpts.OrderBy = new("created_at")
+		case "updated":
+			listOpts.OrderBy = new("updated_at")
+		}
+	}
+	if opts.Direction == "asc" || opts.Direction == "desc" {
+		listOpts.Sort = new(opts.Direction)
+	}
 	issues, _, err := p.client.Issues.ListProjectIssues(pidOf(opts.Owner, opts.Repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitLab, "ListIssues", err)

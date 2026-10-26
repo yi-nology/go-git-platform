@@ -30,6 +30,8 @@ var divergences = []provider.Divergence{
 		Reason: "Label IDs are not exposed by the wire; Label.ID is always 0."},
 	{Capability: "ReleaseManager", Method: "UpdateRelease", Field: "opts.Draft, opts.Prerelease", Kind: provider.DivergenceIgnore,
 		Reason: "The release update endpoint takes no draft or prerelease flags."},
+	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
+		Reason: "TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
 }
 
 // Divergences returns the registered divergence ledger for the Tencent Code backend.

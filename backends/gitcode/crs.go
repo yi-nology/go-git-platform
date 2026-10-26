@@ -39,12 +39,16 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 // ListCRs implements provider.ChangeRequestManager.
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	state := gitcode.PullRequestStateOpen
+	// **未指定状态(零值)⇒ 不过滤**(平台上不加 state = 全部)。
+	// 以前默认 "open" ⇒ closed/merged 的 PR **静默丢失**。
+	var state gitcode.PullRequestState
 	switch opts.State {
 	case provider.CRStateClosed:
 		state = gitcode.PullRequestStateClosed
 	case provider.CRStateMerged:
 		state = gitcode.PullRequestStateClosed
+	case provider.CRStateOpened:
+		state = gitcode.PullRequestStateOpen
 	}
 	prs, err := p.client.ListPullRequests(ctx, opts.Owner, opts.Repo, gitcode.ListPullRequestsOptions{
 		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},

@@ -120,9 +120,12 @@ func TestGitee_QueryValueEscaping(t *testing.T) {
 }
 
 // TestGitee_ListCRs_StateMapping verifies that the SDK CRState vocabulary is
-// mapped to gitee's pull-list vocabulary (open/closed/merged/all): the SDK's
-// "opened" must go out as "open", and an empty state defaults to "open"
-// rather than being sent (or omitted) raw.
+// mapped to gitee's pull-list vocabulary (open/closed/merged):
+// the SDK's "opened" must go out as "open", and an **empty state must go out
+// as no filter at all** (契约:空 = 不过滤 = 全部)。
+//
+// 回归背景(P1):以前空状态被映射成 "open" ⇒ 调用方只想"列出 CR"时,
+// closed/merged 的 **静默丢失**(GitHub / GitLab / 工蜂 都是"空=不过滤")。
 func TestGitee_ListCRs_StateMapping(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -137,7 +140,7 @@ func TestGitee_ListCRs_StateMapping(t *testing.T) {
 	}
 	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: provider.CRStateOpened})
 	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r"})
-	if len(got) != 2 || got[0] != "open" || got[1] != "open" {
-		t.Fatalf("expected state mapping [open open], got %v", got)
+	if len(got) != 2 || got[0] != "open" || got[1] != "" {
+		t.Fatalf("expected state mapping [open \"\"(=不过滤)], got %v", got)
 	}
 }
