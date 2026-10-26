@@ -29,6 +29,7 @@ package gitee
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
@@ -42,7 +43,13 @@ import (
 type Provider struct {
 	client  *gitee.Client
 	baseURL string
-	logger  provider.Logger
+	// httpClient 是交给 SDK 的那个 client 本体(不是副本)。
+	//
+	// go-gitee 的 NewClient 会**原地**把 `o.httpClient.Transport` 包成
+	// tokenTransport(每跳重加 `access_token` query)⇒ 这里持有的同一个
+	// client 自带认证。GetArchive 走它发请求,才能与 SDK 的请求等价。
+	httpClient *http.Client
+	logger     provider.Logger
 }
 
 // New builds a Gitee Provider from the given config.
@@ -81,9 +88,10 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 
 	return &Provider{
-		client:  client,
-		baseURL: baseURL,
-		logger:  logger,
+		client:     client,
+		baseURL:    baseURL,
+		httpClient: httpClient,
+		logger:     logger,
 	}, nil
 }
 

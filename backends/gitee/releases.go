@@ -2,7 +2,11 @@ package gitee
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net/http"
+	"net/url"
+	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -120,36 +124,44 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 }
 
 // GetArchive implements provider.ReleaseManager.
+//
+// **不能走 SDK 的 DownloadTarball/DownloadZipball**:go-gitee 的 Client.Do
+// 内部是 `defer resp.Body.Close()` ⇒ 它返回时 body **已经关闭**,
+// 之后再读只会拿到 "http: read on closed response body"
+// ⇒ 归档下载**必然失败**(不是偶发,是 100% 失败)。
+//
+// 这里改用 SDK 同一个 http.Client 直接发请求 —— 认证、重试、重定向策略
+// 与 SDK 完全一致(同一个 client、同一个 Transport 链),区别只是
+// body 的生命周期由本方法自己持有。
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	opts := &gitee.DownloadArchiveOptions{
-		Ref: gitee.String(ref),
-	}
-	var resp *gitee.Response
-	var err error
+	kind := "zipball"
 	if format == "tar.gz" {
-		resp, err = p.client.Repositories.DownloadTarball(ctx, esc(owner), esc(repo), opts)
-	} else {
-		resp, err = p.client.Repositories.DownloadZipball(ctx, esc(owner), esc(repo), opts)
+		kind = "tarball"
 	}
+	u := p.baseURL + "/repos/" + esc(owner) + "/" + esc(repo) + "/" + kind
+	if ref != "" {
+		u += "?ref=" + url.QueryEscape(ref)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	buf := make([]byte, 0, 1024*1024)
-	tmp := make([]byte, 32*1024)
-	for {
-		n, readErr := resp.Body.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if readErr != nil {
-			if readErr == io.EOF {
-				break
-			}
-			return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", readErr)
-		}
+	if resp.StatusCode >= 400 {
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive",
+			fmt.Errorf("gitee archive: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(detail))))
 	}
-	return buf, nil
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
+	}
+	return data, nil
 }
 
 var _ provider.ReleaseManager = (*Provider)(nil)
