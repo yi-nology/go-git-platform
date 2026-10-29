@@ -475,9 +475,11 @@ if tc, ok := p.(*tencentcode.Provider); ok {
 }
 ```
 
-在 `TencentCodeExtras`（评审/树/blob/分支保护）之外，backend 还按域暴露三组
-工蜂文档能力（官方 API 文档镜像随收编 SDK 存于
-`backends/tencentcode/internal/gongfeng/docs/api/`）：
+在 `TencentCodeExtras`（评审/树/blob/分支保护）之外，backend 还实现跨平台
+可选能力 `provider.BranchProtectionManager`（分支保护规则 CRUD，7 个平台全实现）
+与 `provider.NoteManager`（MR 评论的改/全量列，GitLab 家族 MR 与 issue 注释
+分命名空间，同 gitlab backend），并按域暴露四组工蜂文档能力（官方 API 文档
+镜像随收编 SDK 存于 `backends/tencentcode/internal/gongfeng/docs/api/`）：
 
 - **`provider.CollaboratorManager`**（跨平台可选能力，经 `Capabilities().Collaborators`
   声明）——项目成员管理，`read`/`write`/`admin` 词表映射工蜂 access level
@@ -485,9 +487,12 @@ if tc, ok := p.(*tencentcode.Provider); ok {
 - **`tencentcode.TencentCodeOrgExtras`**——项目组（groups）CRUD + 组成员管理、
   命名空间（namespaces）列表。
 - **`tencentcode.TencentCodeProjectExtras`**——关注人（watchers）、star、
-  fork 关系、Tag 增删查、项目↔群组共享、项目事件流。
+  fork 关系、Tag 增删查、项目↔群组共享、项目事件流、项目成员改级/单查。
 - **`tencentcode.TencentCodeAccountExtras`**——session 登录换 private token
-  （仅引导期使用）、当前用户详情、关注的项目、SSH 公钥与邮箱管理。
+  （仅引导期使用）、当前用户详情、用户目录检索（ListUsers/按邮箱查用户）、
+  关注的项目、名下项目、SSH 公钥与邮箱管理。
+- 仓库读取扩展挂在 `TencentCodeExtras`：单分支详情（GetBranch）、原始文件流
+  （GetRawFile）、compare 变更文件集 zip 下载。
 
 ## 已知限制
 
@@ -503,6 +508,7 @@ if tc, ok := p.(*tencentcode.Provider); ok {
 - **Tencent Code 工蜂 issue 三处登记限制**: `CreateIssue`/`UpdateIssue` 的 `Assignees` 经 Users API（`GET /users/{username}`）解析为 `assignee_ids`（数值用户 ID csv）后生效,每 provider 带 TTL 缓存,未知用户名报 `provider.IsNotFound`;`ListIssuesOptions.Assignee` 过滤不携带——工蜂 issue 列表端点无 assignee 过滤参数（登记忽略）；移除 issue 的最后一个标签是 no-op——空 label csv 因 `omitempty` 上不了 PUT 体，标签保留；`Issue.WebURL` 恒为空、`Issue.ClosedAt` 恒为 nil——gongfeng issue 模型无这两个字段。
 - **Tencent Code 工蜂 Reviews 是 MR notes 映射（已登记）**: 工蜂原生评审以携带 `reviewer_state` verdict 的 MR note 表达，与普通 MR 评论共用同一集合——普通评论会以 `commented` 评审混入 `ListReviews`（工蜂 system 记账 note 已过滤）；读侧无 verdict 字段，`Review.State` 恒为 `commented`；`CreateReview` 的 `Comments`/`CommitID` 不映射（一条 note 至多携带一个行内位置，且无 commit 概念）；`RequestReviewers` 为登记忽略（工蜂 MR 更新面不收评审人，原生邀请端点按数值 user ID 寻址，username→ID 不可达）；`DismissReview` 为登记桩返回 `provider.ErrNotImplemented`（工蜂无评审撤销面）。
 - **Tencent Code 工蜂 Releases 按 ID 寻址（已登记 detour）**: 工蜂 release 端点只认数值 release ID，无按 tag 取单条的原生面——`GetReleaseByTag`/`UpdateRelease`/`DeleteRelease` 先按 tag 扫 release 列表解析 ID（查不到报 `provider.ErrNotFound`）；release 载荷无 draft/prerelease/url 字段，`CreateRelease` 的 `Target`/`Draft`/`Prerelease` 与 `UpdateRelease` 的 `Name`（更新面只收 description）/`Draft`/`Prerelease` 均登记忽略。
+- **Tencent Code 工蜂分支保护（已登记）**: 平台无"列出保护分支"端点——`ListBranchProtections` 走分支列表过滤 `protected` 行返回摘要，审批规则经 `GetBranchProtection` 取；protect PUT 只收访问级别与 force-push 标志，`RequiredApprovingReviews`/`RequiredStatusChecks`/`AllowDeletions` 登记忽略；`allow_force_push` 只写不可读（详情载荷永不回显，读侧恒 false）；`RequiredApprovingReviews` 从平台 `approver_rule` 原样映射（-1=全员审批，1=单人，N=N 人）。
 
 ## 项目结构
 

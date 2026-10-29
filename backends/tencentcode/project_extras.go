@@ -56,6 +56,19 @@ type TencentCodeProjectExtras interface {
 
 	// ListProjectEvents lists the project's activity feed.
 	ListProjectEvents(ctx context.Context, owner, repo string, opts ListProjectEventsOptions) ([]*ProjectEventInfo, error)
+
+	// --- Project members admin (beyond provider.CollaboratorManager) ---
+
+	// GetProjectMember fetches one member by numeric user ID.
+	GetProjectMember(ctx context.Context, owner, repo string, userID int) (*MemberInfo, error)
+	// EditProjectMember changes a member's access level (gongfeng
+	// AccessLevel* constants).
+	EditProjectMember(ctx context.Context, owner, repo string, userID int, opts EditProjectMemberOptions) (*MemberInfo, error)
+}
+
+// EditProjectMemberOptions are the EditProjectMember inputs.
+type EditProjectMemberOptions struct {
+	AccessLevel gongfeng.AccessLevelValue
 }
 
 // CreateTagOptions are the CreateTag inputs.
@@ -316,6 +329,25 @@ func (p *Provider) ListProjectEvents(ctx context.Context, owner, repo string, op
 		})
 	}
 	return result, nil
+}
+
+// GetProjectMember implements TencentCodeProjectExtras.
+func (p *Provider) GetProjectMember(ctx context.Context, owner, repo string, userID int) (*MemberInfo, error) {
+	m, _, err := p.client.Projects.GetProjectMember(ctx, pid(owner, repo), userID)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetProjectMember", err)
+	}
+	return convertMemberInfo(m), nil
+}
+
+// EditProjectMember implements TencentCodeProjectExtras.
+func (p *Provider) EditProjectMember(ctx context.Context, owner, repo string, userID int, opts EditProjectMemberOptions) (*MemberInfo, error) {
+	m, _, err := p.client.Projects.EditProjectMember(ctx, pid(owner, repo), userID,
+		&gongfeng.EditProjectMemberOptions{AccessLevel: gongfeng.Ptr(opts.AccessLevel)})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "EditProjectMember", err)
+	}
+	return convertMemberInfo(m), nil
 }
 
 // convertTagDetail maps a gongfeng.Tag to the TagDetail surface.

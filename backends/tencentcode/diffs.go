@@ -124,4 +124,53 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	return strconv.FormatInt(resp.ID, 10), nil
 }
 
-var _ provider.DiffManager = (*Provider)(nil)
+// UpdateNote implements provider.NoteManager. 工蜂 is GitLab-family: MR
+// notes and issue notes live in separate iid namespaces, and
+// IssueManager's comment methods target the Issues Notes API, which 404s
+// for merge requests — CR comment edits must go through the MergeRequest
+// Notes API.
+func (p *Provider) UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*provider.IssueComment, error) {
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "UpdateNote", number)
+	if err != nil {
+		return nil, err
+	}
+	nid, err := strconv.ParseInt(noteID, 10, 64)
+	if err != nil {
+		return nil, provider.Wrapf(provider.PlatformTencentCode, "UpdateNote", "invalid note ID %q: %v", noteID, err)
+	}
+	note, _, err := p.client.Notes.UpdateMergeRequestNote(ctx, pid(owner, repo), n, int(nid),
+		&gongfeng.UpdateMergeRequestNoteOptions{Body: gongfeng.Ptr(body)})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateNote", err)
+	}
+	return convertIssueComment(note), nil
+}
+
+// ListNotes implements provider.NoteManager: every merge-request note,
+// oldest first across all pages. The endpoint has no caller-facing
+// pagination knobs, so every page is fetched via AllPages (工蜂's
+// page-size ceiling is 100).
+func (p *Provider) ListNotes(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListNotes", number)
+	if err != nil {
+		return nil, err
+	}
+	notes, err := backendutil.AllPages(func(page int) ([]*gongfeng.Note, error) {
+		list, _, err := p.client.Notes.ListMergeRequestNotes(ctx, pid(owner, repo), n,
+			&gongfeng.ListMergeRequestNotesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
+		return list, err
+	})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListNotes", err)
+	}
+	result := make([]*provider.IssueComment, 0, len(notes))
+	for _, note := range notes {
+		result = append(result, convertIssueComment(note))
+	}
+	return result, nil
+}
+
+var (
+	_ provider.DiffManager = (*Provider)(nil)
+	_ provider.NoteManager = (*Provider)(nil)
+)

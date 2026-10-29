@@ -86,6 +86,15 @@ func TestTencentCode_Contract(t *testing.T) {
 			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
 			UserLookupResponse: `{"id":7,"username":"dev","name":"Dev"}`,
 		},
+		// Branch protection: List walks the branch list and filters the
+		// protected rows (branch-row shape); create/update PUT the protect
+		// endpoint and decode the protection detail straight from the PUT
+		// response (registered ignores for the contract fields the protect
+		// PUT cannot carry).
+		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
+			ListResponse:   `[{"name":"main","protected":true,"commit":{"id":"abc"}}]`,
+			MutateResponse: `{"protected":true,"name":"main","approver_rule":1}`,
+		},
 		// Commit status fixtures: gongfeng's commit-status shape is
 		// GitLab-like (GET /projects/:id/commits/:sha/statuses — the
 		// repository/ prefix in studyzy v0.6.0 was a doc error the

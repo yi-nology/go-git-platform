@@ -212,10 +212,85 @@ func TestTencentCode_ProjectExtrasWire(t *testing.T) {
 	})
 }
 
+// TestTencentCode_AccountAndMemberExtrasWire pins the remaining account /
+// member extras: user directory search, email lookup, single key/email
+// fetches, owned projects (projects/owned), and the project-member
+// edit/get pair (CollaboratorManager only covers add/remove/list).
+func TestTencentCode_AccountAndMemberExtrasWire(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	srv := httptest.NewServer(recordCalls(&mu, &calls, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v3/users":
+			writeListPage(w, r, []map[string]any{{"id": 7, "username": "dev", "name": "Dev", "avatar_url": "https://t/a/7"}})
+		case "/api/v3/user/email":
+			writeJSON(w, map[string]any{"id": 7, "username": "dev", "name": "Dev"})
+		case "/api/v3/user/keys/1":
+			writeJSON(w, map[string]any{"id": 1, "title": "laptop", "key": "ssh-ed25519 AA"})
+		case "/api/v3/user/emails/2":
+			writeJSON(w, map[string]any{"id": 2, "email": "dev@example.com"})
+		case "/api/v3/projects/owner/repo/members/7":
+			writeJSON(w, map[string]any{"id": 7, "username": "dev", "access_level": 40})
+		case "/api/v3/projects/owned":
+			writeListPage(w, r, []map[string]any{{
+				"id": 1, "path": "repo", "path_with_namespace": "owner/repo",
+				"owner": map[string]any{"username": "owner"},
+			}})
+		default:
+			writeJSON(w, map[string]any{"id": 1})
+		}
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv)
+
+	users, err := p.ListUsers(context.Background(), tencentcode.ListUsersOptions{Search: "dev"})
+	if err != nil || len(users) != 1 || users[0].ID != 7 || users[0].AvatarURL != "https://t/a/7" {
+		t.Fatalf("ListUsers: %+v err=%v", users, err)
+	}
+	byEmail, err := p.GetUserByEmail(context.Background(), "dev@example.com")
+	if err != nil || byEmail.Username != "dev" {
+		t.Fatalf("GetUserByEmail: %+v err=%v", byEmail, err)
+	}
+	key, err := p.GetSSHKey(context.Background(), 1)
+	if err != nil || key.Title != "laptop" {
+		t.Fatalf("GetSSHKey: %+v err=%v", key, err)
+	}
+	email, err := p.GetEmail(context.Background(), 2)
+	if err != nil || email.Email != "dev@example.com" {
+		t.Fatalf("GetEmail: %+v err=%v", email, err)
+	}
+	member, err := p.GetProjectMember(context.Background(), "owner", "repo", 7)
+	if err != nil || member.AccessLevel != 40 {
+		t.Fatalf("GetProjectMember: %+v err=%v", member, err)
+	}
+	edited, err := p.EditProjectMember(context.Background(), "owner", "repo", 7, tencentcode.EditProjectMemberOptions{AccessLevel: 40})
+	if err != nil || edited.AccessLevel != 40 {
+		t.Fatalf("EditProjectMember: %+v err=%v", edited, err)
+	}
+	owned, err := p.ListOwnedProjects(context.Background(), 0, 0)
+	if err != nil || len(owned) != 1 {
+		t.Fatalf("ListOwnedProjects: %+v err=%v", owned, err)
+	}
+
+	assertCalls(t, calls, []string{
+		http.MethodGet + " /api/v3/users", // page 1
+		http.MethodGet + " /api/v3/users", // page 2 (empty)
+		http.MethodGet + " /api/v3/user/email",
+		http.MethodGet + " /api/v3/user/keys/1",
+		http.MethodGet + " /api/v3/user/emails/2",
+		http.MethodGet + " /api/v3/projects/owner%2Frepo/members/7",
+		http.MethodPut + " /api/v3/projects/owner%2Frepo/members/7",
+		http.MethodGet + " /api/v3/projects/owned", // page 1
+		http.MethodGet + " /api/v3/projects/owned", // page 2 (empty)
+	})
+}
+
 // TestTencentCode_AccountExtrasWire pins the account surface: the session
 // login POSTs credentials to /session, SSH keys and emails live under
 // /user/keys and /user/emails, and watched projects reuse the project
 // conversion.
+
 func TestTencentCode_AccountExtrasWire(t *testing.T) {
 	var mu sync.Mutex
 	var calls []string

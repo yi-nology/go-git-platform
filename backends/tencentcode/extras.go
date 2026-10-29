@@ -1,9 +1,11 @@
 package tencentcode
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -49,6 +51,15 @@ type TencentCodeExtras interface {
 	// --- Repository tree & blob ---
 	GetRepoTree(ctx context.Context, owner, repo, path, ref string, recursive bool) ([]*TreeEntryNode, error)
 	GetBlob(ctx context.Context, owner, repo, sha string) ([]byte, error)
+	// GetBranch fetches a single branch with its head commit and
+	// protection flag (the core BranchManager only lists).
+	GetBranch(ctx context.Context, owner, repo, branch string) (*BranchInfo, error)
+	// GetRawFile streams the raw (undecoded) file content at a ref —
+	// unlike GetFileContent, no base64 round trip and no size decode.
+	GetRawFile(ctx context.Context, owner, repo, ref, path string) ([]byte, error)
+	// DownloadCompareChangedFiles streams a zip of the changed files
+	// between two refs.
+	DownloadCompareChangedFiles(ctx context.Context, owner, repo, from, to string, w io.Writer) error
 
 	// --- Branch protection ---
 	ProtectBranch(ctx context.Context, owner, repo, branch string, opts ProtectBranchOptions) error
@@ -57,6 +68,13 @@ type TencentCodeExtras interface {
 	AddProtectedBranchMember(ctx context.Context, owner, repo, branch string, opts ProtectedBranchMemberOptions) error
 	UpdateProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int, opts ProtectedBranchMemberOptions) error
 	RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error
+}
+
+// BranchInfo is a single branch with its head commit and protection flag.
+type BranchInfo struct {
+	Name      string `json:"name"`
+	CommitSHA string `json:"commit_sha"`
+	Protected bool   `json:"protected"`
 }
 
 // Compile-time assertion that *Provider satisfies TencentCodeExtras.
@@ -588,6 +606,37 @@ func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte
 		return decoded, nil
 	}
 	return []byte(blob.Content), nil
+}
+
+func (t *Provider) GetBranch(ctx context.Context, owner, repo, branch string) (*BranchInfo, error) {
+	b, _, err := t.client.Branches.GetBranch(ctx, pid(owner, repo), branch)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetBranch", err)
+	}
+	info := &BranchInfo{Name: b.Name, Protected: b.Protected}
+	if b.Commit != nil {
+		info.CommitSHA = b.Commit.ID
+	}
+	return info, nil
+}
+
+func (t *Provider) GetRawFile(ctx context.Context, owner, repo, ref, path string) ([]byte, error) {
+	var buf bytes.Buffer
+	_, err := t.client.Repositories.GetRawFile(ctx, pid(owner, repo), ref, &buf,
+		&gongfeng.GetRawFileOptions{FilePath: gongfeng.Ptr(path)})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRawFile", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func (t *Provider) DownloadCompareChangedFiles(ctx context.Context, owner, repo, from, to string, w io.Writer) error {
+	_, err := t.client.Repositories.DownloadCompareChangedFiles(ctx, pid(owner, repo), w,
+		&gongfeng.CompareOptions{From: gongfeng.Ptr(from), To: gongfeng.Ptr(to)})
+	if err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "DownloadCompareChangedFiles", err)
+	}
+	return nil
 }
 
 // ===========================================================================

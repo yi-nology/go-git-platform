@@ -45,6 +45,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     当前用户/指定用户详情、关注的项目、SSH 公钥与邮箱管理。
   - 契约套件协作者 stub 放宽为 PUT/POST/DELETE 三动词并支持 username→ID
     查找响应（ID 寻址成员 API 的平台形状；原有平台行为不受影响）。
+- **tencentcode: 分支保护契约实现与 SDK 残余面全量暴露**（目标：后端完全
+  替代 gongfeng-sdk-go 直连）：
+  - `provider.BranchProtectionManager`——分支保护规则 CRUD（第 7 个实现平台）。
+    平台无"列出保护分支"端点：List 走分支列表过滤 `protected` 行返回摘要
+    （登记 detour），审批规则经 Get 取（`approver_rule` 原样映射，-1=全员
+    审批）；protect PUT 只收访问级别 + force-push 标志，契约其余选项登记
+    忽略；`allow_force_push` 只写不可读（读侧恒 false，登记 mapping）；
+    unprotect 端点是 PUT 非 DELETE。`iface_branch_protection.go` 的平台
+    支持注释同步更新。
+  - `provider.NoteManager`——MR 评论改写（UpdateNote）与全量分页列出
+    （ListNotes），GitLab 家族 MR/issue 注释分命名空间，同 gitlab backend。
+  - `TencentCodeExtras` 增补仓库读取：单分支详情 `GetBranch`、原始文件流
+    `GetRawFile`（blob 端点 + filepath query）、compare 变更文件集 zip 下载
+    `DownloadCompareChangedFiles`。
+  - `TencentCodeProjectExtras` 增补项目成员管理：单查 `GetProjectMember`、
+    改级 `EditProjectMember`（协作者契约只覆盖增删列）。
+  - `TencentCodeAccountExtras` 增补：用户目录检索 `ListUsers`（带 search）、
+    按邮箱查用户 `GetUserByEmail`、SSH 公钥/邮箱单查、名下项目
+    `ListOwnedProjects`。
+  - 平台 API 原生缺失而未实现的可选能力维持缺席（工蜂无对应端点）：
+    Search / Notifications / Reactions / DeployKeys / Gists / Migrations /
+    ReleaseAssets；Starred 按接口文档仅 GitHub 实现。
 
 ## [0.99.7] - 2026-10-26
 
