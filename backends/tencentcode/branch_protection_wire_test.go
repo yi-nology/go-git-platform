@@ -161,6 +161,8 @@ func TestTencentCode_RepositoryReadsWire(t *testing.T) {
 			compareQuery = r.URL.RawQuery
 			mu.Unlock()
 			_, _ = w.Write([]byte("zip-bytes"))
+		case strings.HasSuffix(r.URL.Path, "/repository/commits/abc/blob"):
+			_, _ = w.Write([]byte("commit-raw"))
 		default: // raw blob
 			_, _ = w.Write([]byte("raw-content"))
 		}
@@ -177,6 +179,10 @@ func TestTencentCode_RepositoryReadsWire(t *testing.T) {
 	if err != nil || string(raw) != "raw-content" {
 		t.Fatalf("GetRawFile: %q err=%v", raw, err)
 	}
+	commitRaw, err := p.GetCommitRawFile(context.Background(), "owner", "repo", "abc", "docs/read me.md")
+	if err != nil || string(commitRaw) != "commit-raw" {
+		t.Fatalf("GetCommitRawFile: %q err=%v", commitRaw, err)
+	}
 	var zipBuf strings.Builder
 	if err := p.DownloadCompareChangedFiles(context.Background(), "owner", "repo", "main", "feature", io.Writer(&zipBuf)); err != nil {
 		t.Fatalf("DownloadCompareChangedFiles: %v", err)
@@ -191,6 +197,7 @@ func TestTencentCode_RepositoryReadsWire(t *testing.T) {
 	assertCalls(t, calls, []string{
 		http.MethodGet + " /api/v3/projects/owner%2Frepo/repository/branches/main",
 		http.MethodGet + " /api/v3/projects/owner%2Frepo/repository/blobs/main", // raw file; filepath rides the query
+		http.MethodGet + " /api/v3/projects/owner%2Frepo/repository/commits/abc/blob",
 		http.MethodGet + " /api/v3/projects/owner%2Frepo/repository/compare/changed_files",
 	})
 }

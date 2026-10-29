@@ -99,6 +99,9 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	gfClient, err := gongfeng.NewClient(gfToken,
 		gongfeng.WithHTTPClient(httpClient),
 		gongfeng.WithBaseURL(sdkBaseURL),
+		// Debug logging rides the caller's logger (noop default; oekit
+		// consumers wire provider.NewLogxLogger via Config.Logger).
+		gongfeng.WithLogger(logger),
 	)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "New", err)

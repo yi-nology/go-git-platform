@@ -20,4 +20,21 @@ merge request 路径修正、移除官方 API 不存在的 SearchProjects/Delete
   go-git-platform 主模块，第三方依赖仅剩 `github.com/google/go-querystring`
   （主模块原本就有的间接依赖，收编后转为直接依赖）。
 
-升级方式：同步 fork 上游提交后整体覆盖本目录，并保持本 README 与 LICENSE。
+## 本仓适配层（升级 fork 时需重新套用）
+
+收编基线之上叠加了少量 oekit 化适配，与上游 fork 存在以下**有意偏离**，
+整体覆盖升级后需对照重新套用：
+
+1. **错误面走 oekit/pkg errors**：`fmt.Errorf` 的带格式构造（含 `%w`）改为
+   `oekiterrors.Errorf`（`setBaseURL` / `parseID` / `Time.UnmarshalJSON`），
+   静态错误改为 `oekiterrors.New`（`NewClient` 的 token 校验）。
+2. **日志注入**：`Client` 增加可选 `provider.Logger`（kv 风格，默认 noop），
+   经 `WithLogger` 注入；`Do` 记录请求 debug 行（method/path/status/耗时）
+   与失败 error 行。这是本仓"SDK 包面向 provider.Logger 注入"约定的落地，
+   oekit 生态消费方经 `provider.NewLogxLogger("gongfeng")` 接入。
+3. **并发约定**：SDK 保持无 goroutine 的同步设计——有界并发由 provider 层
+   的批量引擎（`provider.GetFileContents` 等，oekit/concurrency
+   syncx.FanInLimitCtx 驱动）承担，SDK 内不引入 async。
+
+升级方式：同步 fork 上游提交后整体覆盖本目录，重新套用上述适配层，并保持
+本 README 与 LICENSE。

@@ -29,6 +29,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `+0000` 偏移格式。
   - 唯一新增直接依赖 `github.com/google/go-querystring`（原就是两模块共有的
     间接依赖，收编后转 direct）；`mcp` 子模块的 studyzy 间接依赖一并消失。
+- **收编工蜂 SDK 的 oekit 适配层**（`internal/gongfeng`，偏离已在目录 README
+  登记，升级 fork 时需重新套用）：
+  - 错误面走 oekit/pkg errors：带格式构造（含 `%w`）转 `oekiterrors.Errorf`
+    （setBaseURL / parseID / Time.UnmarshalJSON），静态错误转 `oekiterrors.New`；
+  - 日志注入：`Client` 增加可选 `provider.Logger`（kv 风格，默认 noop），经
+    `WithLogger` 注入；`Do` 记录请求 debug 行（method/path/status/耗时）与
+    失败 error 行；tencentcode 后端默认把 `Config.Logger` 接进来，oekit 生态
+    消费方经 `provider.NewLogxLogger("gongfeng")` 观测 SDK 请求流；
+  - 并发约定成文：SDK 保持无 goroutine 的同步设计，有界并发由 provider 批量
+    引擎（`provider.GetFileContents` / `GetCRs` / `SetCommitStatuses`，
+    oekit/concurrency syncx.FanInLimitCtx 驱动）承担——tencentcode 后端因此
+    开箱获得三个批量助手。
 
 ### Added
 
@@ -67,6 +79,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - 平台 API 原生缺失而未实现的可选能力维持缺席（工蜂无对应端点）：
     Search / Notifications / Reactions / DeployKeys / Gists / Migrations /
     ReleaseAssets；Starred 按接口文档仅 GitHub 实现。
+- **tencentcode: 提交级原始文件读取与期望态收敛验证**：
+  - `TencentCodeExtras.GetCommitRawFile`——commit 作用域的原始文件流
+    （`repository/commits/{sha}/blob`，`GetRawFile` 的 commit 变体）；
+  - `provider.EnsureBranchProtection` 跨平台期望态助手经新契约对工蜂生效
+    （Created/Unchanged/Updated 三态有测试钉住）；已知形状：approver_rule
+    不可经 protect PUT 写入，期望态的 `RequiredApprovingReviews` 需按平台
+    上报值（或 0）表达才能收敛到 Unchanged。
 
 ## [0.99.7] - 2026-10-26
 

@@ -492,7 +492,9 @@ if tc, ok := p.(*tencentcode.Provider); ok {
   （仅引导期使用）、当前用户详情、用户目录检索（ListUsers/按邮箱查用户）、
   关注的项目、名下项目、SSH 公钥与邮箱管理。
 - 仓库读取扩展挂在 `TencentCodeExtras`：单分支详情（GetBranch）、原始文件流
-  （GetRawFile）、compare 变更文件集 zip 下载。
+  （GetRawFile 及其 commit 作用域变体 GetCommitRawFile）、compare 变更文件集
+  zip 下载。SDK 请求流的调试日志经 `Config.Logger` 输出（oekit 生态传
+  `provider.NewLogxLogger("gongfeng")`）。
 
 ## 已知限制
 

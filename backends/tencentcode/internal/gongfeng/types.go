@@ -1,8 +1,9 @@
 package gongfeng
 
 import (
-	"fmt"
 	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // timeLayout 是工蜂 API 返回的时间格式。
@@ -57,7 +58,7 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 		parseErr = err
 	}
 
-	return fmt.Errorf("gongfeng: cannot parse time %q: %w", string(data), parseErr)
+	return oekiterrors.Errorf("gongfeng: cannot parse time %q: %w", string(data), parseErr)
 }
 
 // String 实现 fmt.Stringer 接口。

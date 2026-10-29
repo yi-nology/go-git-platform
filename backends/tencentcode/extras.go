@@ -47,6 +47,9 @@ type TencentCodeExtras interface {
 	ListCommitComments(ctx context.Context, owner, repo, sha string, page, perPage int) ([]*CommitComment, error)
 	CreateCommitComment(ctx context.Context, owner, repo, sha string, opts CreateCommitCommentOptions) (*CommitComment, error)
 	GetCommitRefs(ctx context.Context, owner, repo, sha string, refType CommitRefType) (*CommitRefs, error)
+	// GetCommitRawFile streams the raw content of one file as of a commit
+	// (commit-scoped variant of GetRawFile).
+	GetCommitRawFile(ctx context.Context, owner, repo, sha, path string) ([]byte, error)
 
 	// --- Repository tree & blob ---
 	GetRepoTree(ctx context.Context, owner, repo, path, ref string, recursive bool) ([]*TreeEntryNode, error)
@@ -626,6 +629,16 @@ func (t *Provider) GetRawFile(ctx context.Context, owner, repo, ref, path string
 		&gongfeng.GetRawFileOptions{FilePath: gongfeng.Ptr(path)})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRawFile", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func (t *Provider) GetCommitRawFile(ctx context.Context, owner, repo, sha, path string) ([]byte, error) {
+	var buf bytes.Buffer
+	_, err := t.client.Repositories.GetCommitRawFile(ctx, pid(owner, repo), sha, &buf,
+		&gongfeng.GetRawFileOptions{FilePath: gongfeng.Ptr(path)})
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitRawFile", err)
 	}
 	return buf.Bytes(), nil
 }

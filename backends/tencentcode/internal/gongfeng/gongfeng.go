@@ -12,8 +12,13 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/google/go-querystring/query"
+
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 const (
@@ -37,6 +42,11 @@ type Client struct {
 
 	// userAgent 是请求中使用的 User-Agent 标头值。
 	userAgent string
+
+	// logger 是可选的调试日志出口（provider.Logger，kv 风格；默认 noop）。
+	// 本仓约定：SDK 包面向 provider.Logger 注入，消费方接 oekit 生态时传
+	// provider.NewLogxLogger(component)。
+	logger provider.Logger
 
 	// Services
 
@@ -80,15 +90,28 @@ func WithHTTPClient(httpClient *http.Client) ClientOptionFunc {
 	}
 }
 
+// WithLogger 注入调试日志出口（provider.Logger，kv 风格）。默认 noop：
+// 不传即静默。oekit 生态消费方传 provider.NewLogxLogger("gongfeng")。
+func WithLogger(logger provider.Logger) ClientOptionFunc {
+	return func(c *Client) error {
+		if logger == nil {
+			return nil
+		}
+		c.logger = logger
+		return nil
+	}
+}
+
 // NewClient 创建一个工蜂 API 客户端。token 为用户的 Private Token。
 func NewClient(token string, options ...ClientOptionFunc) (*Client, error) {
 	if strings.TrimSpace(token) == "" {
-		return nil, fmt.Errorf("gongfeng: token is required")
+		return nil, oekiterrors.New("gongfeng: token is required")
 	}
 
 	c := &Client{
 		token:     token,
 		userAgent: userAgent,
+		logger:    provider.NewNoopLogger(),
 	}
 
 	// 设置默认 BaseURL
@@ -160,7 +183,7 @@ func (c *Client) setBaseURL(urlStr string) error {
 
 	baseURL, err := url.Parse(urlStr)
 	if err != nil {
-		return fmt.Errorf("gongfeng: invalid base url %q: %w", urlStr, err)
+		return oekiterrors.Errorf("gongfeng: invalid base url %q: %w", urlStr, err)
 	}
 
 	// 拼接 api/v3/ 路径
@@ -279,13 +302,20 @@ func (c *Client) NewRequest(ctx context.Context, method, path string, body inter
 // 如果 v 为 nil 则不解码响应体。
 // 如果 v 实现了 io.Writer，则将响应体直接写入。
 func (c *Client) Do(req *http.Request, v interface{}) (*Response, error) {
+	start := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		c.logger.Error("gongfeng request failed",
+			"method", req.Method, "path", req.URL.Path, "err", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	response := newResponse(resp)
+
+	c.logger.Debug("gongfeng request",
+		"method", req.Method, "path", req.URL.Path,
+		"status", resp.StatusCode, "duration_ms", time.Since(start).Milliseconds())
 
 	if err := checkResponse(resp); err != nil {
 		return response, err
@@ -336,6 +366,6 @@ func parseID(id interface{}) (string, error) {
 	case string:
 		return pathEscape(v), nil
 	default:
-		return "", fmt.Errorf("gongfeng: invalid ID type %T, expected int or string", id)
+		return "", oekiterrors.Errorf("gongfeng: invalid ID type %T, expected int or string", id)
 	}
 }
