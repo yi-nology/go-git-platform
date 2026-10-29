@@ -86,6 +86,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     （Created/Unchanged/Updated 三态有测试钉住）；已知形状：approver_rule
     不可经 protect PUT 写入，期望态的 `RequiredApprovingReviews` 需按平台
     上报值（或 0）表达才能收敛到 Unchanged。
+- **mcp: 新增 `protection` / `collaborators` 两个 toolset，crs 增补评论读改**：
+  - `protection`（需 BranchProtections）——`list_branch_protections` /
+    `get_branch_protection` / `ensure_branch_protection`（写，幂等期望态
+    收敛）/ `delete_branch_protection`（写）；
+  - `collaborators`（需 Collaborators）——`list_collaborators` /
+    `add_collaborator`（写，read/write/admin 词表在工具边界校验）/
+    `remove_collaborator`（写）；
+  - `crs` 增补 `list_cr_comments` / `update_cr_comment`（写）——经
+    NoteManager 门控，GitLab 家族 MR 注释独立命名空间的读写从此对 agent
+    可达；
+  - 七平台现共八个 toolset；`--read-only` / `--toolsets` 子集选择行为
+    不变，有挂载/只读/子集/端到端/词表校验五类测试钉住。
+- **contracttest: NoteManager 契约套件**（spec 空缺补齐）——`Harness.Notes`
+  挂载 UpdateNote/ListNotes 双向漂移检查（实现而无配置、或配置而无实现都
+  报错）；gitlab 与 tencentcode 挂 fixture，GitHub 家族（issue 即 PR，由
+  IssueManager 覆盖）按设计跳过。README 能力矩阵同步（BranchProtections/
+  Collaborators 的 Tencent 列转 ✅、平台缺席清单更正、CapabilitySet 计数
+  13→17）。
 
 ## [0.99.7] - 2026-10-26
 

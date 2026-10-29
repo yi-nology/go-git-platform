@@ -202,3 +202,102 @@ func TestReadOnlyToolCallRejected(t *testing.T) {
 		t.Fatal("create_cr should not exist on a read-only server")
 	}
 }
+
+// --- branch protection / collaborators / CR notes (fake extensions) ---
+
+func (f fakeProvider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
+	return []*provider.BranchProtection{{BranchName: "main"}}, nil
+}
+func (f fakeProvider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
+	return &provider.BranchProtection{BranchName: branch}, nil
+}
+func (f fakeProvider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
+	return &provider.BranchProtection{BranchName: opts.BranchName}, nil
+}
+func (f fakeProvider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
+	return &provider.BranchProtection{BranchName: branch}, nil
+}
+func (f fakeProvider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
+	return nil
+}
+func (f fakeProvider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
+	return []*provider.Collaborator{{Username: "dev", Permission: "write"}}, nil
+}
+func (f fakeProvider) AddCollaborator(ctx context.Context, owner, repo, username string, opts provider.AddCollaboratorOptions) error {
+	return nil
+}
+func (f fakeProvider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
+	return nil
+}
+func (f fakeProvider) ListNotes(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+	return []*provider.IssueComment{{Body: "first"}}, nil
+}
+func (f fakeProvider) UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*provider.IssueComment, error) {
+	return &provider.IssueComment{Body: body}, nil
+}
+
+// TestProtectionCollaboratorNoteToolsets pins the capability-gated mounting
+// of the new toolsets: protection/collaborators mount when the provider
+// implements BranchProtectionManager/CollaboratorManager, and the CR-note
+// read/edit tools ride NoteManager inside the crs toolset.
+func TestProtectionCollaboratorNoteToolsets(t *testing.T) {
+	p := fakeProvider{caps: provider.CapabilitySet{}}
+	names := listTools(t, connect(t, p, Options{}))
+
+	for _, want := range []string{
+		"list_branch_protections", "get_branch_protection", "ensure_branch_protection", "delete_branch_protection",
+		"list_collaborators", "add_collaborator", "remove_collaborator",
+		"list_cr_comments", "update_cr_comment",
+	} {
+		if !names[want] {
+			t.Errorf("tool %q not mounted (have %v)", want, names)
+		}
+	}
+
+	// Read-only: the write tools vanish, the reads stay.
+	ro := listTools(t, connect(t, p, Options{ReadOnly: true}))
+	for _, absent := range []string{
+		"ensure_branch_protection", "delete_branch_protection",
+		"add_collaborator", "remove_collaborator", "update_cr_comment",
+	} {
+		if ro[absent] {
+			t.Errorf("mutating tool %q mounted in read-only mode", absent)
+		}
+	}
+	for _, want := range []string{"list_branch_protections", "get_branch_protection", "list_collaborators", "list_cr_comments"} {
+		if !ro[want] {
+			t.Errorf("read tool %q missing in read-only mode", want)
+		}
+	}
+
+	// Subset selection: "protection" alone mounts only protection tools.
+	sub := listTools(t, connect(t, p, Options{Toolsets: []string{"protection"}}))
+	for _, absent := range []string{"list_collaborators", "get_repo", "list_cr_comments"} {
+		if sub[absent] {
+			t.Errorf("tool %q mounted although toolset was not selected", absent)
+		}
+	}
+	if !sub["ensure_branch_protection"] {
+		t.Error("ensure_branch_protection missing from protection toolset")
+	}
+}
+
+// TestCollaboratorPermissionValidated pins the tool-boundary vocabulary
+// check: an unknown permission is a tool error, not a deep platform 4xx.
+func TestCollaboratorPermissionValidated(t *testing.T) {
+	p := fakeProvider{caps: provider.CapabilitySet{}}
+	sess := connect(t, p, Options{})
+
+	res, err := sess.CallTool(context.Background(), &mcp.CallToolParams{
+		Name: "add_collaborator",
+		Arguments: map[string]any{
+			"owner": "o", "repo": "r", "user": "dev", "permission": "owner",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("invalid permission must be a tool error, got: %v", res.Content)
+	}
+}

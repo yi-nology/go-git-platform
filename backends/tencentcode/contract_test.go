@@ -86,6 +86,12 @@ func TestTencentCode_Contract(t *testing.T) {
 			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
 			UserLookupResponse: `{"id":7,"username":"dev","name":"Dev"}`,
 		},
+		// CR notes go through the MergeRequest Notes API (GitLab-family iid
+		// namespaces — the reason this backend implements NoteManager).
+		Notes: &contracttest.NotesHarnessConfig{
+			ListResponse:   `[{"id":7,"body":"first note","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			MutateResponse: `{"id":7,"body":"rewritten","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		// Branch protection: List walks the branch list and filters the
 		// protected rows (branch-row shape); create/update PUT the protect
 		// endpoint and decode the protection detail straight from the PUT

@@ -83,6 +83,13 @@ func TestGitLab_Contract(t *testing.T) {
 			IssuesResponse: `[{"id":1,"iid":1,"title":"found","state":"opened","description":"b","web_url":"https://gitlab.example.com/owner/repo/-/issues/1","labels":["bug"],"user_notes_count":2,"created_at":"2026-01-01T00:00:00Z"}]`,
 			UsersResponse:  `[{"username":"dev","name":"Dev","avatar_url":"https://gitlab.example.com/uploads/-/system/user/avatar/1/avatar.png","web_url":"https://gitlab.example.com/dev"}]`,
 		},
+		// CR notes ride the MergeRequest Notes API (MR notes are a separate
+		// iid namespace from issues on GitLab — the reason this backend
+		// implements NoteManager). Shape: id/body/author.
+		Notes: &contracttest.NotesHarnessConfig{
+			ListResponse:   `[{"id":7,"body":"first note","author":{"id":1,"username":"dev","name":"Dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			MutateResponse: `{"id":7,"body":"rewritten","author":{"id":1,"username":"dev","name":"Dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		// Commit status fixtures: GitLab's commit-status shape
 		// (GET /projects/:id/repository/commits/:sha/statuses), a bare array
 		// where the state verb rides the "status" key and the context "name".

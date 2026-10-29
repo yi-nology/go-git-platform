@@ -15,11 +15,13 @@ AI agent 可直接调用的工具面。
 | Toolset | 工具 |
 |---|---|
 | `core`(必有) | `get_repo` `list_repos` `get_file` `list_branches` `list_crs` `get_cr` `get_cr_files` `get_commit` `list_commits` |
-| `crs`(必有) | `create_cr` `merge_cr` `add_cr_comment`(写) |
+| `crs`(必有) | `create_cr` `merge_cr` `add_cr_comment`(写) `list_cr_comments`(需 NoteManager) `update_cr_comment`(写,需 NoteManager) |
 | `issues`(需 Capability) | `list_issues` `get_issue` `create_issue`(写) `close_issue`(写) `add_issue_comment`(写) |
 | `status`(需 CommitStatuses) | `get_commit_statuses` `set_commit_status`(写) `wait_for_status` |
 | `search`(需 Search) | `search_repositories` `search_issues` `search_users` |
 | `releases`(必有) | `list_tags` `list_releases` `get_release` `create_release`(写) |
+| `protection`(需 BranchProtections) | `list_branch_protections` `get_branch_protection` `ensure_branch_protection`(写,幂等收敛) `delete_branch_protection`(写) |
+| `collaborators`(需 Collaborators) | `list_collaborators` `add_collaborator`(写) `remove_collaborator`(写) |
 
 上下文经济设计(承接 [github/github-mcp-server] 的 toolset 实践):
 

@@ -95,8 +95,8 @@ if caps := p.Capabilities(); caps.Reviews {
 | CommitStatuses | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CommitStatusManager` |
 | Notifications | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `NotificationManager` |
 | Reactions | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | `ReactionManager` |
-| BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `BranchProtectionManager` |
-| Collaborators | ✅ | — | ✅ | ✅ | ✅ | ✅ | — | `CollaboratorManager` |
+| BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `BranchProtectionManager` |
+| Collaborators | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
 | DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `DeploymentKeyManager` |
 | RepoStats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `RepoStatsManager` |
 | Users | — | ✅ | — | — | — | — | ✅ | `UserManager` |
@@ -288,7 +288,7 @@ if cl, ok := p.(provider.CILogManager); ok {
 完整的能力×平台矩阵见 [英文 Capability matrix](#capability-matrix)(与 `Capabilities()` 声明一一对应, `examples/capabilities` 是其可运行巡检版本)。要点:
 
 - **CILogManager 只在 GitLab 实现**: GitLab 是唯一公开暴露逐作业日志的平台; GitHub check-runs 只有摘要/注解, 缺失以"不实现该接口"表达而非桩方法
-- **Gitee 不声明 Reviews / Reactions / Users**; **GitHub 不声明 Users**(走独立 REST 即可); **腾讯工蜂不声明 Search / Notifications / Reactions / BranchProtections**(分支保护在工蜂专属接口中, 见下)
+- **Gitee 不声明 Reviews / Reactions / Users**; **GitHub 不声明 Users**(走独立 REST 即可); **腾讯工蜂不声明 Search / Notifications / Reactions**(工蜂 API 无对应端点); **NoteManager 仅 GitLab / 腾讯工蜂实现**(GitLab 家族 MR 与 issue 注释分 iid 命名空间, GitHub 家族 issue 即 PR 由 IssueManager 覆盖)
 
 ### 自动化与 Agent 场景(等待/批量/投影/MCP)
 
@@ -322,7 +322,7 @@ action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOption
 })
 ```
 
-`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, 六个 toolset(core/crs/issues/status/search/releases)按能力接口断言门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影与 `per_page` 分页参数、`--http` 可切换 streamable HTTP 远程部署(`/mcp` 端点 + `--http-token` Bearer 门禁)。详见 [mcp/README.md](mcp/README.md)。
+`mcp/` 子模块(独立 go module)提供开箱即用的 MCP server: 七平台一套工具面, 八个 toolset(core/crs/issues/status/search/releases/protection/collaborators)按能力接口断言门控、`--read-only` 注册期丢弃写工具、列表工具支持 `fields` 投影与 `per_page` 分页参数、`--http` 可切换 streamable HTTP 远程部署(`/mcp` 端点 + `--http-token` Bearer 门禁)。详见 [mcp/README.md](mcp/README.md)。
 
 ### 仓库元数据与部分克隆
 
@@ -517,7 +517,7 @@ if tc, ok := p.(*tencentcode.Provider); ok {
 ```
 go-git-platform/
 ├── provider/                    # 公共 API (类型 + 接口 + 工厂 + Manager)
-│   ├── provider.go              # Provider 接口 + CapabilitySet (13 项能力声明)
+│   ├── provider.go              # Provider 接口 + CapabilitySet (17 项能力声明)
 │   ├── options.go               # 所有 Options/Result 类型 (集中定义)
 │   ├── errors.go                # ProviderError + Wrap/New 助手 + 状态码反射
 │   ├── webhook.go               # WebhookValidator 接口 + 注册表 + 策略

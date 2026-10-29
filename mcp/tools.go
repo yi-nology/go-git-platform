@@ -9,12 +9,14 @@ import (
 
 // toolsetNames are the selectable toolset identifiers (Options.Toolsets).
 const (
-	toolsetCore     = "core"     // repos, branches, files, CR reads
-	toolsetCRs      = "crs"      // CR lifecycle writes
-	toolsetIssues   = "issues"   // issue reads/writes
-	toolsetStatus   = "status"   // commit status read/write/wait
-	toolsetSearch   = "search"   // repo/issue/user search
-	toolsetReleases = "releases" // tags and release reads/writes
+	toolsetCore     = "core"          // repos, branches, files, CR reads
+	toolsetCRs      = "crs"           // CR lifecycle writes (+ note read/edit where supported)
+	toolsetIssues   = "issues"        // issue reads/writes
+	toolsetStatus   = "status"        // commit status read/write/wait
+	toolsetSearch   = "search"        // repo/issue/user search
+	toolsetReleases = "releases"      // tags and release reads/writes
+	toolsetProtect  = "protection"    // branch protection read/converge/delete
+	toolsetCollab   = "collaborators" // repository member management
 )
 
 // defaultPerPage is the page size used when a tool caller leaves per_page
@@ -36,11 +38,14 @@ var toolsets = []toolset{
 	// ReleaseManager is a core Provider interface (every backend implements
 	// it), so the toolset mounts unconditionally.
 	{name: toolsetReleases, enabled: func(provider.Provider) bool { return true }, registered: registerReleases},
+	{name: toolsetProtect, enabled: func(p provider.Provider) bool { _, ok := p.(provider.BranchProtectionManager); return ok }, registered: registerProtection},
+	{name: toolsetCollab, enabled: func(p provider.Provider) bool { _, ok := p.(provider.CollaboratorManager); return ok }, registered: registerCollaborators},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
 	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
+	toolsetProtect: true, toolsetCollab: true,
 }
 
 // perPage resolves the per_page tool parameter with the default fallback.

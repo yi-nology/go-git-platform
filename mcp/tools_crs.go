@@ -50,4 +50,28 @@ func registerCRs(s *mcp.Server, st *state) {
 		id, err := st.p.CreateNote(ctx, in.Owner, in.Repo, in.Number, in.Body)
 		return map[string]any{"note_id": id}, err
 	})
+
+	// CR-note read/edit ride NoteManager when the backend implements it
+	// (GitLab-family platforms: MR notes are a separate iid namespace, so
+	// the issue-comment tools never reach them).
+	nm, ok := st.p.(provider.NoteManager)
+	if !ok {
+		return
+	}
+	add(s, st, "list_cr_comments", "List CR comments", "List every comment on a pull/merge request, oldest first.", false, func(ctx context.Context, in struct {
+		Owner  string `json:"owner"`
+		Repo   string `json:"repo"`
+		Number string `json:"number"`
+	}) ([]*provider.IssueComment, error) {
+		return nm.ListNotes(ctx, in.Owner, in.Repo, in.Number)
+	})
+	add(s, st, "update_cr_comment", "Edit CR comment", "Rewrite the body of one comment on a pull/merge request.", true, func(ctx context.Context, in struct {
+		Owner  string `json:"owner"`
+		Repo   string `json:"repo"`
+		Number string `json:"number"`
+		NoteID string `json:"note_id"`
+		Body   string `json:"body"`
+	}) (*provider.IssueComment, error) {
+		return nm.UpdateNote(ctx, in.Owner, in.Repo, in.Number, in.NoteID, in.Body)
+	})
 }
