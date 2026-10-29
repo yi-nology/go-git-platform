@@ -57,6 +57,24 @@ linters:
     presets:
       - common-false-positives
     rules:
+      # Vendored Gongfeng SDK: backends/tencentcode/internal/gongfeng is a
+      # whole-tree snapshot of an external Apache-2.0 project (see its
+      # README.md). Per-file lint edits would create upgrade friction, and
+      # the tree carries its own unit tests, so it is exempt from the
+      # enabled linters (extend this list when new linters are enabled).
+      - path: backends/tencentcode/internal/gongfeng/
+        linters:
+          - errcheck
+          - staticcheck
+          - govet
+          - ineffassign
+          - unused
+          - gosec
+          - gocritic
+          - gocyclo
+          - misspell
+          - unconvert
+          - unparam
       # Test files get more leeway
       - path: _test\.go
         linters:

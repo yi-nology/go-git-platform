@@ -263,6 +263,9 @@ func TestListTags(t *testing.T) {
 // carrying nothing this platform can express (only Body is forwarded;
 // Name/Draft/Prerelease are ignored by registered limitation) skips the
 // PUT entirely and returns the current release from GetReleaseByTag.
+// 工蜂's release endpoints are ID-addressed, so the lookup walks the
+// release list (gongfeng wire shape: tag/title/description) to resolve
+// the tag.
 func TestUpdateRelease_AllNilShortCircuit(t *testing.T) {
 	var mu sync.Mutex
 	var methods []string
@@ -270,7 +273,7 @@ func TestUpdateRelease_AllNilShortCircuit(t *testing.T) {
 		mu.Lock()
 		methods = append(methods, r.Method)
 		mu.Unlock()
-		writeJSON(w, map[string]any{"tag_name": "v1.0", "description": "current notes"})
+		writeJSON(w, []map[string]any{{"id": 3, "tag": "v1.0", "title": "v1.0", "description": "current notes"}})
 	}))
 	defer srv.Close()
 	p := newTestProvider(t, srv)
@@ -278,7 +281,7 @@ func TestUpdateRelease_AllNilShortCircuit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rel == nil || rel.TagName != "v1.0" || rel.Body != "current notes" {
+	if rel == nil || rel.TagName != "v1.0" || rel.Body != "current notes" || rel.ID != 3 {
 		t.Errorf("unexpected release: %+v", rel)
 	}
 	for _, m := range methods {

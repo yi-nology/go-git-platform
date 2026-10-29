@@ -7,12 +7,12 @@ require (
 	gitea.dev/sdk v1.3.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/google/go-github/v92 v92.0.0
+	github.com/google/go-querystring v1.2.0
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.22.0
 	github.com/oekit/logx v0.7.1
 	github.com/oekit/pkg v0.28.0
 	github.com/stretchr/testify v1.12.1
-	github.com/studyzy/gongfeng-sdk-go v0.6.0
 	github.com/yi-nology/go-gitcode v0.7.2
 	gitlab.com/gitlab-org/api/client-go/v3 v3.18.0
 	golang.org/x/crypto v0.58.0
@@ -49,7 +49,6 @@ require (
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect

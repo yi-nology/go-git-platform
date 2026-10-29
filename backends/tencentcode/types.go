@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -101,10 +101,14 @@ func convertTag(t *gongfeng.Tag) *provider.TagInfo {
 	}
 }
 
-// convertRelease maps a gongfeng.Release to a provider.ReleaseInfo.
+// convertRelease maps a gongfeng.Release to a provider.ReleaseInfo. The
+// gongfeng release object carries no draft/prerelease flags or web URL,
+// so those fields stay zero.
 func convertRelease(r *gongfeng.Release) *provider.ReleaseInfo {
 	return &provider.ReleaseInfo{
-		TagName:   r.TagName,
+		ID:        int64(r.ID),
+		TagName:   r.Tag,
+		Title:     r.Title,
 		Body:      r.Description,
 		CreatedAt: r.CreatedAt.Time,
 	}

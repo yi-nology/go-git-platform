@@ -142,7 +142,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if ref != "" {
 		u += "?ref=" + url.QueryEscape(ref)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
 	}

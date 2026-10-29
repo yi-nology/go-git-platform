@@ -3,7 +3,7 @@ package tencentcode
 import (
 	"errors"
 
-	gongfeng "github.com/studyzy/gongfeng-sdk-go"
+	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 

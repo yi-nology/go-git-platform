@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	gongfeng "github.com/studyzy/gongfeng-sdk-go"
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 

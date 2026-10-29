@@ -102,5 +102,10 @@ This document is generated from the backends' registered divergence ledgers
 | IssueManager | ListIssues | WebURL, ClosedAt | mapping | The API exposes no issue web URL and no closed-at timestamp. |
 | IssueManager | GetIssue | WebURL, ClosedAt | mapping | See ListIssues. |
 | LabelManager | ListLabels | Label.ID | mapping | Label IDs are not exposed by the wire; Label.ID is always 0. |
+| CollaboratorManager | AddCollaborator | opts.Permission | mapping | The read/write/admin vocabulary maps onto 工蜂 access levels (read→reporter, write→developer, admin→master); empty takes the platform default. |
+| ReleaseManager | GetReleaseByTag |  | detour | Gongfeng releases are ID-addressed and expose no by-tag fetch; the tag is resolved by scanning the release list (ErrNotFound when absent). |
+| ReleaseManager | UpdateRelease |  | detour | The update resolves the release ID by tag via the list scan, then PUTs to /releases/{id}. |
+| ReleaseManager | DeleteRelease |  | detour | The delete resolves the release ID by tag via the list scan, then DELETEs /releases/{id}. |
+| ReleaseManager | CreateRelease | opts.Target, opts.Draft, opts.Prerelease | ignore | The release create endpoint carries only tag/title/description. |
 | ReleaseManager | UpdateRelease | opts.Draft, opts.Prerelease | ignore | The release update endpoint takes no draft or prerelease flags. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |

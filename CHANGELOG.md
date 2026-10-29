@@ -4,6 +4,48 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **tencentcode: 收编工蜂 SDK，移除 `github.com/studyzy/gongfeng-sdk-go` 外部依赖**：
+  studyzy 上游删除了 v0.6.0 tag，外部引用不再可靠。SDK 源码（fork
+  `zy84338719/gongfeng-sdk-go` main 分支，Apache-2.0）整体收编进
+  `backends/tencentcode/internal/gongfeng/`，连同其单元测试与官方 API 文档镜像
+  （`docs/api/`）。fork 相对 v0.6.0 是一批"对齐官方文档"的修正，随收编生效：
+  - **Release 按 ID 寻址**（原 v0.6.0 按 tag 寻址是对 wire 的错误认知）：工蜂
+    release 端点只认数值 ID 且无按 tag 取单条的原生面，`GetReleaseByTag`/
+    `UpdateRelease`/`DeleteRelease` 改为先按 tag 扫 release 列表解析 ID（登记
+    detour，查不到报 `provider.ErrNotFound`）；release 载荷为 `id`/`tag`/
+    `title`/`description`（无 GitHub 式 `tag_name`/`name`），契约套件的工蜂
+    fixture 据此修正，`CreateRelease` 现映射 `Title`，`Target`/`Draft`/
+    `Prerelease` 登记忽略。
+  - **路径修正**：commit status 列表/查询去掉 `repository/` 前缀
+    （`commits/{sha}/statuses`）、MR commits 与 changed files 走
+    `merge_request/{id}/…`（原 v0.6.0 路径与官方文档不符）。
+  - **移除官方 API 不存在的端点**（`SearchProjects`/`DeleteIssue`，本仓无调用点）、
+    webhook 增加 `review_events`/`token` 字段、分支保护/MR 创建 options 补齐
+    官方字段（labels、necessary_reviewers、approver_rule 等）、时间解析兼容
+    `+0000` 偏移格式。
+  - 唯一新增直接依赖 `github.com/google/go-querystring`（原就是两模块共有的
+    间接依赖，收编后转 direct）；`mcp` 子模块的 studyzy 间接依赖一并消失。
+
+### Added
+
+- **tencentcode: 官方 API 文档能力补齐到后端面**（此前仅存在于收编 SDK 内、
+  未暴露）：
+  - `provider.CollaboratorManager`（跨平台可选能力）——项目成员增删查，权限词表
+    read/write/admin → 工蜂 access level 映射（登记 mapping），username 经
+    Users API 解析（TTL 缓存）；
+  - `TencentCodeOrgExtras`——项目组 CRUD + 组成员管理、命名空间列表；
+  - `TencentCodeProjectExtras`——关注人 watch/unwatch/状态/列表、star/取消/
+    状态/列表、fork 关系建立与解除、Tag 创建/查询/删除、项目↔群组共享、
+    项目事件流；
+  - `TencentCodeAccountExtras`——session 登录换 private token（引导期专用）、
+    当前用户/指定用户详情、关注的项目、SSH 公钥与邮箱管理。
+  - 契约套件协作者 stub 放宽为 PUT/POST/DELETE 三动词并支持 username→ID
+    查找响应（ID 寻址成员 API 的平台形状；原有平台行为不受影响）。
+
 ## [0.99.7] - 2026-10-26
 
 ### Fixed

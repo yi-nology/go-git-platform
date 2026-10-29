@@ -66,16 +66,30 @@ func TestTencentCode_Contract(t *testing.T) {
 			IgnoresDismissal:        true,
 			ListStateIsCommented:    true,
 		},
-		// Gongfeng release shape: tag_name/description only — the model has
-		// no name/id/url fields, and the update surface cannot carry a name
-		// (registered limitation), so the suite asserts the description key.
+		// Gongfeng release shape: id/tag/title/description — the platform's
+		// release object has no tag_name/name/url fields (the GitHub-style
+		// keys in the old fixture encoded a wrong belief about this wire),
+		// the endpoints are ID-addressed, and the update surface cannot
+		// carry a name (registered limitation), so the suite asserts the
+		// description key. By-tag lookups resolve through the list scan the
+		// suite's collection route already serves.
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:              `{"tag_name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z"}`,
-			UpdateResponse:             `{"tag_name":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,
+			ByTagResponse:              `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:             `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateSendsDescriptionOnly: true,
 		},
+		// Project members double as collaborators: the list serves the
+		// member shape, add/remove resolve the username through the users
+		// lookup (ID-addressed member API, registered mapping for the
+		// permission vocabulary).
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
+			UserLookupResponse: `{"id":7,"username":"dev","name":"Dev"}`,
+		},
 		// Commit status fixtures: gongfeng's commit-status shape is
-		// GitLab-like (GET /projects/:id/repository/commits/:sha/statuses),
+		// GitLab-like (GET /projects/:id/commits/:sha/statuses — the
+		// repository/ prefix in studyzy v0.6.0 was a doc error the
+		// vendored SDK corrected),
 		// a bare array where the state verb rides the "status" key and the
 		// context "name".
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{

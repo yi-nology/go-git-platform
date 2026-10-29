@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -12,6 +14,12 @@ import (
 // CollaboratorsHarnessConfig carries fixtures for the collaborator suite.
 type CollaboratorsHarnessConfig struct {
 	ListResponse string
+	// UserLookupResponse, when set, is served for the username→ID lookup
+	// GET (…/users/{username}) that platforms with ID-addressed member
+	// APIs (GitLab, TencentCode) perform before add/remove mutations.
+	// Empty means the platform addresses collaborators by username
+	// directly and makes no lookup.
+	UserLookupResponse string
 }
 
 func testCollaboratorsSuite(t *testing.T, h Harness) {
@@ -29,17 +37,35 @@ func testCollaboratorsSuite(t *testing.T, h Harness) {
 	default:
 		RunCollaboratorsSuite(t, CollaboratorsHarness{
 			Name: h.Name, Platform: h.Platform, NewProvider: h.NewProvider,
-			ListResponse: h.Collaborators.ListResponse,
+			ListResponse:       h.Collaborators.ListResponse,
+			UserLookupResponse: h.Collaborators.UserLookupResponse,
 		})
 	}
 }
 
 // CollaboratorsHarness bundles inputs for the collaborator suite.
 type CollaboratorsHarness struct {
-	Name         string
-	Platform     provider.Platform
-	NewProvider  func(t *testing.T, cfg provider.Config) provider.Provider
-	ListResponse string
+	Name               string
+	Platform           provider.Platform
+	NewProvider        func(t *testing.T, cfg provider.Config) provider.Provider
+	ListResponse       string
+	UserLookupResponse string
+}
+
+// isUsernameLookup reports whether the path targets …/users/{username} with
+// a non-numeric final segment — the username→ID resolution shape.
+func isUsernameLookup(path string) bool {
+	const usersSegment = "/users/"
+	idx := strings.LastIndex(path, usersSegment)
+	if idx < 0 {
+		return false
+	}
+	name := path[idx+len(usersSegment):]
+	if name == "" {
+		return false
+	}
+	_, err := strconv.Atoi(name)
+	return err != nil
 }
 
 // RunCollaboratorsSuite tests collaborator list operations.
@@ -49,6 +75,13 @@ func RunCollaboratorsSuite(t *testing.T, h CollaboratorsHarness) {
 			w.Header().Set("Content-Type", "application/json")
 			switch r.Method {
 			case http.MethodGet:
+				// Username→ID lookup for ID-addressed member APIs: a
+				// non-numeric final segment under /users/ is the lookup
+				// (GET …/users/{username}), distinct from user-by-ID reads.
+				if h.UserLookupResponse != "" && isUsernameLookup(r.URL.Path) {
+					_, _ = w.Write([]byte(h.UserLookupResponse))
+					return
+				}
 				// Page-aware: AllPages-driven backends probe page 2; serve an
 				// empty terminal page so the loop stops.
 				if beyondFirstPage(r) {
@@ -56,8 +89,16 @@ func RunCollaboratorsSuite(t *testing.T, h CollaboratorsHarness) {
 					return
 				}
 				_, _ = w.Write([]byte(h.ListResponse))
+			// The PUT/DELETE pair covers the permission-push family
+			// (GitHub/Gitea/Forgejo/Gitee/GitCode); POST covers the
+			// member-create family (GitLab/TencentCode add members via a
+			// POST to the members collection, not a PUT per user).
 			case http.MethodPut:
 				w.WriteHeader(http.StatusNoContent)
+			case http.MethodPost:
+				// 201 + an object body: member-creating SDKs decode the
+				// created member, so an empty body would EOF them.
+				_, _ = w.Write([]byte(`{}`))
 			case http.MethodDelete:
 				w.WriteHeader(http.StatusNoContent)
 			default:
