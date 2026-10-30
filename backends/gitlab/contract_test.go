@@ -103,6 +103,9 @@ func TestGitLab_Contract(t *testing.T) {
 			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
 			UserLookupResponse: `[{"id":7,"username":"dev","name":"Dev"}]`,
 		},
+		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
+			GetResponse: `{"id":42,"url":"https://hooks.example/ci","push_events":true,"merge_requests_events":true}`,
+		},
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{
 			ListResponse: `[{"id":1,"sha":"deadbeef","ref":"main","status":"success","name":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:10Z","allow_failure":false,"coverage":87.5,"pipeline_id":10,"author":{"id":1,"username":"dev"}},{"id":2,"sha":"deadbeef","ref":"main","status":"pending","name":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z","allow_failure":false,"coverage":0,"pipeline_id":10,"author":{"id":1,"username":"dev"}}]`,
 		},

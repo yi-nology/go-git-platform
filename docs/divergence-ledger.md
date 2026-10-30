@@ -46,6 +46,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | GetCR | BaseSHA | mapping | GitHub payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | ReleaseManager | GetArchive |  | detour | Archive downloads stream through the raw transport client rather than go-github. |
+| WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 
 ## gitee
 
@@ -87,6 +88,7 @@ This document is generated from the backends' registered divergence ledgers
 | IssueManager | ListIssueComments |  | detour | go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page. |
 | IssueManager | ListIssueLabels |  | detour | go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-gitcode marshals UpdateWebhookOptions.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 
 ## tencent_code
 

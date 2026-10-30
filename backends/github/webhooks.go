@@ -33,6 +33,41 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	return convertHook(h), nil
 }
 
+// GetWebhook implements provider.WebhookConfigManager.
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	h, _, err := p.client.Repositories.GetHook(ctx, owner, repo, webhookID)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "GetWebhook", err)
+	}
+	return convertHook(h), nil
+}
+
+// UpdateWebhook implements provider.WebhookConfigManager. GitHub's PATCH
+// semantics keep unprovided settings; the config object is only attached
+// when at least one of URL/Secret is being changed so the remaining config
+// keys stay server-side.
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	hook := &github.Hook{}
+	if opts.Events != nil {
+		hook.Events = opts.Events
+	}
+	if opts.URL != nil || opts.Secret != nil {
+		cfg := &github.HookConfig{}
+		if opts.URL != nil {
+			cfg.URL = opts.URL
+		}
+		if opts.Secret != nil {
+			cfg.Secret = opts.Secret
+		}
+		hook.Config = cfg
+	}
+	h, _, err := p.client.Repositories.EditHook(ctx, owner, repo, webhookID, hook)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateWebhook", err)
+	}
+	return convertHook(h), nil
+}
+
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Repositories.DeleteHook(ctx, owner, repo, webhookID)
@@ -223,3 +258,4 @@ func normalizeCommentAction(action string) string {
 
 // compile-time guard
 var _ provider.WebhookManager = (*Provider)(nil)
+var _ provider.WebhookConfigManager = (*Provider)(nil)

@@ -86,6 +86,9 @@ func TestTencentCode_Contract(t *testing.T) {
 			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
 			UserLookupResponse: `{"id":7,"username":"dev","name":"Dev"}`,
 		},
+		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
+			GetResponse: `{"id":42,"url":"https://hooks.example/ci","push_events":true,"merge_requests_events":true}`,
+		},
 		// CR notes go through the MergeRequest Notes API (GitLab-family iid
 		// namespaces — the reason this backend implements NoteManager).
 		Notes: &contracttest.NotesHarnessConfig{

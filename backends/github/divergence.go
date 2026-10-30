@@ -12,6 +12,8 @@ var divergences = []provider.Divergence{
 		Reason: "See GetCR."},
 	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceDetour,
 		Reason: "Archive downloads stream through the raw transport client rather than go-github."},
+	{Capability: "WebhookConfigManager", Method: "UpdateWebhook", Field: "opts.Events (empty)", Kind: provider.DivergenceIgnore,
+		Reason: "go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from \"unchanged\" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets)."},
 }
 
 // Divergences returns the registered divergence ledger for the GitHub backend.

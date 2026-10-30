@@ -17,6 +17,7 @@ const (
 	toolsetReleases = "releases"      // tags and release reads/writes
 	toolsetProtect  = "protection"    // branch protection read/converge/delete
 	toolsetCollab   = "collaborators" // repository member management
+	toolsetWebhooks = "webhooks"      // webhook CRUD (+ single get/update where supported)
 )
 
 // defaultPerPage is the page size used when a tool caller leaves per_page
@@ -40,12 +41,16 @@ var toolsets = []toolset{
 	{name: toolsetReleases, enabled: func(provider.Provider) bool { return true }, registered: registerReleases},
 	{name: toolsetProtect, enabled: func(p provider.Provider) bool { _, ok := p.(provider.BranchProtectionManager); return ok }, registered: registerProtection},
 	{name: toolsetCollab, enabled: func(p provider.Provider) bool { _, ok := p.(provider.CollaboratorManager); return ok }, registered: registerCollaborators},
+	// WebhookManager is core (every backend), so the webhook toolset mounts
+	// unconditionally; get_webhook/update_webhook additionally gate on the
+	// WebhookConfigManager capability at registration time.
+	{name: toolsetWebhooks, enabled: func(p provider.Provider) bool { _, ok := p.(provider.WebhookManager); return ok }, registered: registerWebhooks},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
 	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
-	toolsetProtect: true, toolsetCollab: true,
+	toolsetProtect: true, toolsetCollab: true, toolsetWebhooks: true,
 }
 
 // perPage resolves the per_page tool parameter with the default fallback.

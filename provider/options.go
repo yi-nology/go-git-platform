@@ -224,6 +224,15 @@ type CreateWebhookOptions struct {
 	Events []string `json:"events,omitempty"`
 }
 
+// UpdateWebhookOptions contains options for updating a webhook (patch-style:
+// nil fields are left unchanged). Events is the exception — see
+// WebhookConfigManager for the full-replacement semantics.
+type UpdateWebhookOptions struct {
+	URL    *string  `json:"url,omitempty"`
+	Secret *string  `json:"secret,omitempty"`
+	Events []string `json:"events,omitempty"`
+}
+
 // --- Releases ---
 
 // CreateReleaseOptions contains options for creating a release.

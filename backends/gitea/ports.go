@@ -47,6 +47,25 @@ func (s sdkPorts) ListRepoHooks(ctx context.Context, owner, repo string, opt git
 	return familyHooks(list), err
 }
 
+func (s sdkPorts) GetRepoHook(ctx context.Context, owner, repo string, id int64) (*giteafamily.Hook, int, error) {
+	h, resp, err := s.c.Hooks.GetRepoHook(ctx, owner, repo, id)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyHook(h), status, err
+}
+
+func (s sdkPorts) EditRepoHook(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditHookOption) (*giteafamily.Hook, error) {
+	// The gitea SDK's edit returns no body either; the engine hydrates the
+	// updated hook with a follow-up GetRepoHook.
+	_, err := s.c.Hooks.EditRepoHook(ctx, owner, repo, id, gitea.EditHookOption{
+		Config: opt.Config,
+		Events: opt.Events,
+	})
+	return nil, err
+}
+
 func familyHook(h *gitea.Hook) *giteafamily.Hook {
 	if h == nil {
 		return nil

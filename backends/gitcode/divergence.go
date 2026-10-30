@@ -22,6 +22,8 @@ var divergences = []provider.Divergence{
 		Reason: "go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 		Reason: "GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
+	{Capability: "WebhookConfigManager", Method: "UpdateWebhook", Field: "opts.Events (empty)", Kind: provider.DivergenceIgnore,
+		Reason: "go-gitcode marshals UpdateWebhookOptions.Events with omitempty, so an empty slice is indistinguishable from \"unchanged\" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets)."},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

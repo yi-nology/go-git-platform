@@ -55,6 +55,45 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	return convertHook(hook), nil
 }
 
+// GetWebhook implements provider.WebhookConfigManager.
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	hook, _, err := p.client.Webhooks.Get(ctx, esc(owner), esc(repo), webhookID)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "GetWebhook", err)
+	}
+	return convertHook(hook), nil
+}
+
+// UpdateWebhook implements provider.WebhookConfigManager. Gitee's edit
+// endpoint is boolean-flag based: omitted flags mean "unchanged", so a
+// non-nil Events slice sets every flag of giteeHookEventFlags explicitly
+// (true for members, false for the rest) to express removal.
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	em := map[string]bool{}
+	for _, e := range opts.Events {
+		em[e] = true
+	}
+	updateOpts := &gitee.UpdateWebhookOptions{}
+	if opts.URL != nil {
+		updateOpts.URL = opts.URL
+	}
+	if opts.Secret != nil {
+		updateOpts.Password = opts.Secret
+	}
+	if opts.Events != nil {
+		updateOpts.PushEvents = gitee.Bool(em["push"])
+		updateOpts.TagPushEvents = gitee.Bool(em["tag_push"])
+		updateOpts.IssuesEvents = gitee.Bool(em["issues"])
+		updateOpts.NoteEvents = gitee.Bool(em["note"] || em["comment"])
+		updateOpts.MergeRequestsEvents = gitee.Bool(em["pull_request"])
+	}
+	hook, _, err := p.client.Webhooks.Edit(ctx, esc(owner), esc(repo), webhookID, updateOpts)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "UpdateWebhook", err)
+	}
+	return convertHook(hook), nil
+}
+
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Webhooks.Delete(ctx, esc(owner), esc(repo), webhookID)
@@ -217,3 +256,4 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)
+var _ provider.WebhookConfigManager = (*Provider)(nil)

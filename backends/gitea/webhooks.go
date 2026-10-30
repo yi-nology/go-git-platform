@@ -23,6 +23,16 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 	return giteafamily.ListWebhooks(ctx, p.family, p.ports, owner, repo)
 }
 
+// GetWebhook implements provider.WebhookConfigManager.
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	return giteafamily.GetWebhook(ctx, p.family, p.ports, owner, repo, webhookID)
+}
+
+// UpdateWebhook implements provider.WebhookConfigManager.
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	return giteafamily.UpdateWebhook(ctx, p.family, p.ports, owner, repo, webhookID, opts)
+}
+
 // ValidateWebhookSignature implements provider.WebhookManager. It
 // delegates to the platform's registered validator so the signature
 // scheme has exactly one implementation (shared with contracttest);
@@ -40,3 +50,4 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)
+var _ provider.WebhookConfigManager = (*Provider)(nil)

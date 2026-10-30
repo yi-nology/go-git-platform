@@ -22,6 +22,7 @@ AI agent 可直接调用的工具面。
 | `releases`(必有) | `list_tags` `list_releases` `get_release` `create_release`(写) |
 | `protection`(需 BranchProtections) | `list_branch_protections` `get_branch_protection` `ensure_branch_protection`(写,幂等收敛) `delete_branch_protection`(写) |
 | `collaborators`(需 Collaborators) | `list_collaborators` `add_collaborator`(写) `remove_collaborator`(写) |
+| `webhooks`(必有) | `list_webhooks` `create_webhook`(写) `delete_webhook`(写) `get_webhook`(需 WebhookConfig) `update_webhook`(写,需 WebhookConfig;patch 语义,非 nil 字段才更新,events 为全量替换) |
 
 上下文经济设计(承接 [github/github-mcp-server] 的 toolset 实践):
 

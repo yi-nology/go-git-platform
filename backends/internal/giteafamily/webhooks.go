@@ -80,6 +80,14 @@ type CreateHookOption struct {
 	Active bool
 }
 
+// EditHookOption mirrors the family's PATCH webhook body. Config keys are
+// merged server-side (unprovided keys keep their values); Events replaces
+// the full event set.
+type EditHookOption struct {
+	Config map[string]string
+	Events []string
+}
+
 // ListHooksOptions mirrors the family's webhook list query.
 type ListHooksOptions struct {
 	ListOptions ListOptions
@@ -99,6 +107,11 @@ type HookPort interface {
 	CreateRepoHook(ctx context.Context, owner, repo string, opt CreateHookOption) (*Hook, error)
 	DeleteRepoHook(ctx context.Context, owner, repo string, id int64) error
 	ListRepoHooks(ctx context.Context, owner, repo string, opt ListHooksOptions) ([]*Hook, error)
+	GetRepoHook(ctx context.Context, owner, repo string, id int64) (*Hook, int, error)
+	// EditRepoHook returns the updated hook; both family SDKs' edit
+	// endpoints return no body, so a nil Hook with nil error is the norm
+	// and the engine hydrates with a follow-up read.
+	EditRepoHook(ctx context.Context, owner, repo string, id int64, opt EditHookOption) (*Hook, error)
 }
 
 // --- engine: webhook CRUD ---
@@ -118,6 +131,53 @@ func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.Crea
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "CreateWebhook", err)
+	}
+	return convertHook(hook), nil
+}
+
+// GetWebhook returns one family webhook. The int port return carries the
+// response's HTTP status for IsNotFound classification (the family's error
+// type flattens it away — same reason as FilePort.GetFile).
+func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	hook, status, err := c.GetRepoHook(ctx, owner, repo, webhookID)
+	if err != nil {
+		if status == 404 {
+			return nil, provider.New(f.Platform, "GetWebhook", 404, err.Error())
+		}
+		return nil, provider.Wrap(f.Platform, "GetWebhook", err)
+	}
+	return convertHook(hook), nil
+}
+
+// UpdateWebhook patches one family webhook. The family PATCH semantics
+// merge the provided config keys server-side, so URL and Secret updates
+// touch only their own key; Events replaces the full event set.
+func UpdateWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	opt := EditHookOption{}
+	if opts.URL != nil || opts.Secret != nil {
+		opt.Config = map[string]string{}
+		if opts.URL != nil {
+			opt.Config["url"] = *opts.URL
+		}
+		if opts.Secret != nil {
+			opt.Config["secret"] = *opts.Secret
+		}
+	}
+	if opts.Events != nil {
+		opt.Events = opts.Events
+	}
+	hook, err := c.EditRepoHook(ctx, owner, repo, webhookID, opt)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "UpdateWebhook", err)
+	}
+	// Both family SDKs' edit endpoints return no body (nil hook, nil
+	// error): hydrate with a follow-up read so the engine returns the
+	// updated state uniformly.
+	if hook == nil {
+		hook, _, err = c.GetRepoHook(ctx, owner, repo, webhookID)
+		if err != nil {
+			return nil, provider.Wrap(f.Platform, "UpdateWebhook", err)
+		}
 	}
 	return convertHook(hook), nil
 }

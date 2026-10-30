@@ -49,6 +49,27 @@ func (s sdkPorts) ListRepoHooks(ctx context.Context, owner, repo string, opt git
 	return familyHooks(list), err
 }
 
+func (s sdkPorts) GetRepoHook(ctx context.Context, owner, repo string, id int64) (*giteafamily.Hook, int, error) {
+	_ = ctx // forgejo SDK takes no context
+	h, resp, err := s.c.GetRepoHook(owner, repo, id)
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	return familyHook(h), status, err
+}
+
+func (s sdkPorts) EditRepoHook(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditHookOption) (*giteafamily.Hook, error) {
+	_ = ctx // forgejo SDK takes no context
+	// Forgejo's edit endpoint returns no body; the engine hydrates the
+	// updated hook with a follow-up GetRepoHook.
+	_, err := s.c.EditRepoHook(owner, repo, id, forgejo.EditHookOption{
+		Config: opt.Config,
+		Events: opt.Events,
+	})
+	return nil, err
+}
+
 func familyHook(h *forgejo.Hook) *giteafamily.Hook {
 	if h == nil {
 		return nil

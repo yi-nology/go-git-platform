@@ -43,6 +43,7 @@ type CapabilitySet struct {
 	Reactions         bool // provider.ReactionManager
 	BranchProtections bool // provider.BranchProtectionManager
 	Collaborators     bool // provider.CollaboratorManager
+	WebhookConfig     bool // provider.WebhookConfigManager
 	DeployKeys        bool // provider.DeploymentKeyManager
 	RepoStats         bool // provider.RepoStatsManager
 	Users             bool // provider.UserManager

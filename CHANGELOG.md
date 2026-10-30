@@ -4,6 +4,42 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.9] - 2026-10-30
+
+### Added
+
+- **`provider.WebhookConfigManager`（跨平台可选能力，7 平台全实现）**——单个
+  webhook 的读取与更新（`GetWebhook`/`UpdateWebhook`），补齐核心
+  `WebhookManager`（create/delete/list 全平台本就有）缺的"查配置、改事件
+  订阅"面：
+  - `UpdateWebhookOptions` patch 语义（nil 字段不动），唯一例外是非 nil
+    `Events` 切片**全量替换**事件集（空切片=清空）——GitLab/Gitee/工蜂的
+    事件订阅是布尔标志位（省略=不变），增量表达不存在，故契约定义为全量、
+    实现侧显式置位（含 false）来落地"移除事件"；GitHub/GitCode 的 SDK 对
+    空 `Events` 带 `omitempty`（空切片上不了 wire，清空不可表达），登记
+    `DivergenceIgnore`；
+  - 平台词汇映射：secret 按平台落 key（GitHub `config.secret`/GitLab
+    `token`/Gitee `password`/工蜂 `token`/Gitea 家族 `config.secret`/
+    GitCode `secret`），事件派生 scope 与各家 create 完全一致（工蜂/
+    GitLab：push/MR/tag 三族）；secret 在所有平台均为只写，`GetWebhook`
+    永不回显；
+  - Gitea 家族经 `giteafamily` 引擎统一实现（`HookPort` 扩展
+    `GetRepoHook`/`EditRepoHook`）：两家 SDK 的 edit 端点都不回读 hook，
+    引擎 PATCH 后补一次 GET 水合，两平台观察语义一致；`GetRepoHook` 按家族
+    惯例回带 HTTP status 供 `IsNotFound` 分类（family 错误类型拍平状态码）；
+  - 契约套件新增 `WebhookConfigSuite`（get/update/404 分类三例，mock 按
+    "寻址到单个 hook 资源"路由，PATCH/PUT 动词漂移也会被抓住），`Harness`
+    新增 `WebhookConfig` 配置项，7 后端全部接线；GitHub/GitLab/Gitee/
+    GitCode/工蜂/Gitea 另各有 wire 级单测钉请求体形状（config 只在
+    URL/Secret 变更时挂载、标志位显式 false、password/token key 等）；
+  - `CapabilitySet` 新增 `WebhookConfig`，`contracttest` 双向漂移检查与
+    `provider` 派生同步扩展；README 能力矩阵补行。
+- **mcp: `webhooks` 工具集**——`list_webhooks`/`create_webhook`(写)/
+  `delete_webhook`(写) 走核心 `WebhookManager`（必有工具集），
+  `get_webhook`/`update_webhook`(写) 走 `WebhookConfigManager` 能力门控
+  （注册期断言，平台不支持则根本不挂载）；`update_webhook` 是 patch 语义
+  （至少给一个字段），README 工具面表同步。
+
 ## [0.99.8] - 2026-10-30
 
 ### Changed

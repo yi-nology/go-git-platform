@@ -70,6 +70,9 @@ func TestGitee_Contract(t *testing.T) {
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
 		},
+		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
+			GetResponse: `{"id":42,"url":"https://hooks.example/ci","push_events":true,"merge_requests_events":true}`,
+		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,

@@ -97,6 +97,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Reactions | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | `ReactionManager` |
 | BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `BranchProtectionManager` |
 | Collaborators | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
+| WebhookConfig | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `WebhookConfigManager` |
 | DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `DeploymentKeyManager` |
 | RepoStats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `RepoStatsManager` |
 | Users | — | ✅ | — | — | — | — | ✅ | `UserManager` |

@@ -39,6 +39,44 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	return convertWebhook(hook), nil
 }
 
+// GetWebhook implements provider.WebhookConfigManager.
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	hook, _, err := p.client.Webhooks.GetWebhook(ctx, owner+"/"+repo, int(webhookID))
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "GetWebhook", err)
+	}
+	return convertWebhook(hook), nil
+}
+
+// UpdateWebhook implements provider.WebhookConfigManager. 工蜂's edit
+// endpoint is boolean-flag based: omitted flags mean "unchanged", so a
+// non-nil Events slice must set every derived flag explicitly (true for
+// members, false for the rest) to express removal — mirroring the create
+// mapping's scope (push / merge-request / tag-push families).
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	editOpts := &gongfeng.EditWebhookOptions{}
+	if opts.URL != nil {
+		editOpts.URL = opts.URL
+	}
+	if opts.Secret != nil {
+		editOpts.Token = opts.Secret
+	}
+	if opts.Events != nil {
+		em := map[string]bool{}
+		for _, e := range opts.Events {
+			em[e] = true
+		}
+		editOpts.PushEvents = gongfeng.Ptr(em["push"])
+		editOpts.MergeRequestsEvents = gongfeng.Ptr(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
+		editOpts.TagPushEvents = gongfeng.Ptr(em["tag_push"] || em["tag"])
+	}
+	hook, _, err := p.client.Webhooks.EditWebhook(ctx, owner+"/"+repo, int(webhookID), editOpts)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateWebhook", err)
+	}
+	return convertWebhook(hook), nil
+}
+
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	pid := owner + "/" + repo
@@ -251,3 +289,4 @@ func mapGongfengIssueState(state string) provider.IssueState {
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)
+var _ provider.WebhookConfigManager = (*Provider)(nil)

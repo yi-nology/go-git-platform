@@ -86,6 +86,9 @@ func TestForgejo_Contract(t *testing.T) {
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
 		},
+		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
+			GetResponse: `{"id":42,"config":{"url":"https://hooks.example/ci"},"events":["push","pull_request"]}`,
+		},
 		DeployKeys: &contracttest.DeployKeysHarnessConfig{
 			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,
 			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,

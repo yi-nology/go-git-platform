@@ -28,6 +28,38 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
 }
 
+// GetWebhook implements provider.WebhookConfigManager.
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+	hook, err := p.client.GetWebhook(ctx, owner, repo, webhookID)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "GetWebhook", err)
+	}
+	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
+}
+
+// UpdateWebhook implements provider.WebhookConfigManager. The GitCode SDK's
+// update body is GitHub-shaped ([]string events, omitempty everything), so
+// nil provider fields map to omitted fields; a non-nil empty Events slice is
+// indistinguishable from "unchanged" on this wire (SDK omitempty) — see the
+// registered divergence.
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	sdkOpts := gitcode.UpdateWebhookOptions{}
+	if opts.URL != nil {
+		sdkOpts.URL = *opts.URL
+	}
+	if opts.Secret != nil {
+		sdkOpts.Secret = *opts.Secret
+	}
+	if len(opts.Events) > 0 {
+		sdkOpts.Events = opts.Events
+	}
+	hook, err := p.client.UpdateWebhook(ctx, owner, repo, webhookID, sdkOpts)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateWebhook", err)
+	}
+	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
+}
+
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	err := p.client.DeleteWebhook(ctx, owner, repo, webhookID)
@@ -312,3 +344,4 @@ func parseInt64(s string) (int64, error) {
 }
 
 var _ provider.WebhookManager = (*Provider)(nil)
+var _ provider.WebhookConfigManager = (*Provider)(nil)

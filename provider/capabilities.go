@@ -20,6 +20,7 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 	_, reactions := p.(ReactionManager)
 	_, branchProtections := p.(BranchProtectionManager)
 	_, collaborators := p.(CollaboratorManager)
+	_, webhookConfig := p.(WebhookConfigManager)
 	_, deployKeys := p.(DeploymentKeyManager)
 	_, repoStats := p.(RepoStatsManager)
 	_, users := p.(UserManager)
@@ -38,6 +39,7 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 		Reactions:         reactions,
 		BranchProtections: branchProtections,
 		Collaborators:     collaborators,
+		WebhookConfig:     webhookConfig,
 		DeployKeys:        deployKeys,
 		RepoStats:         repoStats,
 		Users:             users,

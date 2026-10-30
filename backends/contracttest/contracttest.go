@@ -76,6 +76,9 @@ type Harness struct {
 	BranchProtections *BranchProtectionsHarnessConfig
 	// Collaborators, when non-nil, auto-mounts the collaborator suite.
 	Collaborators *CollaboratorsHarnessConfig
+	// WebhookConfig, when non-nil, auto-mounts the single-webhook
+	// get/update suite (WebhookConfigManager — all seven backends).
+	WebhookConfig *WebhookConfigHarnessConfig
 	// Notes, when non-nil, auto-mounts the CR-note (merge-request note)
 	// read/edit suite — GitLab-family platforms where MR notes live in a
 	// separate iid namespace (GitHub-family: covered by IssueManager, no
@@ -120,6 +123,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("ReactionsSuite", func(t *testing.T) { testReactionsSuite(t, h) })
 	t.Run("BranchProtectionsSuite", func(t *testing.T) { testBranchProtectionsSuite(t, h) })
 	t.Run("CollaboratorsSuite", func(t *testing.T) { testCollaboratorsSuite(t, h) })
+	t.Run("WebhookConfigSuite", func(t *testing.T) { testWebhookConfigSuite(t, h) })
 	t.Run("NotesSuite", func(t *testing.T) { testNotesSuite(t, h) })
 	t.Run("DeployKeysSuite", func(t *testing.T) { testDeployKeysSuite(t, h) })
 	t.Run("RepoStatsSuite", func(t *testing.T) { testRepoStatsSuite(t, h) })
