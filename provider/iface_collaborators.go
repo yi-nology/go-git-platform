@@ -6,8 +6,11 @@ import "context"
 // an optional capability interface: consumers should gate on
 // Provider.Capabilities().Collaborators (or type-assert) before use.
 //
-// Platform support: GitHub, GitCode, Gitea, Forgejo, Gitee.
-// GitLab uses a Members API with different semantics (skip).
+// Platform support: GitHub, GitCode, GitLab, Gitea, Forgejo, Gitee,
+// TencentCode. GitLab-family platforms (GitLab, TencentCode) back this
+// with the project-members API: mutations resolve the username to a
+// numeric user ID first (TTL-cached), and the read/write/admin permission
+// vocabulary maps onto platform access levels (registered mappings).
 type CollaboratorManager interface {
 	// ListCollaborators returns all collaborators on a repository.
 	ListCollaborators(ctx context.Context, owner, repo string) ([]*Collaborator, error)

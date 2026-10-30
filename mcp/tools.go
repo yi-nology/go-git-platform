@@ -89,3 +89,14 @@ func add[In, Out any](s *mcp.Server, st *state, name, title, desc string, write 
 		return nil, out, nil
 	})
 }
+
+// ToolsetNames returns the toolset identifiers in registration order —
+// the authoritative list for CLI help text, so the flag docs cannot drift
+// from the registry.
+func ToolsetNames() []string {
+	names := make([]string, len(toolsets))
+	for i, ts := range toolsets {
+		names[i] = ts.name
+	}
+	return names
+}

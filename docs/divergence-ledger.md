@@ -29,6 +29,7 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
+| CollaboratorManager | AddCollaborator | opts.Permission | mapping | The read/write/admin vocabulary maps onto GitLab access levels (read→reporter, write→developer, admin→maintainer); GitLab's add-member endpoint has no platform default and rejects a missing access_level, so empty maps to developer. |
 | ReviewManager | ListReviews |  | mapping | GitLab has no per-review objects: approvals are summarized into one review per approver, each keyed by the MR IID because no per-approval IDs exist. |
 | ReviewManager | GetReview |  | mapping | Backed by the approval state; returns the first approver's synthesized review and reports NotFound when nobody has approved yet. |
 | ReviewManager | CreateReview | opts.Event, opts.CommitID, opts.Comments | mapping | A review is created as a merge-request note; verdicts and inline comments have no GitLab mapping, so every created review is in the commented state. |

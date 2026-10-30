@@ -93,6 +93,16 @@ func TestGitLab_Contract(t *testing.T) {
 		// Commit status fixtures: GitLab's commit-status shape
 		// (GET /projects/:id/repository/commits/:sha/statuses), a bare array
 		// where the state verb rides the "status" key and the context "name".
+		// Project members double as collaborators (GitLab family): the list
+		// serves the member shape, add/remove resolve the username through
+		// the users lookup (ID-addressed member API, registered mapping for
+		// the permission vocabulary). GitLab's lookup filter rides the
+		// query string on /users, so the member fixture doubles as the
+		// user payload — both decode as arrays.
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse:       `[{"id":7,"username":"dev","name":"Dev","access_level":30,"state":"active"}]`,
+			UserLookupResponse: `[{"id":7,"username":"dev","name":"Dev"}]`,
+		},
 		CommitStatus: &contracttest.CommitStatusHarnessConfig{
 			ListResponse: `[{"id":1,"sha":"deadbeef","ref":"main","status":"success","name":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z","finished_at":"2026-01-01T00:00:10Z","allow_failure":false,"coverage":87.5,"pipeline_id":10,"author":{"id":1,"username":"dev"}},{"id":2,"sha":"deadbeef","ref":"main","status":"pending","name":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z","allow_failure":false,"coverage":0,"pipeline_id":10,"author":{"id":1,"username":"dev"}}]`,
 		},

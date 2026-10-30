@@ -14,7 +14,8 @@
 //	              also accepted via GIT_PLATFORM_TOKEN when the flag is unset)
 //	--token-env   name of the environment variable holding the token
 //	--read-only   mount only read tools (recommended for untrusted agents)
-//	--toolsets    comma-separated subset: core,crs,issues,status,search,releases
+//	--toolsets    comma-separated subset (run with --help for the live
+//	              list; names come straight from the toolset registry)
 //	--http        serve streamable HTTP on this address (e.g. ":8080")
 //	              instead of stdio; the MCP endpoint lives at /mcp
 //	--http-token  require "Authorization: Bearer <token>" on the HTTP
@@ -73,7 +74,7 @@ func run() error {
 		tokenEnv  = flag.String("token-env", "GIT_PLATFORM_TOKEN", "environment variable holding the API token")
 		skipTLS   = flag.Bool("skip-tls", false, "skip TLS verification for self-hosted instances (not recommended)")
 		readOnly  = flag.Bool("read-only", false, "mount read tools only")
-		toolsets  = flag.String("toolsets", "", "comma-separated subset of core,crs,issues,status,search,releases (empty = all)")
+		toolsets  = flag.String("toolsets", "", "comma-separated subset of "+strings.Join(mcpserver.ToolsetNames(), ",")+" (empty = all)")
 		httpAddr  = flag.String("http", "", "serve streamable HTTP on this address (e.g. \":8080\") instead of stdio")
 		httpToken = flag.String("http-token", "", "require Authorization: Bearer <token> on the HTTP endpoint")
 	)

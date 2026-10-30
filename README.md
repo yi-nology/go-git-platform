@@ -96,7 +96,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Notifications | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `NotificationManager` |
 | Reactions | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | `ReactionManager` |
 | BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `BranchProtectionManager` |
-| Collaborators | ✅ | — | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
+| Collaborators | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
 | DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `DeploymentKeyManager` |
 | RepoStats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `RepoStatsManager` |
 | Users | — | ✅ | — | — | — | — | ✅ | `UserManager` |

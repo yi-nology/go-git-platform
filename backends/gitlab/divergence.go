@@ -6,6 +6,8 @@ import "github.com/yi-nology/go-git-platform/provider"
 // this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
+	{Capability: "CollaboratorManager", Method: "AddCollaborator", Field: "opts.Permission", Kind: provider.DivergenceMapping,
+		Reason: "The read/write/admin vocabulary maps onto GitLab access levels (read→reporter, write→developer, admin→maintainer); GitLab's add-member endpoint has no platform default and rejects a missing access_level, so empty maps to developer."},
 	{Capability: "ReviewManager", Method: "ListReviews", Kind: provider.DivergenceMapping,
 		Reason: "GitLab has no per-review objects: approvals are summarized into one review per approver, each keyed by the MR IID because no per-approval IDs exist."},
 	{Capability: "ReviewManager", Method: "GetReview", Kind: provider.DivergenceMapping,

@@ -105,6 +105,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Collaborators 的 Tencent 列转 ✅、平台缺席清单更正、CapabilitySet 计数
   13→17）。
 
+- **GitLab: `CollaboratorManager` 落地（能力矩阵补上最后一个 GitLab 空格）**——
+  项目成员 API 承载协作者增删查（与 TencentCode 同构：成员按数值 user ID
+  寻址，username 经 Users API 精确过滤解析 + TTL 缓存）；read/write/admin →
+  access level 映射登记 mapping（GitLab 加成员**无平台默认**、缺
+  access_level 直接 400，空权限映射为 developer）。`iface_collaborators.go`
+  平台支持注释同步更新；契约套件挂 Collaborators fixture（GitLab 的用户
+  过滤走 /users 的 query 参数，成员 fixture 兼作用户载荷）。`examples/
+  capabilities` 巡检程序为通用实现，自动覆盖新能力。主 README 矩阵同步。
+- **mcp: `--toolsets` 旗标帮助文本改为从注册表动态生成**（新增
+  `mcpserver.ToolsetNames()`）——toolset 名单不再可能与注册表漂移，
+  protection/collaborators 随之进入 `--help`。
+- **tencentcode: 批量助手端到端 wire 测试**——`provider.GetFileContents` /
+  `GetCRs` / `SetCommitStatuses`（oekit/concurrency 有界并发引擎）在工蜂
+  wire 上钉住：输入序保持、单条失败不扩散为批量失败、缺失文件按
+  per-item Err 呈现、状态批量按 2 次 POST 落线。
+
 ## [0.99.7] - 2026-10-26
 
 ### Fixed
