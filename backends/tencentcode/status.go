@@ -3,8 +3,8 @@ package tencentcode
 import (
 	"errors"
 
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 )
 
 // init registers TencentCODE's SDK error extractor: gongfeng's single

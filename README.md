@@ -479,7 +479,9 @@ if tc, ok := p.(*tencentcode.Provider); ok {
 可选能力 `provider.BranchProtectionManager`（分支保护规则 CRUD，7 个平台全实现）
 与 `provider.NoteManager`（MR 评论的改/全量列，GitLab 家族 MR 与 issue 注释
 分命名空间，同 gitlab backend），并按域暴露四组工蜂文档能力（官方 API 文档
-镜像随收编 SDK 存于 `backends/tencentcode/internal/gongfeng/docs/api/`）：
+镜像与 SDK 源码存于独立组件
+[go-gongfeng](https://github.com/yi-nology/go-gongfeng)（本仓 tencentcode
+backend 所依赖的工蜂 SDK，v0.1.0 起））：
 
 - **`provider.CollaboratorManager`**（跨平台可选能力，经 `Capabilities().Collaborators`
   声明）——项目成员管理，`read`/`write`/`admin` 词表映射工蜂 access level

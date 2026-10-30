@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 )
 
 // CreateWebhook implements provider.WebhookManager.

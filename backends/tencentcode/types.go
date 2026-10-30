@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 )
 
 func mapState(state string) provider.CRState {

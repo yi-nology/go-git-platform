@@ -44,6 +44,7 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yi-nology/go-gitcode v0.7.2 // indirect
+	github.com/yi-nology/go-gongfeng v0.1.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	gitlab.com/gitlab-org/api/client-go/v3 v3.18.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect

@@ -3,7 +3,7 @@ package tencentcode
 import (
 	"context"
 
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )

@@ -4,39 +4,50 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.99.8] - 2026-10-30
 
 ### Changed
 
-- **tencentcode: 收编工蜂 SDK，移除 `github.com/studyzy/gongfeng-sdk-go` 外部依赖**：
-  studyzy 上游删除了 v0.6.0 tag，外部引用不再可靠。SDK 源码（fork
-  `zy84338719/gongfeng-sdk-go` main 分支，Apache-2.0）整体收编进
-  `backends/tencentcode/internal/gongfeng/`，连同其单元测试与官方 API 文档镜像
-  （`docs/api/`）。fork 相对 v0.6.0 是一批"对齐官方文档"的修正，随收编生效：
-  - **Release 按 ID 寻址**（原 v0.6.0 按 tag 寻址是对 wire 的错误认知）：工蜂
-    release 端点只认数值 ID 且无按 tag 取单条的原生面，`GetReleaseByTag`/
-    `UpdateRelease`/`DeleteRelease` 改为先按 tag 扫 release 列表解析 ID（登记
-    detour，查不到报 `provider.ErrNotFound`）；release 载荷为 `id`/`tag`/
-    `title`/`description`（无 GitHub 式 `tag_name`/`name`），契约套件的工蜂
-    fixture 据此修正，`CreateRelease` 现映射 `Title`，`Target`/`Draft`/
-    `Prerelease` 登记忽略。
-  - **路径修正**：commit status 列表/查询去掉 `repository/` 前缀
-    （`commits/{sha}/statuses`）、MR commits 与 changed files 走
-    `merge_request/{id}/…`（原 v0.6.0 路径与官方文档不符）。
-  - **移除官方 API 不存在的端点**（`SearchProjects`/`DeleteIssue`，本仓无调用点）、
-    webhook 增加 `review_events`/`token` 字段、分支保护/MR 创建 options 补齐
-    官方字段（labels、necessary_reviewers、approver_rule 等）、时间解析兼容
-    `+0000` 偏移格式。
-  - 唯一新增直接依赖 `github.com/google/go-querystring`（原就是两模块共有的
-    间接依赖，收编后转 direct）；`mcp` 子模块的 studyzy 间接依赖一并消失。
-- **收编工蜂 SDK 的 oekit 适配层**（`internal/gongfeng`，偏离已在目录 README
-  登记，升级 fork 时需重新套用）：
+- **tencentcode: 工蜂 SDK 抽离为独立组件
+  [go-gongfeng v0.1.0](https://github.com/yi-nology/go-gongfeng)，本仓改为
+  依赖 `github.com/yi-nology/go-gongfeng`**（工蜂逻辑单独成库，架构对齐
+  go-gitcode 等姊妹 SDK 模式；本发布周期内曾短暂以收编目录承载，同周期内
+  被抽离取代）：
+  - go-gongfeng 承载工蜂 SDK 全量源码、单元测试与官方 API 文档镜像
+    （22 个能力域），lineage：studyzy v0.6.0（上游已删 tag）→
+    zy84338719/gongfeng-sdk-go 文档对齐修正 → 本组件（oekit 适配层）；
+  - SDK 的日志注入改为其**自有最小 kv 风格 `Logger` 接口**（4 方法，默认
+    noop，与 `oekit/logx` 及本仓 `provider.Logger` 结构兼容，注入零适配），
+    打断 SDK → 本仓的依赖方向（SDK 是最底层，不得反向依赖 adapter）；
+  - 后端 17 个文件 import 切换 + `go get @v0.1.0`，收编目录删除；对
+    0.99.7 的净依赖变化：`studyzy/gongfeng-sdk-go v0.6.0` →
+    `yi-nology/go-gongfeng v0.1.0`；
+  - **wire 修正随组件对本仓生效**（fork 相对 v0.6.0 的"对齐官方文档"批次，
+    均有真实环境集成测试背书）：
+    - **Release 按 ID 寻址**（原 v0.6.0 按 tag 寻址是对 wire 的错误认知）：
+      工蜂 release 端点只认数值 ID 且无按 tag 取单条的原生面，
+      `GetReleaseByTag`/`UpdateRelease`/`DeleteRelease` 改为先按 tag 扫
+      release 列表解析 ID（登记 detour，查不到报 `provider.ErrNotFound`）；
+      release 载荷为 `id`/`tag`/`title`/`description`（无 GitHub 式
+      `tag_name`/`name`），契约套件的工蜂 fixture 据此修正，
+      `CreateRelease` 现映射 `Title`，`Target`/`Draft`/`Prerelease` 登记
+      忽略。
+    - **路径修正**：commit status 列表/查询去掉 `repository/` 前缀
+      （`commits/{sha}/statuses`）、MR commits 与 changed files 走
+      `merge_request/{id}/…`（原 v0.6.0 路径与官方文档不符）。
+    - **移除官方 API 不存在的端点**（`SearchProjects`/`DeleteIssue`，本仓
+      无调用点）、webhook 增加 `review_events`/`token` 字段、分支保护/MR
+      创建 options 补齐官方字段（labels、necessary_reviewers、
+      approver_rule 等）、时间解析兼容 `+0000` 偏移格式。
+- **工蜂 SDK 的 oekit 适配层**（随组件迁入 go-gongfeng，偏离已在其 README
+  登记，升级上游时需重新套用）：
   - 错误面走 oekit/pkg errors：带格式构造（含 `%w`）转 `oekiterrors.Errorf`
     （setBaseURL / parseID / Time.UnmarshalJSON），静态错误转 `oekiterrors.New`；
-  - 日志注入：`Client` 增加可选 `provider.Logger`（kv 风格，默认 noop），经
-    `WithLogger` 注入；`Do` 记录请求 debug 行（method/path/status/耗时）与
-    失败 error 行；tencentcode 后端默认把 `Config.Logger` 接进来，oekit 生态
-    消费方经 `provider.NewLogxLogger("gongfeng")` 观测 SDK 请求流；
+  - 日志注入：`Client` 增加可选日志出口（SDK 自有最小 kv 风格 `Logger`
+    接口，默认 noop，与 `provider.Logger`/logx 结构兼容），经 `WithLogger`
+    注入；`Do` 记录请求 debug 行（method/path/status/耗时）与失败 error 行；
+    tencentcode 后端默认把 `Config.Logger` 接进来，oekit 生态消费方经
+    `provider.NewLogxLogger` 观测 SDK 请求流；
   - 并发约定成文：SDK 保持无 goroutine 的同步设计，有界并发由 provider 批量
     引擎（`provider.GetFileContents` / `GetCRs` / `SetCommitStatuses`，
     oekit/concurrency syncx.FanInLimitCtx 驱动）承担——tencentcode 后端因此

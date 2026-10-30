@@ -39,7 +39,7 @@ import (
 	"strings"
 	"time"
 
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	gongfeng "github.com/yi-nology/go-git-platform/backends/tencentcode/internal/gongfeng"
 	"github.com/yi-nology/go-git-platform/provider"
+	gongfeng "github.com/yi-nology/go-gongfeng"
 )
 
 // TencentCodeExtras exposes Tencent 工蜂-specific capabilities that are not
