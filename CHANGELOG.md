@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.10] - 2026-10-31
+
+### Fixed
+
+- **provider: 伪翻页无进展检测**（`EachBounded`/`Each`/`Collect*` 单一迭代器）——
+  与上一页逐值相同的页视为服务器未推进分页（实测 Forgejo 15.0.1 评论列表忽略
+  `page` 参数、每页返回同一批全量数据），按"已到列表末尾"软收手并**返回已收集
+  数据**；此前同页重复会一路翻到 `ErrPageBudgetExceeded` 报错、数据整体丢弃
+  （调用方如 argus 的报告扫描被逼进"新建评论"降级，总结评论碎片化）。首页即
+  全量（这正是服务器无法分页的原因），截断风险仅存在于"忽略 page 但遵守
+  limit"的服务器形态，此时首页数据也优于整体报错。`ErrPageBudgetExceeded`
+  语义收窄为真超长列表越界；`backendutil.AllPages` 随单一迭代器同步受益，
+  回归用例改钉软收手语义（首页数据 + 两次 fetch 判停）。
+
 ## [0.99.9] - 2026-10-30
 
 ### Added

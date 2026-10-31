@@ -70,9 +70,46 @@ func TestEachPropagatesFetchError(t *testing.T) {
 	}
 }
 
-func TestEachBoundedBudgetExceeded(t *testing.T) {
+// 伪翻页无进展检测（Forgejo 15 实测形态：忽略 page 参数、每页返回同一批
+// 全量数据）：同页重复即按到尾收手，已收集数据保留、不报错不重复。
+func TestEachBoundedNoProgressStops(t *testing.T) {
+	var fetches int
+	var items []int
 	err := EachBounded(context.Background(), func(_ context.Context, _ int) ([]int, error) {
-		return []int{1}, nil // platform ignores the page parameter
+		fetches++
+		return []int{1, 2}, nil // platform ignores the page parameter
+	}, 50, func(item int) error {
+		items = append(items, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("no-progress 应软收手不报错: %v", err)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetches = %d, want 2（首页 + 重复页判停）", fetches)
+	}
+	if len(items) != 2 || items[0] != 1 || items[1] != 2 {
+		t.Fatalf("items = %v, want [1 2]（重复页不重复消费）", items)
+	}
+}
+
+// Collect 同口径：伪翻页返回首页数据（即全量），nil error。
+func TestCollectNoProgressReturnsData(t *testing.T) {
+	got, err := CollectBounded(context.Background(), func(_ context.Context, _ int) ([]int, error) {
+		return []int{7, 8}, nil
+	}, 5)
+	if err != nil {
+		t.Fatalf("CollectBounded: %v", err)
+	}
+	if len(got) != 2 || got[0] != 7 || got[1] != 8 {
+		t.Fatalf("got = %v, want [7 8]", got)
+	}
+}
+
+// 真超长列表（每页不同）仍走预算哨兵——无进展检测不得吞掉真实越界。
+func TestEachBoundedBudgetExceeded(t *testing.T) {
+	err := EachBounded(context.Background(), func(_ context.Context, page int) ([]int, error) {
+		return []int{page}, nil // 页页不同 = 真在推进
 	}, 3, func(int) error { return nil })
 	if !errors.Is(err, ErrPageBudgetExceeded) {
 		t.Fatalf("err = %v, want ErrPageBudgetExceeded", err)
