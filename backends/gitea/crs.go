@@ -1,6 +1,7 @@
 package gitea
 
 import (
+	"fmt"
 	"context"
 	"strconv"
 
@@ -75,6 +76,16 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 		Title:                  opts.MergeCommitMessage,
 		DeleteBranchAfterMerge: &deleteBranch,
 	})
+	// go-gitea 对部分非 2xx（如空 diff PR 的 405 "Please try again later"）不置 err，
+	// 只看 err 会把"未合并"当成功返回，上层状态机谎报 MERGED（下游实测）。
+	// 统一兜底：非 2xx 一律转错误，交由下面的 405 恢复分支/错误路径处理。
+	status := 0
+	if resp != nil && resp.Response != nil {
+		status = resp.Response.StatusCode
+	}
+	if err == nil && status/100 != 2 {
+		err = fmt.Errorf("merge pull request: HTTP %d", status)
+	}
 	if err != nil {
 		// Gitea returns 405 when the PR is already merged; recover gracefully.
 		if resp != nil && resp.StatusCode == 405 {
