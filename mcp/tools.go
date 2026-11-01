@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/backends/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -18,6 +20,7 @@ const (
 	toolsetProtect  = "protection"    // branch protection read/converge/delete
 	toolsetCollab   = "collaborators" // repository member management
 	toolsetWebhooks = "webhooks"      // webhook CRUD (+ single get/update where supported)
+	toolsetTC       = "tencentcode"   // 工蜂-native workflow (code reviews, subscriptions, global listings)
 )
 
 // defaultPerPage is the page size used when a tool caller leaves per_page
@@ -45,12 +48,19 @@ var toolsets = []toolset{
 	// unconditionally; get_webhook/update_webhook additionally gate on the
 	// WebhookConfigManager capability at registration time.
 	{name: toolsetWebhooks, enabled: func(p provider.Provider) bool { _, ok := p.(provider.WebhookManager); return ok }, registered: registerWebhooks},
+	// 工蜂-native extras: mounts only when the concrete provider implements
+	// tencentcode.TencentCodeExtras (every other platform skips it).
+	{name: toolsetTC, enabled: func(p provider.Provider) bool {
+		_, ok := p.(tencentcode.TencentCodeExtras)
+		return ok
+	}, registered: registerTencentCode},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
 	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
 	toolsetProtect: true, toolsetCollab: true, toolsetWebhooks: true,
+	toolsetTC: true,
 }
 
 // perPage resolves the per_page tool parameter with the default fallback.

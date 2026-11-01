@@ -23,6 +23,7 @@ AI agent 可直接调用的工具面。
 | `protection`(需 BranchProtections) | `list_branch_protections` `get_branch_protection` `ensure_branch_protection`(写,幂等收敛) `delete_branch_protection`(写) |
 | `collaborators`(需 Collaborators) | `list_collaborators` `add_collaborator`(写) `remove_collaborator`(写) |
 | `webhooks`(必有) | `list_webhooks` `create_webhook`(写) `delete_webhook`(写) `get_webhook`(需 WebhookConfig) `update_webhook`(写,需 WebhookConfig;patch 语义,非 nil 字段才更新,events 为全量替换) |
+| `tencentcode`(仅工蜂,需 TencentCodeExtras) | `list_code_reviews` `get_code_review` `create_code_review`(写) `submit_code_review`(写,event 词表边界校验) `reopen_code_review`(写) `list_user_issues`(跨项目) `list_milestone_issues` `get/set_issue_subscription`(写) `get/set_mr_subscription`(写) |
 
 上下文经济设计(承接 [github/github-mcp-server] 的 toolset 实践):
 

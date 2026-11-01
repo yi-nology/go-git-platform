@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.99.11] - 2026-11-01
 
 ### Added
 
@@ -26,7 +26,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **归档下载 ×2**——`DownloadMergeRequestChangedFiles`（
     `merge_request/{id}/changed_files`）与 `DownloadCommitReviewChangedFiles`
     （`review/{id}/changed_files`），流式写调用方 writer；
-  - wire 测试 ×3 钉请求形状（订阅路径动词表、全局列表 query、归档流回读）。
+  - wire 测试 ×3 钉请求形状（订阅路径动词表、全局列表 query、归档流回读）；
+- **mcp: 新增 `tencentcode` 工具集**（仅工蜂挂载，注册期断言
+  `tencentcode.TencentCodeExtras`）——工蜂原生工作流面向 agent 开放：原生
+  代码评审五件套（list/get/create/submit/reopen，submit 的 verdict 词表
+  approve|comment|require_change|deny 在工具边界校验）、跨项目
+  `list_user_issues`、`list_milestone_issues`、issue/MR 订阅四件套
+  （get/set ×2；set 合并订/退订为 `subscribed` 布尔参数）；只读模式丢全部
+  写工具，其余平台永远看不到该工具集；mcp README 工具面表同步。
+
+### Changed
+
+- **deps: go-gongfeng v0.2.0 → v0.2.1**——重试耗尽哨兵接线（`Do` 预算耗尽
+  现按契约返回 "retries exhausted" 包装，cause 链保留、错误分类不受影响）
+  + examples/quickstart + 选项/错误面补测；本仓无消费点变化（后端不消费
+  SDK 重试），纯依赖跟进。
 
 ## [0.99.10] - 2026-10-31
 
