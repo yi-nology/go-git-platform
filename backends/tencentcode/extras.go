@@ -71,6 +71,50 @@ type TencentCodeExtras interface {
 	AddProtectedBranchMember(ctx context.Context, owner, repo, branch string, opts ProtectedBranchMemberOptions) error
 	UpdateProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int, opts ProtectedBranchMemberOptions) error
 	RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error
+
+	// --- Subscriptions (issue/MR watch; 工蜂-native, no cross-platform
+	// counterpart) ---
+	// GetIssueSubscription reports whether the authenticated user watches
+	// an issue.
+	GetIssueSubscription(ctx context.Context, owner, repo string, issueID int) (bool, error)
+	SubscribeIssue(ctx context.Context, owner, repo string, issueID int) error
+	UnsubscribeIssue(ctx context.Context, owner, repo string, issueID int) error
+	// GetMRSubscription/SubscribeMR/UnsubscribeMR manage MR watch state;
+	// unlike issues, 工蜂's MR subscribe endpoints echo the resulting
+	// subscribed flag, so the mutations return it.
+	GetMRSubscription(ctx context.Context, owner, repo string, mrNumber int) (bool, error)
+	SubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error)
+	UnsubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error)
+
+	// --- Cross-project & milestone issue listings ---
+	// ListUserIssues lists issues across all projects visible to the
+	// authenticated user (工蜂's global /issues endpoint) — the project-
+	// scoped provider.IssueManager.ListIssues has no cross-project mode.
+	ListUserIssues(ctx context.Context, opts ListUserIssuesOptions) ([]*provider.Issue, error)
+	// ListMilestoneIssues lists the issues of one milestone (caller-driven
+	// single page; page 0 = first page).
+	ListMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int, page, perPage int) ([]*provider.Issue, error)
+
+	// --- Archive downloads (MR / native code review variants of
+	// DownloadCompareChangedFiles) ---
+	// DownloadMergeRequestChangedFiles streams a zip of one MR's changed
+	// files.
+	DownloadMergeRequestChangedFiles(ctx context.Context, owner, repo string, mrNumber int, w io.Writer) error
+	// DownloadCommitReviewChangedFiles streams a zip of one native code
+	// review's changed files.
+	DownloadCommitReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int, w io.Writer) error
+}
+
+// ListUserIssuesOptions carries the filters of the global issue listing.
+type ListUserIssuesOptions struct {
+	// State filters by resolve state ("" = all; "opened"/"closed" in 工蜂's
+	// vocabulary — the provider's open maps onto "opened").
+	State string
+	// Labels is a comma-separated label-name filter.
+	Labels string
+	// Page/PerPage are caller-driven pagination (page 0 = first page).
+	Page    int
+	PerPage int
 }
 
 // BranchInfo is a single branch with its head commit and protection flag.

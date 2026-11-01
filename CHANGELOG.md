@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **tencentcode: `TencentCodeExtras` 补齐工蜂工作流面**（SDK 已有、后端未暴露
+  的最后一批中价值端点）：
+  - **订阅族 ×6**——issue/MR 的 watch 状态查/订/退订（`GetIssueSubscription`/
+    `SubscribeIssue`/`UnsubscribeIssue`、`GetMRSubscription`/`SubscribeMR`/
+    `UnsubscribeMR`）。wire 词汇：issue 读取返回裸 bool，订阅/退订是独立 PUT
+    路径（`/issues/{id}/subscribe` 与 `/unsubscribe`）；MR 读取/订阅共用
+    `/merge_request/{id}/subscribe`（退订为独立 `/unsubscribe` PUT），三个 MR
+    变更都回显 `{"subscribed":b}`，方法签名 accordingly 返回 bool；
+  - **跨项目全局 issue 列表** `ListUserIssues`（工蜂全局 `/issues` 端点，
+    `ListUserIssuesOptions` 支持 State/Labels/Page/PerPage；provider 的
+    open 词表映射工蜂 `opened`，复用 `convertIssue`）——项目域的
+    `provider.IssueManager.ListIssues` 没有跨项目模式；
+  - **里程碑关联 issue 列表** `ListMilestoneIssues`（caller 驱动单页；里程碑
+    线型是无里程碑回引的瘦身 Issue、单一 assignee，`convertMilestoneIssue`
+    映射）；
+  - **归档下载 ×2**——`DownloadMergeRequestChangedFiles`（
+    `merge_request/{id}/changed_files`）与 `DownloadCommitReviewChangedFiles`
+    （`review/{id}/changed_files`），流式写调用方 writer；
+  - wire 测试 ×3 钉请求形状（订阅路径动词表、全局列表 query、归档流回读）。
+
 ## [0.99.10] - 2026-10-31
 
 ### Fixed

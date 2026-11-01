@@ -498,6 +498,11 @@ backend 所依赖的工蜂 SDK，v0.1.0 起））：
   （GetRawFile 及其 commit 作用域变体 GetCommitRawFile）、compare 变更文件集
   zip 下载。SDK 请求流的调试日志经 `Config.Logger` 输出（oekit 生态传
   `provider.NewLogxLogger("gongfeng")`）。
+- 工作流扩展也挂在 `TencentCodeExtras`：issue/MR 订阅（watch 状态查/订/退订，
+  MR 侧变更回显 subscribed）、跨项目全局 issue 列表（ListUserIssues，工蜂全局
+  /issues 端点）、里程碑关联 issue 列表（ListMilestoneIssues）、MR 与原生代码
+  评审的变更文件集 zip 下载（DownloadMergeRequestChangedFiles /
+  DownloadCommitReviewChangedFiles）。
 
 ## 已知限制
 
