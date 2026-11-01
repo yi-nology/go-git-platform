@@ -2,6 +2,7 @@ package giteafamily
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -182,6 +183,12 @@ func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 		Title:                  opts.MergeCommitMessage,
 		DeleteBranchAfterMerge: &deleteBranch,
 	})
+	// go-gitea 等客户端对部分非 2xx（如空 diff PR 的 405 "Please try again later"）
+	// 不置 err，仅凭 err 判断会把"未合并"当成功返回，上层状态机谎报 MERGED。
+	// 统一兜底：非 2xx 一律转为错误，交给下面的 405 恢复分支/错误路径处理。
+	if err == nil && status/100 != 2 {
+		err = fmt.Errorf("merge pull request: HTTP %d", status)
+	}
 	if err != nil {
 		if status == 405 {
 			cr, getErr := GetCR(ctx, f, c, owner, repo, number)
