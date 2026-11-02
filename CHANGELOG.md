@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.100.1] - 2026-11-02
+
+### Fixed
+
+- **giteafamily: `MergeCR` 把非 2xx 当成功**（#30，by @zy84338719）——
+  go-gitea 的 `MergePullRequest` 走 `getStatusCode`，非 2xx 返回
+  `(status, nil)`；空 diff PR 的 405（"Please try again later"）此前
+  会漏过 `err != nil` 判断、落到末尾 `return GetCR(...)`，调用方拿到
+  open 状态的 CR 且无错误——上层状态机谎报 MERGED。现补非 2xx 兜底转
+  错误，插在 405 恢复分支之前：已合并 PR 的 405 幂等恢复语义不变；
+  附 3 个单测钉住（非 2xx 必败 / 405 已合并可恢复 / 2xx 成功）。
+  合并后规范跟进：错误构造按规则一改走 `oekiterrors.Errorf`。
+
 ## [0.100.0] - 2026-11-02
 
 0.x 序列的第 100 个 minor。本版以依赖线收口为主，无 API 变化；主仓自
