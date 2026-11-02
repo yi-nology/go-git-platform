@@ -202,18 +202,6 @@ func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {
 	}
 }
 
-func convertDeployKey(k *gitcode.DeployKey) *provider.DeployKey {
-	if k == nil {
-		return nil
-	}
-	return &provider.DeployKey{
-		ID:       k.ID,
-		Title:    k.Title,
-		Key:      k.Key,
-		ReadOnly: k.ReadOnly,
-	}
-}
-
 func convertNotification(t *gitcode.NotificationThread) *provider.Notification {
 	n := &provider.Notification{
 		ID:     strconv.FormatInt(t.ID, 10),
@@ -237,25 +225,6 @@ func convertNotification(t *gitcode.NotificationThread) *provider.Notification {
 	}
 	n.UpdatedAt = t.UpdatedAt
 	return n
-}
-
-func convertReactions(in []*gitcode.Reaction) []*provider.Reaction {
-	out := make([]*provider.Reaction, 0, len(in))
-	for _, r := range in {
-		out = append(out, convertReaction(r))
-	}
-	return out
-}
-
-func convertReaction(r *gitcode.Reaction) *provider.Reaction {
-	if r == nil {
-		return nil
-	}
-	return &provider.Reaction{
-		ID:    r.ID,
-		Emoji: r.Content,
-		User:  convertUser(r.User),
-	}
 }
 
 func convertCollaborator(c *gitcode.Collaborator) *provider.Collaborator {

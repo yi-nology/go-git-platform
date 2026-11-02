@@ -4,6 +4,53 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.101.0] - 2026-11-03
+
+### Changed（breaking：gitcode 平台能力面收缩）
+
+- **deps: go-gitcode v0.8.0 → v0.13.0**（SDK 四轮 wire 纠偏：v0.9 删虚构
+  org hooks、v0.10 Actions 重写 v8、v0.11 Enterprise 重写 v8、v0.12/13
+  sitemap 全量 diff 纠偏 + live 探针回滚拼写）。
+
+### Fixed（live 实证驱动的 gitcode 能力收缩）
+
+以有效 token 对真实服务只读探针（真实仓库/真实 commit SHA/真实 issue，
+文档化对照端点同轮 200 证实方法有效，证据存档于 gitcode_api
+docs/wire-provenance.md）后，移除 gitcode 后端对死路由的能力宣称：
+
+- **CommitStatusManager 摘除**（`CreateCommitStatus`/`ListCommitStatuses`
+  方法删除）——`/repos/{o}/{r}/statuses/{sha}` 404；`Capabilities()
+  .CommitStatuses` 不再为真，mcp `status` 工具集对 gitcode 自动隐藏
+  （工具注册按能力断言门控，README 门控语义不变）；
+- **ReactionManager 摘除**（reactions.go 整文件）——issue/评论/PR
+  reactions 路由全 404（连文档形的 user-reactions 也 404）；
+- **DeployKeyManager 摘除**（deploy_keys.go 整文件）——`/keys` 404；
+- **GetArchive 改 ErrNotImplemented**——archive 三种路径形式全 404；
+  ReleaseManager 是整包接口（releases 族全部存活），方法保留但显式
+  stub，`provider.IsNotImplemented` 可判；
+- **NotificationManager 全局半边改 ErrNotImplemented**——全局
+  /notifications 与 threads 路由 404，仓库域（文档化 + live 200）保留；
+  接口是整包设计，全局三方法显式 stub。
+
+契约套件同步（AGENTS.md 规则二，提交内含论证）：NotificationsHarness
+新增 `GlobalUnsupported` 旋钮——置位时全局三方法断言
+`IsNotImplemented`、仓库域断言保持绿（整包接口的"半边能力"从此有了
+机器可读表达）；gitcode harness 摘除 CommitStatus/Reactions/DeployKeys
+夹具、Notifications 夹具置位旋钮并修正 id 类型（int64）。新增三个线测
+钉死：GetArchive ErrNotImplemented、CommitStatus 能力不宣称、
+Reactions/DeployKeys 不再实现。
+
+divergence 台账新增 4 条 DivergenceStub（GetArchive + 全局通知三方法），`docs/divergence-ledger.md` 再生成。mcp 模块 tidy 跟随。
+
+### Migration notes（gitcode 平台）
+
+- 依赖 `Capabilities().CommitStatuses/Reactions/...` 做发现的调用方：
+  gitcode 现在返回 false（此前宣称但线上必 404——虚假可用性比诚实的
+  不可用更危险）；
+- 直接类型断言 `provider.CommitStatusManager`/`ReactionManager` 的调用
+  方：对 gitcode 断言会失败，属预期；
+- `GetArchive` 与全局通知三方法：改判 `provider.IsNotImplemented(err)`。
+
 ## [0.100.2] - 2026-11-02
 
 ### Fixed

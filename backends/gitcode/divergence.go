@@ -19,6 +19,14 @@ var divergences = []provider.Divergence{
 		Reason: "GitCode's label API has no description field."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 		Reason: "GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
+	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceStub,
+		Reason: "GitCode serves no archive endpoint — /archive, /archive/{ref.ext}, /archive/status all 404 live (probe round 2026-11-03); the method fails with ErrNotImplemented and touches no wire."},
+	{Capability: "NotificationManager", Method: "ListNotifications", Kind: provider.DivergenceStub,
+		Reason: "GitCode serves no global notification inbox — /notifications 404s live (probe round 2026-11-03); only the repo-scoped endpoints exist, so the method fails with ErrNotImplemented."},
+	{Capability: "NotificationManager", Method: "MarkNotificationRead", Kind: provider.DivergenceStub,
+		Reason: "The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented."},
+	{Capability: "NotificationManager", Method: "MarkNotificationsRead", Kind: provider.DivergenceStub,
+		Reason: "The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented."},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

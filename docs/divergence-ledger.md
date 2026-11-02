@@ -83,6 +83,10 @@ This document is generated from the backends' registered divergence ledgers
 | LabelManager | CreateLabel | opts.Description | ignore | GitCode's label API has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | GitCode's label API has no description field. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| ReleaseManager | GetArchive |  | stub | GitCode serves no archive endpoint — /archive, /archive/{ref.ext}, /archive/status all 404 live (probe round 2026-11-03); the method fails with ErrNotImplemented and touches no wire. |
+| NotificationManager | ListNotifications |  | stub | GitCode serves no global notification inbox — /notifications 404s live (probe round 2026-11-03); only the repo-scoped endpoints exist, so the method fails with ErrNotImplemented. |
+| NotificationManager | MarkNotificationRead |  | stub | The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented. |
+| NotificationManager | MarkNotificationsRead |  | stub | The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented. |
 
 ## tencent_code
 

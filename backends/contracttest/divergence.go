@@ -98,7 +98,37 @@ func dispatchDivergenceCall(p provider.Provider, capability, method string) (boo
 			return true, nil
 		}
 		return true, csm.CreateCommitStatus(ctx, "owner", "repo", "deadbeef", provider.CommitStatusOptions{State: "pending"})
+	case "ReleaseManager.GetArchive":
+		rm, ok := p.(provider.ReleaseManager)
+		if !ok {
+			return true, nil
+		}
+		_, err := rm.GetArchive(ctx, "owner", "repo", "v1.0.0", "zip")
+		return true, err
+	case "NotificationManager.ListNotifications",
+		"NotificationManager.MarkNotificationRead",
+		"NotificationManager.MarkNotificationsRead":
+		return dispatchNotificationDivergenceCall(p, capability, method, ctx)
 	default:
 		return false, nil
 	}
+}
+
+// dispatchNotificationDivergenceCall serves the NotificationManager stub
+// cases; split out to keep dispatchDivergenceCall's branch budget flat.
+func dispatchNotificationDivergenceCall(p provider.Provider, capability, method string, ctx context.Context) (bool, error) {
+	nm, ok := p.(provider.NotificationManager)
+	if !ok {
+		return true, nil
+	}
+	switch capability + "." + method {
+	case "NotificationManager.ListNotifications":
+		_, err := nm.ListNotifications(ctx, provider.ListNotificationsOptions{})
+		return true, err
+	case "NotificationManager.MarkNotificationRead":
+		return true, nm.MarkNotificationRead(ctx, "1")
+	case "NotificationManager.MarkNotificationsRead":
+		return true, nm.MarkNotificationsRead(ctx, provider.MarkNotificationsOptions{})
+	}
+	return false, nil
 }

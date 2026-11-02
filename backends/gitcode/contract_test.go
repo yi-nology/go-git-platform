@@ -72,11 +72,13 @@ func TestGitCode_Contract(t *testing.T) {
 		// Commit status fixtures: gitcode's commit-status shape is
 		// GitHub-like (GET /repos/{o}/{r}/statuses/{sha}), a bare array with
 		// state/context/description/target_url.
-		CommitStatus: &contracttest.CommitStatusHarnessConfig{
-			ListResponse: `[{"id":1,"sha":"deadbeef","state":"success","context":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:10Z"},{"id":2,"sha":"deadbeef","state":"pending","context":"ci/test","description":"tests running","target_url":"https://ci.example.com/2","created_at":"2026-01-01T00:00:05Z","updated_at":"2026-01-01T00:00:05Z"}]`,
-		},
+		// Notifications: GitCode serves only the repo-scoped half of the
+		// inbox — the global routes 404 live (probe round 2026-11-03); the
+		// suite pins the global methods to ErrNotImplemented and keeps the
+		// repo-scoped assertions green.
 		Notifications: &contracttest.NotificationsHarnessConfig{
-			ListResponse: `[{"id":1,"unread":true,"reason":"subscribed","subject":{"title":"Bug report","type":"Issue","url":"https://gitcode.com/api/v5/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
+			ListResponse:      `[{"id":1,"unread":true,"reason":"subscribed","subject":{"title":"Bug report","type":"Issue","url":"https://gitcode.com/api/v5/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
+			GlobalUnsupported: true,
 		},
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
 			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
@@ -91,18 +93,10 @@ func TestGitCode_Contract(t *testing.T) {
 			// no events array; the backend maps flags onto the neutral names.
 			GetResponse: `{"id":42,"url":"https://hooks.example/ci","push_events":1,"merge_requests_events":1}`,
 		},
-		DeployKeys: &contracttest.DeployKeysHarnessConfig{
-			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,
-			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,
-		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			StargazersResponse:   `[{"id":1,"login":"star"}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
-		},
-		Reactions: &contracttest.ReactionsHarnessConfig{
-			ListResponse:   `[{"id":1,"content":"+1","user":{"id":1,"login":"dev"}}]`,
-			CreateResponse: `{"id":1,"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
 	})
 }

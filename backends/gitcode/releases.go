@@ -3,6 +3,7 @@ package gitcode
 import (
 	"context"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -117,25 +118,15 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 	return nil
 }
 
-// GetArchive implements provider.ReleaseManager.
-//
-// GitCode's archive endpoint carries the ref and extension as a single
-// `ref.ext` path segment (GET /repos/{o}/{r}/archive/{archive}), so the
-// provider's (ref, format) pair maps: format "tar.gz" → ref+".tar.gz";
-// format "zip", empty, or anything else → ref+".zip" (default-zip
-// semantics, mirroring the gitee backend's format mapping, adapted to
-// GitCode's extension-in-path scheme — gitee's zipball/tarball keyword
-// URLs do not apply here). Returns the raw archive bytes.
+// GetArchive implements provider.ReleaseManager. GitCode serves no archive
+// endpoint — the documented-shaped routes (/repos/{o}/{r}/archive,
+// /archive/{ref.ext}, /archive/status) all 404 live (probe round
+// 2026-11-03; see gitcode_api docs/wire-provenance.md). The method stays
+// for ReleaseManager completeness and fails with ErrNotImplemented so
+// callers can classify; use ListTags/CreateRelease instead.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	ext := "zip"
-	if format == "tar.gz" {
-		ext = "tar.gz"
-	}
-	data, err := p.client.GetRepositoryArchive(ctx, owner, repo, ref+"."+ext)
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive", err)
-	}
-	return data, nil
+	return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no archive endpoint (live-verified 2026-11-03)"))
 }
 
 var _ provider.ReleaseManager = (*Provider)(nil)

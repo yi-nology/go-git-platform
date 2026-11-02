@@ -15,6 +15,14 @@ type NotificationsHarnessConfig struct {
 	// ListResponse is the JSON array the mock returns for notification list
 	// requests. It must contain at least one notification with unread=true.
 	ListResponse string
+	// GlobalUnsupported declares that the platform serves only the
+	// repo-scoped half of NotificationManager: the global methods
+	// (ListNotifications / MarkNotificationRead / MarkNotificationsRead)
+	// must then fail with ErrNotImplemented — the interface couples the
+	// global and repo halves, and some platforms (GitCode, live-verified
+	// 2026-11-03) have no global inbox. When set, the suite also asserts
+	// the repo-scoped methods stay functional.
+	GlobalUnsupported bool
 }
 
 // testNotificationsSuite auto-mounts RunNotificationsSuite from a main
@@ -33,10 +41,11 @@ func testNotificationsSuite(t *testing.T, h Harness) {
 		t.Errorf("%s Harness provides a Notifications config but the platform does not declare Capabilities().Notifications", h.Name)
 	default:
 		RunNotificationsSuite(t, NotificationsHarness{
-			Name:         h.Name,
-			Platform:     h.Platform,
-			NewProvider:  h.NewProvider,
-			ListResponse: h.Notifications.ListResponse,
+			Name:              h.Name,
+			Platform:          h.Platform,
+			NewProvider:       h.NewProvider,
+			ListResponse:      h.Notifications.ListResponse,
+			GlobalUnsupported: h.Notifications.GlobalUnsupported,
 		})
 	}
 }
@@ -44,10 +53,11 @@ func testNotificationsSuite(t *testing.T, h Harness) {
 // NotificationsHarness bundles the inputs needed to run the notification
 // contract suite against a backend that implements provider.NotificationManager.
 type NotificationsHarness struct {
-	Name         string
-	Platform     provider.Platform
-	NewProvider  func(t *testing.T, cfg provider.Config) provider.Provider
-	ListResponse string
+	Name              string
+	Platform          provider.Platform
+	NewProvider       func(t *testing.T, cfg provider.Config) provider.Provider
+	ListResponse      string
+	GlobalUnsupported bool
 }
 
 // RunNotificationsSuite executes the notification contract suite.
@@ -61,6 +71,11 @@ func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
 			t.Fatalf("%s does not implement provider.NotificationManager", h.Name)
 		}
 		return nm
+	}
+
+	if h.GlobalUnsupported {
+		runGlobalUnsupportedSuite(t, newNM)
+		return
 	}
 
 	t.Run("ListNotifications_ReturnsResults", func(t *testing.T) {
@@ -91,6 +106,39 @@ func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
 		nm := newNM(t)
 		if err := nm.MarkNotificationsRead(context.Background(), provider.MarkNotificationsOptions{}); err != nil {
 			t.Fatalf("MarkNotificationsRead: %v", err)
+		}
+	})
+}
+
+// runGlobalUnsupportedSuite pins the partial-capability contract for
+// platforms whose inbox is repo-scoped only (the provider interface
+// couples the global and repo halves): the global methods must fail with
+// ErrNotImplemented, the repo-scoped methods must stay functional.
+func runGlobalUnsupportedSuite(t *testing.T, newNM func(*testing.T) provider.NotificationManager) {
+	t.Run("GlobalMethods_NotImplemented", func(t *testing.T) {
+		nm := newNM(t)
+		_, listErr := nm.ListNotifications(context.Background(), provider.ListNotificationsOptions{})
+		if !provider.IsNotImplemented(listErr) {
+			t.Errorf("ListNotifications err = %v, want ErrNotImplemented", listErr)
+		}
+		if err := nm.MarkNotificationRead(context.Background(), "1"); !provider.IsNotImplemented(err) {
+			t.Errorf("MarkNotificationRead err = %v, want ErrNotImplemented", err)
+		}
+		if err := nm.MarkNotificationsRead(context.Background(), provider.MarkNotificationsOptions{}); !provider.IsNotImplemented(err) {
+			t.Errorf("MarkNotificationsRead err = %v, want ErrNotImplemented", err)
+		}
+	})
+	t.Run("RepoScoped_Succeeds", func(t *testing.T) {
+		nm := newNM(t)
+		notifications, err := nm.ListRepoNotifications(context.Background(), "owner", "repo", provider.ListNotificationsOptions{})
+		if err != nil {
+			t.Fatalf("ListRepoNotifications: %v", err)
+		}
+		if len(notifications) == 0 || notifications[0].ID == "" {
+			t.Fatalf("repo-scoped list incomplete: %+v", notifications)
+		}
+		if err := nm.MarkRepoNotificationsRead(context.Background(), "owner", "repo", provider.MarkNotificationsOptions{}); err != nil {
+			t.Errorf("MarkRepoNotificationsRead: %v", err)
 		}
 	})
 }

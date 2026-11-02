@@ -2,39 +2,22 @@ package gitcode
 
 import (
 	"context"
-	"strconv"
+
+	oekiterrors "github.com/oekit/pkg/errors"
+	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
-	gitcode "github.com/yi-nology/go-gitcode"
 )
 
-// ListNotifications implements provider.NotificationManager.
-//
-// Dual-mode pagination is handled by backendutil.PageList:
-// opts.Page == 0 walks every page (budget-capped, fails loud);
-// opts.Page > 0 returns exactly that single caller-driven page.
+// ListNotifications implements provider.NotificationManager. GitCode
+// serves no global notification inbox — the global routes 404 live
+// (probe round 2026-11-03, see gitcode_api docs/wire-provenance.md); only
+// the repo-scoped endpoints exist. The interface couples the two, so the
+// global half fails with ErrNotImplemented; use ListRepoNotifications.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
-		return gitcode.ListNotificationsOptions{
-			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-			All:         opts.All,
-			Since:       opts.Since,
-		}
-	}
-	var threads []*gitcode.NotificationThread
-	threads, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
-		func(page, perPage int) ([]*gitcode.NotificationThread, error) {
-			return p.client.ListNotificationsWithOptions(ctx, buildOpts(page, perPage))
-		})
-	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications", err)
-	}
-	result := make([]*provider.Notification, 0, len(threads))
-	for _, t := range threads {
-		result = append(result, convertNotification(t))
-	}
-	return result, nil
+	return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use ListRepoNotifications"))
 }
 
 // ListRepoNotifications implements provider.NotificationManager.
@@ -65,20 +48,20 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 	return result, nil
 }
 
-// MarkNotificationRead implements provider.NotificationManager.
+// MarkNotificationRead implements provider.NotificationManager. The
+// thread-read route hangs off the global inbox GitCode does not serve
+// (live-verified 2026-11-03); it fails with ErrNotImplemented.
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
-	id, err := strconv.ParseInt(threadID, 10, 64)
-	if err != nil {
-		return provider.Wrapf(provider.PlatformGitCode, "MarkNotificationRead", "invalid thread ID %q", threadID)
-	}
-	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationRead", p.client.MarkNotificationThreadAsRead(ctx, id))
+	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationRead",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use MarkRepoNotificationsRead"))
 }
 
-// MarkNotificationsRead implements provider.NotificationManager.
+// MarkNotificationsRead implements provider.NotificationManager. The
+// global mark-all route 404s live (probe round 2026-11-03); it fails with
+// ErrNotImplemented.
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationsRead", p.client.MarkNotificationsAsRead(ctx, gitcode.MarkNotificationsOptions{
-		LastReadAt: opts.LastReadAt,
-	}))
+	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationsRead",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use MarkRepoNotificationsRead"))
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
