@@ -640,6 +640,35 @@ func (rt *clientRoundTripper) baseTransport() http.RoundTripper {
 	return rt.transport
 }
 
+// healETag304Miss is the in-process self-heal for a 304 whose cached entry
+// was evicted underneath it (issue #31): strip If-None-Match and re-send
+// unconditionally once. applyConditional skips requests that already carry
+// If-None-Match and none is present now, so the resend cannot re-enter the
+// conditional path; a protocol-violating 304 without a validator would
+// surface unchanged (no loop). The 200 repopulates the cache, so later
+// conditional requests work again. Returns the healed exchange, the extra
+// wall time spent, and the exchange error.
+func (rt *clientRoundTripper) healETag304Miss(ctx context.Context, req *http.Request, tr http.RoundTripper) (*http.Response, time.Duration, error) {
+	rt.client.log().Warn("etag entry evicted under an in-flight 304; resending unconditionally",
+		"url", redactURL(*req.URL))
+	req.Header.Del("If-None-Match")
+	if rt.client.limiter != nil {
+		if err := rt.client.limiter.WaitContext(ctx); err != nil {
+			return nil, 0, err
+		}
+	}
+	start := time.Now()
+	resp, err := tr.RoundTrip(req)
+	duration := time.Since(start)
+	if resp != nil && rt.client.limiter != nil {
+		rt.client.limiter.UpdateFromResponse(resp)
+	}
+	if err == nil {
+		resp, err = rt.client.etag.processRT(req, resp)
+	}
+	return resp, duration, err
+}
+
 // RoundTrip implements http.RoundTripper.
 //
 // The request context is used as-is: it is NOT re-wrapped in a client-timeout
@@ -675,6 +704,17 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 	if err == nil {
 		resp, err = rt.client.etag.processRT(req, resp)
+		if oekiterrors.Is(err, ErrETagEntryGone) {
+			// The bounded LRU can evict the validator between
+			// applyConditional and a 304's arrival (concurrent walks over
+			// DefaultETagEntries evict fast) — a pure local bookkeeping
+			// race that must not surface as an API error (issue #31).
+			// One unconditional resend repopulates the cache and hands the
+			// caller a clean 200; see healETag304Miss.
+			var healAdded time.Duration
+			resp, healAdded, err = rt.healETag304Miss(ctx, req, tr)
+			duration += healAdded
+		}
 	}
 	rt.client.Hooks().ExecuteResponse(ctx, req, resp, duration, err)
 	if err != nil {

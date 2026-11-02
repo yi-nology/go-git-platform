@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.100.2] - 2026-11-02
+
+### Fixed
+
+- **transport: `ETagCache` 304 与 LRU 驱逐竞态不再硬失败**（#31）——
+  有界缓存（默认 128 条）在并发翻页下，验证器可能在
+  `applyConditional` 与 304 到达之间被驱逐，旧实现直接报错
+  `conditional request ... answered 304 but the cached entry is gone`，
+  未配重试的 Client 把纯本地记账竞态当真实 API 错误抛给调用方。现
+  RoundTrip 检测哨兵后**进程内自愈**：剥掉 If-None-Match 无条件重发
+  一次——重发经过限流器与响应钩子（时长并入本次交换），200 回填缓存
+  使后续条件请求恢复工作；不依赖调用方配置重试，协议违例的裸 304
+  原样上抛（无循环）。
+- 新增导出哨兵 `transport.ErrETagEntryGone`：自愈前的 304-miss 条件
+  现在可被自定义 RoundTripper/观察方 `errors.Is` 识别（stdlib Is 链，
+  经 oekiterrors.Errorf %w 包装）。
+
 ## [0.100.1] - 2026-11-02
 
 ### Fixed

@@ -3,13 +3,13 @@ package transport
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/oekit/pkg/cache"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // DefaultETagEntries is the default maximum number of responses kept in an
@@ -171,6 +171,15 @@ func (e etagEntry) synthesize(req *http.Request) *http.Response {
 	}
 }
 
+// ErrETagEntryGone is the sentinel behind the 304-with-no-local-entry race:
+// the bounded LRU can evict the validator between applyConditional and the
+// 304's arrival (concurrent walks over DefaultETagEntries=128 evict fast).
+// Callers of Client.Do rarely see it — the RoundTrip path detects the
+// sentinel and re-sends the request unconditionally once (in-process
+// self-heal, issue #31); it stays exported so custom RoundTrippers and
+// observers can recognize the condition.
+var ErrETagEntryGone = oekiterrors.New("conditional request answered 304 but the cached entry is gone")
+
 // processRT handles a completed exchange whose body is still streaming: 304s
 // are replaced by the cached 200 (or fail, see below), and cacheable 200s are
 // buffered up to the entry-size cap and re-wrapped for single consumption by
@@ -187,7 +196,7 @@ func (c *ETagCache) processRT(req *http.Request, resp *http.Response) (*http.Res
 		e, err := c.entries.Get(context.Background(), etagKey(req))
 		if err != nil || e == nil {
 			_ = resp.Body.Close()
-			return nil, fmt.Errorf("transport: conditional request for %s answered 304 but the cached entry is gone", redactURL(*req.URL))
+			return nil, oekiterrors.Errorf("transport: conditional request for %s: %w", redactURL(*req.URL), ErrETagEntryGone)
 		}
 		_ = resp.Body.Close()
 		return e.synthesize(req), nil

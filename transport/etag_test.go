@@ -1,6 +1,8 @@
 package transport
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -346,7 +348,106 @@ func TestETag304WithoutEntryIsAnError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/data", nil)
 	resp := &http.Response{StatusCode: http.StatusNotModified, Body: http.NoBody}
 
-	if _, err := c.processRT(req, resp); err == nil {
+	_, err := c.processRT(req, resp)
+	if err == nil {
 		t.Fatal("304 with no cached entry must be an error, not a bodyless 200-shape passthrough")
+	}
+	if !errors.Is(err, ErrETagEntryGone) {
+		t.Fatalf("err = %v, want the ErrETagEntryGone sentinel (stdlib Is chain)", err)
+	}
+}
+
+// TestETag304MissSelfHealsUnconditionally drives the issue #31 race
+// end-to-end: the validator is evicted from the bounded LRU while its 304
+// is in flight (the stub transport evicts exactly there, like concurrent
+// walks would). RoundTrip must detect ErrETagEntryGone, strip the
+// validator, re-send unconditionally once, and hand the caller a clean
+// 200 — with the cache repopulated so later conditional requests work.
+func TestETag304MissSelfHealsUnconditionally(t *testing.T) {
+	var cache *ETagCache
+	var sawConditional []bool
+	calls := 0
+	var raced atomic.Bool
+	stub := roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		calls++
+		conditional := r.Header.Get("If-None-Match") != ""
+		sawConditional = append(sawConditional, conditional)
+		if conditional {
+			// The race window, once: evict the entry while the 304 is "in
+			// transit" — what concurrent walks do to a bounded LRU. Later
+			// conditional requests hit a populated cache and 304 cleanly.
+			if raced.CompareAndSwap(false, true) {
+				_ = cache.entries.Del(context.Background(), etagKey(r))
+			}
+			return &http.Response{StatusCode: http.StatusNotModified, Header: http.Header{}, Body: http.NoBody}, nil
+		}
+		h := http.Header{}
+		h.Set("ETag", `"v1"`)
+		h.Set("Content-Type", "application/json")
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Header:        h,
+			Body:          io.NopCloser(strings.NewReader(`{"v":1}`)),
+			ContentLength: int64(len(`{"v":1}`)),
+		}, nil
+	})
+	c := NewClient("https://example.invalid", None{}, WithTransport(stub))
+	cache = NewETagCache(4)
+	c.etag = cache
+	hc := &http.Client{Transport: c.RoundTripper()}
+
+	// Prime: unconditional 200 lands in the cache.
+	resp, err := hc.Get("https://example.invalid/data")
+	if err != nil {
+		t.Fatalf("prime GET: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("prime status = %d", resp.StatusCode)
+	}
+
+	// Race round: conditional 304 with the entry evicted underneath — must
+	// self-heal, never surface as an error.
+	resp, err = hc.Get("https://example.invalid/data")
+	if err != nil {
+		t.Fatalf("race GET must self-heal, got error: %v", err)
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read healed body: %v", readErr)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("healed status = %d, want a clean 200", resp.StatusCode)
+	}
+	if string(body) != `{"v":1}` {
+		t.Fatalf("healed body = %q", body)
+	}
+	if resp.Header.Get(cacheHitHeader) == "hit" {
+		t.Fatal("healed response must be the network 200, not a synthesized hit")
+	}
+	if calls != 3 {
+		t.Fatalf("transport saw %d calls, want 3 (prime, evicted 304, unconditional resend)", calls)
+	}
+	if len(sawConditional) != 3 || sawConditional[0] || !sawConditional[1] || sawConditional[2] {
+		t.Fatalf("conditional header per call = %v, want [false true false]", sawConditional)
+	}
+	if cache.Len() != 1 {
+		t.Fatalf("cache holds %d entries after heal, want 1 (repopulated)", cache.Len())
+	}
+
+	// Steady state: the repopulated entry serves 304s from cache again.
+	resp, err = hc.Get("https://example.invalid/data")
+	if err != nil {
+		t.Fatalf("steady GET: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.Header.Get(cacheHitHeader) != "hit" || string(body) != `{"v":1}` {
+		t.Fatalf("steady state must serve the synthesized 200, got header=%q body=%q",
+			resp.Header.Get(cacheHitHeader), body)
+	}
+	if calls != 4 {
+		t.Fatalf("steady-state conditional hit still hit the wire (calls=%d)", calls)
 	}
 }
