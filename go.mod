@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
-	gitea.dev/sdk v1.3.0
+	gitea.dev/sdk v1.4.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/google/go-github/v92 v92.0.0
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
@@ -22,7 +22,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/42wim/httpsig v1.2.4 // indirect
+	github.com/42wim/httpsig v1.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
