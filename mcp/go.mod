@@ -12,8 +12,8 @@ require (
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 // indirect
-	gitea.dev/sdk v1.3.0 // indirect
-	github.com/42wim/httpsig v1.2.4 // indirect
+	gitea.dev/sdk v1.4.0 // indirect
+	github.com/42wim/httpsig v1.3.0 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-openapi/errors v0.22.9 // indirect
@@ -46,7 +46,7 @@ require (
 	github.com/yi-nology/go-gitcode v0.8.0 // indirect
 	github.com/yi-nology/go-gongfeng v0.2.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	gitlab.com/gitlab-org/api/client-go/v3 v3.18.0 // indirect
+	gitlab.com/gitlab-org/api/client-go/v3 v3.40.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
