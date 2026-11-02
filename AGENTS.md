@@ -69,6 +69,25 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   重试无调用方。v0.19.0/v0.18.1 修的移位溢出与抖动 0 panic 两类 bug，
   `transport/retry.go` 的 float64 pow + 双侧钳制 + 乘法抖动实现天然免疫，
   已有回归测试钉住（TestRetry_BackoffExtremeAttemptsStayClamped）。
+- **pkg v0.28.0 / concurrency v0.22.0 全量子包重评估（2026-11-02，无新增
+  引入；先行审计再动工，本条即结论存档）**。当前基线（已接入的上游新原
+  语，后续迭代直接沿用、勿手写等价物）：`syncx.FanInLimitCtx`（batch 引
+  擎，panic→item Err）、`pkg/cache`（`LocalCache`+`SingleFlightCache`，
+  provider/ttlcache.go 全量委托）、async v0.22 变体（`GoSafeLabeled`=
+  provider/janitor、`GoSafeWithErrChannel`=mcp serve）、
+  `concurrency/retry/httpx`（transport 重试判定）。本轮逐包对照后确认无
+  手写等价物/不适用：`errors` 新增的 `Append`/`Chain`/`In`（仓内无错误聚
+  合、无清理链、无多哨兵 Is 链）；`cache.Checker`（无健康检查回源形态）；
+  `pagination`（服务端 PageRequest/PageResponse，与本仓客户端翻页器
+  provider/pageiter.go 不同域）；`convert`（any 强转，本仓 Parse* 是校验
+  型拒绝语义）；`timex`（日期算术/格式化，无多 layout 解析原语，
+  gitcode/gitee 的 due_on 多格式解析保留为领域助手）；`shellx`（POSIX
+  shell 转义，gitbackend 走 argv 直 exec 不经 shell）；`container`
+  （SafeMap 等——本仓 mutex+map 注册表皆为 init 注册+读路径形态，换容器
+  零行为收益，存量不迁移）；`bloomx`/`pack`/`strmap`/`encoding`/`cli`/
+  `contextx`/`bufiox`/`enumx`/`mathx`/`stringx`/`slicex`/`ptrx`（无匹配
+  形态：本仓无布隆/迁移资产包/CLI 分发需求，指针助手用外部 SDK 自带的，
+  contains 类循环用 stdlib slices）。
 
 ## 规则二：公共契约红线
 
