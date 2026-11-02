@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.100.0] - 2026-11-02
+
+0.x 序列的第 100 个 minor。本版以依赖线收口为主，无 API 变化；主仓自
+0.99.12 起无功能增量，随版收入两个排队中的 dependabot 升级（PR CI 均
+全绿：ubuntu+macos 测试 / lint / vuln / mcp 模块）：
+
+### Changed
+
+- **deps: gitlab client-go v3.18.0 → v3.40.0**（#28）——跨 22 个 minor
+  的常规升级，覆盖 3.x 线全部累计修复；
+- **deps: gitea.dev/sdk v1.3.0 → v1.4.0**（#29）。
+
 ## [0.99.12] - 2026-11-02
 
 ### Changed
