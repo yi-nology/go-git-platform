@@ -5,82 +5,153 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// CreateWebhook implements provider.WebhookManager.
+// gitcodeHookEventFlags maps the platform-neutral webhook event names onto
+// GitCode's per-family boolean flag fields. GitCode's hook wire has no
+// "events" array (docs: PATCH /repos/{owner}/{repo}/hooks/{id} carries
+// push_events / tag_push_events / issues_events / note_events /
+// merge_requests_events) — the same shape the gitee backend maps onto.
+var gitcodeHookEventFlags = map[string]string{
+	"push":         "push_events",
+	"tag_push":     "tag_push_events",
+	"issues":       "issues_events",
+	"note":         "note_events",
+	"comment":      "note_events",
+	"pull_request": "merge_requests_events",
+}
+
+// CreateWebhook implements provider.WebhookManager. Subscriptions ride the
+// documented per-family flags; the default event set matches the other
+// backends ("push" + "pull_request" → push_events + merge_requests_events).
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
-	hook, err := p.client.CreateWebhook(ctx, opts.Owner, opts.Repo, gitcode.CreateWebhookOptions{
-		URL: opts.URL, Secret: opts.Secret, Events: events,
+	em := map[string]bool{}
+	for _, e := range events {
+		em[e] = true
+	}
+	hook, err := p.client.CreateWebhook(ctx, esc(opts.Owner), esc(opts.Repo), gitcode.CreateWebhookOptions{
+		URL:                 opts.URL,
+		Password:            opts.Secret,
+		PushEvents:          gitcode.Bool(em["push"]),
+		TagPushEvents:       gitcode.Bool(em["tag_push"]),
+		IssuesEvents:        gitcode.Bool(em["issues"]),
+		NoteEvents:          gitcode.Bool(em["note"] || em["comment"]),
+		MergeRequestsEvents: gitcode.Bool(em["pull_request"]),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateWebhook", err)
 	}
-	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
+	return convertHook(hook), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
 func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
-	hook, err := p.client.GetWebhook(ctx, owner, repo, webhookID)
+	hook, err := p.client.GetWebhook(ctx, esc(owner), esc(repo), webhookID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetWebhook", err)
 	}
-	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
+	return convertHook(hook), nil
 }
 
-// UpdateWebhook implements provider.WebhookConfigManager. The GitCode SDK's
-// update body is GitHub-shaped ([]string events, omitempty everything), so
-// nil provider fields map to omitted fields; a non-nil empty Events slice is
-// indistinguishable from "unchanged" on this wire (SDK omitempty) — see the
-// registered divergence.
+// UpdateWebhook implements provider.WebhookConfigManager. GitCode's edit
+// endpoint is boolean-flag based: omitted flags mean "unchanged", so a
+// non-nil Events slice sets every flag of gitcodeHookEventFlags explicitly
+// (true for members, false for the rest) to express removal.
 func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+	em := map[string]bool{}
+	for _, e := range opts.Events {
+		em[e] = true
+	}
 	sdkOpts := gitcode.UpdateWebhookOptions{}
 	if opts.URL != nil {
 		sdkOpts.URL = *opts.URL
 	}
 	if opts.Secret != nil {
-		sdkOpts.Secret = *opts.Secret
+		sdkOpts.Password = *opts.Secret
 	}
-	if len(opts.Events) > 0 {
-		sdkOpts.Events = opts.Events
+	if opts.Events != nil {
+		sdkOpts.PushEvents = gitcode.Bool(em["push"])
+		sdkOpts.TagPushEvents = gitcode.Bool(em["tag_push"])
+		sdkOpts.IssuesEvents = gitcode.Bool(em["issues"])
+		sdkOpts.NoteEvents = gitcode.Bool(em["note"] || em["comment"])
+		sdkOpts.MergeRequestsEvents = gitcode.Bool(em["pull_request"])
 	}
-	hook, err := p.client.UpdateWebhook(ctx, owner, repo, webhookID, sdkOpts)
+	hook, err := p.client.UpdateWebhook(ctx, esc(owner), esc(repo), webhookID, sdkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateWebhook", err)
 	}
-	return &provider.PlatformWebhook{ID: hook.ID, URL: hook.URL, Events: hook.Events}, nil
+	return convertHook(hook), nil
 }
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	err := p.client.DeleteWebhook(ctx, owner, repo, webhookID)
+	err := p.client.DeleteWebhook(ctx, esc(owner), esc(repo), webhookID)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteWebhook", err)
 	}
 	return nil
 }
 
-// ListWebhooks implements provider.WebhookManager. The SDK's hooks endpoint
-// exposes no pagination parameters, so the call stays single-shot.
+// ListWebhooks implements provider.WebhookManager. The SDK's hook-list
+// endpoint takes the documented page/per_page since go-gitcode v0.8.0, so
+// the walk covers every page.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, err := p.client.ListWebhooks(ctx, owner, repo)
+	hooks, err := backendutil.AllPages(func(page int) ([]*gitcode.Webhook, error) {
+		return p.client.ListWebhooksWithOptions(ctx, esc(owner), esc(repo), gitcode.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListWebhooks", err)
 	}
 	result := make([]*provider.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
-		result = append(result, &provider.PlatformWebhook{ID: h.ID, URL: h.URL, Events: h.Events})
+		result = append(result, convertHook(h))
 	}
 	return result, nil
+}
+
+// convertHook maps the SDK hook (per-family FlexBool flags) onto the
+// platform-neutral webhook shape, reversing gitcodeHookEventFlags.
+func convertHook(h *gitcode.Webhook) *provider.PlatformWebhook {
+	if h == nil {
+		return nil
+	}
+	var events []string
+	for name, field := range gitcodeHookEventFlags {
+		if hookFlag(h, field) {
+			events = append(events, name)
+		}
+	}
+	sort.Strings(events)
+	return &provider.PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
+}
+
+// hookFlag reads one event family off the SDK hook by its field name.
+func hookFlag(h *gitcode.Webhook, field string) bool {
+	switch field {
+	case "push_events":
+		return bool(h.PushEvents)
+	case "tag_push_events":
+		return bool(h.TagPushEvents)
+	case "issues_events":
+		return bool(h.IssuesEvents)
+	case "note_events":
+		return bool(h.NoteEvents)
+	case "merge_requests_events":
+		return bool(h.MergeRequestsEvents)
+	}
+	return false
 }
 
 // ValidateWebhookSignature implements provider.WebhookManager. It

@@ -2,14 +2,10 @@ package gitcode
 
 import (
 	"context"
-	"fmt"
-	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
-	"github.com/yi-nology/go-git-platform/transport"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 
@@ -140,24 +136,18 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 }
 
 // ListIssueComments implements provider.IssueManager.
+//
+// go-gitcode v0.8.0 exposes the documented page/per_page/order/since query
+// on the issue-comment list endpoint, so the walk runs through the SDK.
 func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
-	// The fork's ListIssueComment surface takes no pagination parameters
-	// (a bare GET returns the server-default first page only), so the list
-	// is driven through the raw transport client with explicit page/
-	// per_page query parameters until an empty page (registered detour).
 	comments, err := backendutil.AllPages(func(page int) ([]*gitcode.IssueComment, error) {
-		var batch []*gitcode.IssueComment
-		_, err := p.rawClient.DoJSON(ctx, &transport.Request{
-			Method: "GET",
-			Path:   fmt.Sprintf("/repos/%s/%s/issues/%d/comments", esc(owner), esc(repo), n),
-			Query:  url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(backendutil.IssueCommentPageSize)}},
-			Result: &batch,
+		return p.client.ListIssueCommentsWithOptions(ctx, esc(owner), esc(repo), n, gitcode.ListIssueCommentsOptions{
+			ListOptions: gitcode.ListOptions{Page: page, PerPage: backendutil.IssueCommentPageSize},
 		})
-		return batch, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueComments", err)
@@ -193,22 +183,15 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
-// ListIssueLabels implements provider.IssueManager. The fork's
-// ListIssueLabels surface takes no pagination parameters (a bare GET
-// returns the server-default first page only), so the list is driven
-// through the raw transport client with explicit page/per_page query
-// parameters until an empty page (registered detour).
+// ListIssueLabels implements provider.IssueManager. go-gitcode v0.8.0
+// exposes the documented page/per_page query on the label-list endpoint,
+// so the walk runs through the SDK (server default is 100 per page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
-	var labels []gitcode.Label
-	labels, err := backendutil.AllPages(func(page int) ([]gitcode.Label, error) {
-		var batch []gitcode.Label
-		_, err := p.rawClient.DoJSON(ctx, &transport.Request{
-			Method: "GET",
-			Path:   fmt.Sprintf("/repos/%s/%s/labels", url.PathEscape(owner), url.PathEscape(repo)),
-			Query:  url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(backendutil.LabelPageSize)}},
-			Result: &batch,
+	var labels []*gitcode.Label
+	labels, err := backendutil.AllPages(func(page int) ([]*gitcode.Label, error) {
+		return p.client.ListIssueLabelsWithOptions(ctx, esc(owner), esc(repo), gitcode.ListOptions{
+			Page: page, PerPage: backendutil.LabelPageSize,
 		})
-		return batch, err
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueLabels", err)

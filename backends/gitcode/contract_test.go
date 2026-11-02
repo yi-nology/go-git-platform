@@ -24,9 +24,9 @@ func TestGitCode_Contract(t *testing.T) {
 		Labels: &contracttest.LabelsHarnessConfig{
 			ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
 			MutateResponse: `{"id":1,"name":"bug","color":"#4cc917"}`,
-			// The gitcode SDK's ListIssueLabels exposes no page/page-size
-			// parameters, so the backend cannot forward pagination on the wire.
-			IgnoresListPagination: true,
+			// go-gitcode v0.8.0 exposes the documented page/per_page query on
+			// the label list, so the backend forwards pagination on the wire
+			// (IgnoresListPagination retired with the SDK fix).
 		},
 		// GitCode's issue payloads are GitHub-shaped; milestones are
 		// addressed by id, and labels carry '#'-prefixed colors.
@@ -48,12 +48,13 @@ func TestGitCode_Contract(t *testing.T) {
 			// so an APPROVE verdict hits the wire as "APPROVE".
 			CreateEvent: "APPROVE",
 		},
-		// GitCode milestone shape: GitHub-like keys but keyed by id
-		// (milestones are ID-addressed, matching MilestoneRef) with a
-		// date-time due_date.
+		// GitCode milestone shape: real deployments key milestones by id
+		// (the addressing value), the documented v5 shape carries number and
+		// a date-only due_on — the fixture carries both identifier keys and
+		// the documented date form.
 		Milestones: &contracttest.MilestonesHarnessConfig{
-			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}]`,
-			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_date":"2026-01-01T00:00:00Z"}`,
+			ListResponse:   `[{"id":1,"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}]`,
+			MutateResponse: `{"id":1,"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
 		},
 		// GitCode search payloads are GitHub-shaped bare arrays; issue
 		// numbers are strings on the wire.
@@ -85,7 +86,10 @@ func TestGitCode_Contract(t *testing.T) {
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
 		},
 		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
-			GetResponse: `{"id":42,"url":"https://hooks.example/ci","events":["push","pull_request"]}`,
+			// GitCode's hook wire expresses subscriptions as per-family
+			// flags (integers in the documented response schema) — there is
+			// no events array; the backend maps flags onto the neutral names.
+			GetResponse: `{"id":42,"url":"https://hooks.example/ci","push_events":1,"merge_requests_events":1}`,
 		},
 		DeployKeys: &contracttest.DeployKeysHarnessConfig{
 			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,

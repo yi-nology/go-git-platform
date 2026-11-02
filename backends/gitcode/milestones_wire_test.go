@@ -6,20 +6,20 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TestGitCode_MilestoneMutations_OmitDueOn verifies the wire form of the
-// milestone mutation bodies: go-gitcode's create/update option structs
-// marshal `due_on` without omitempty, so riding the SDK would post
-// `"due_on": ""` on every call without a due date — on GitCode's
-// GitHub-shaped API that conventionally clears (or errors on) the value,
-// wiping the milestone's due date on a title-only update. The backend must
-// therefore omit the key entirely when DueOn is nil (raw-transport
-// detour; see backends/gitcode/milestones.go).
+// milestone mutation bodies: an unset due date must stay off the wire —
+// GitCode's documented due_on carries minLength 1, and an explicit
+// `"due_on": ""` clears (or errors on) the stored value, wiping the
+// milestone's due date on a title-only update. Since go-gitcode v0.8.0 the
+// SDK marshals due_on with omitempty and the backend rides it directly.
 func TestGitCode_MilestoneMutations_OmitDueOn(t *testing.T) {
 	var gotBodies = map[string]map[string]any{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +70,20 @@ func TestGitCode_MilestoneMutations_OmitDueOn(t *testing.T) {
 	}
 	if v, _ := createBody["title"].(string); v != "v2" {
 		t.Errorf("create body title = %q, want %q", v, "v2")
+	}
+
+	// A set due date goes out under the due_on key (RFC3339, as the backend
+	// formats it) instead of being silently dropped.
+	due := time.Date(2026, 3, 1, 8, 0, 0, 0, time.UTC)
+	if _, err := mm.CreateMilestone(context.Background(), "owner", "repo", provider.CreateMilestoneOptions{Title: "v3", DueOn: &due}); err != nil {
+		t.Fatalf("CreateMilestone (due): %v", err)
+	}
+	dueBody, ok := gotBodies[http.MethodPost]
+	if !ok {
+		t.Fatal("expected the due-set POST to be recorded")
+	}
+	if v, _ := dueBody["due_on"].(string); !strings.HasPrefix(v, "2026-03-01T08:00:00") {
+		t.Errorf("due-set create body due_on = %q, want the formatted timestamp", v)
 	}
 }
 

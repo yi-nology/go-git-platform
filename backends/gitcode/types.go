@@ -3,6 +3,7 @@ package gitcode
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
@@ -40,7 +41,7 @@ func convertIssue(i *gitcode.Issue) *provider.Issue {
 	}
 	var milestone *provider.MilestoneRef
 	if i.Milestone != nil {
-		milestone = &provider.MilestoneRef{Number: strconv.FormatInt(i.Milestone.ID, 10), Title: i.Milestone.Title}
+		milestone = &provider.MilestoneRef{Number: strconv.FormatInt(milestoneAddress(i.Milestone), 10), Title: i.Milestone.Title}
 	}
 	return &provider.Issue{
 		ID:        i.ID,
@@ -139,17 +140,47 @@ func convertLabel(l *gitcode.Label) *provider.Label {
 	}
 }
 
+// milestoneAddress resolves the milestone addressing identifier: real
+// GitCode deployments key milestones by the wire's "id" (the value the
+// Get/Update/Delete path parameter expects), while the documented v5
+// shape carries only "number" — prefer id, fall back to number.
+func milestoneAddress(m *gitcode.Milestone) int64 {
+	if m == nil {
+		return 0
+	}
+	if m.ID != 0 {
+		return m.ID
+	}
+	return m.Number
+}
+
+// parseGitCodeDueOn parses the milestone due date as served: GitCode's
+// documented due_on is a date-only string ("2026-01-31"), while instances
+// that echo back what was sent return RFC3339 timestamps. Empty or
+// unparseable values yield nil rather than failing the conversion.
+func parseGitCodeDueOn(s string) *time.Time {
+	if s == "" {
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return &t
+		}
+	}
+	return nil
+}
+
 func convertMilestone(m *gitcode.Milestone) provider.Milestone {
 	var ms provider.Milestone
 	if m == nil {
 		return ms
 	}
 	ms = provider.Milestone{
-		Number:      strconv.FormatInt(m.ID, 10),
+		Number:      strconv.FormatInt(milestoneAddress(m), 10),
 		Title:       m.Title,
 		Description: m.Description,
 		State:       provider.MilestoneState(m.State),
-		DueOn:       m.DueDate,
+		DueOn:       parseGitCodeDueOn(m.DueOn),
 	}
 	return ms
 }

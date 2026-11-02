@@ -4,6 +4,38 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.99.12] - 2026-11-02
+
+### Changed
+
+- **deps: go-gitcode v0.7.2 → v0.8.0**（SDK 对照 docs.gitcode.com 的 wire
+  契约修正，gitcode backend 随之回归 SDK 主路）：
+  - **webhook 密钥真修**——wire 密钥字段是 `password`（SDK 旧 `Secret` 发的
+    `secret` 键服务端不认，密钥从未生效）；Create/Update 改走 `Password`；
+  - **webhook 事件布尔化**——GitCode hook wire 没有 `events` 数组，订阅是
+    `push_events`/`tag_push_events`/`issues_events`/`note_events`/
+    `merge_requests_events` 五族布尔（gitee 同构）。backend 以
+    `gitcodeHookEventFlags` 映射中性事件名，非 nil Events 显式置全族
+    旗标（true 成员/false 其余）表达"清空"；Get/Update/List 回读旗标映射
+    回中性名。**撤销该能力的 divergence 登记**——空事件集此前不可表达；
+  - **milestone**——SDK create/update 的 `due_on` 改 omitempty（未设值不再
+    以 `""` 上 wire 清空日期），响应结构对齐文档（`number` 寻址 + date-only
+    `due_on`，新增 `Number`/`RepositoryID`/`URL`/issue 计数；`DueDate`
+    → `DueOn string`）。backend 撤除 milestone create/update 的 raw 绕行，
+    `convertMilestone` 以 id 优先/number 兜底解析寻址值、双格式解析
+    due_on（RFC3339 与 date-only）；
+  - **分页**——issue 评论（+order/since）、仓库 label、hook 列表三端点
+    文档化 page/per_page 落地，backend 撤除对应 raw 绕行并让
+    LabelManager.ListLabels 走双模分页（此前台账误记"不分页"）；
+  - **raw 面清零**——`Provider.rawClient` 与 `doJSON` 助手整体移除，
+    gitcode backend 不再有绕过 SDK 的路径；owner/repo/label-name 路径段
+    统一 `esc()` 转义（SDK 逐字插值，`#`/`?`/`%`/空格会截断 URL）；
+  - 契约夹具同步真 wire：milestone `due_on` date-only（旧 `due_date`
+    键从未在文档 wire 上存在）、webhook GetResponse 改旗标形态、labels
+    撤 `IgnoresListPagination` 豁免（提交内含旧形状为何是错的的论证）；
+  - divergence 台账 9 项 → 3 项（label 无 description ×2、issue 列表
+    无 sort/direction），`docs/divergence-ledger.md` 再生成。
+
 ## [0.99.11] - 2026-11-01
 
 ### Added

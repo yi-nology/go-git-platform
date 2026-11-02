@@ -80,15 +80,9 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
-| LabelManager | ListLabels | opts.Page, opts.PerPage | ignore | GitCode's label list endpoint does not paginate; paging options are accepted but ignored. |
 | LabelManager | CreateLabel | opts.Description | ignore | GitCode's label API has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | GitCode's label API has no description field. |
-| MilestoneManager | CreateMilestone |  | detour | go-gitcode marshals due_on without omitempty, which would clear due dates on the GitHub-shaped API; create goes through the raw client with exactly the fields the caller set. |
-| MilestoneManager | UpdateMilestone |  | detour | See CreateMilestone. |
-| IssueManager | ListIssueComments |  | detour | go-gitcode's ListIssueComment surface takes no pagination parameters (a bare GET returns the server-default first page only); the raw client drives page/per_page until an empty page. |
-| IssueManager | ListIssueLabels |  | detour | go-gitcode's ListIssueLabels surface takes no pagination parameters; the raw client drives page/per_page until an empty page. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
-| WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-gitcode marshals UpdateWebhookOptions.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 
 ## tencent_code
 

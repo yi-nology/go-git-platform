@@ -4,14 +4,24 @@ import (
 	"context"
 	"strings"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
 )
 
-// ListLabels implements provider.LabelManager. GitCode's list endpoint does
-// not paginate, so opts are accepted but ignored.
+// ListLabels implements provider.LabelManager.
+//
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page. The
+// label-list endpoint takes the documented page/per_page query (server
+// default 100 per page) since go-gitcode v0.8.0.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
-	labels, err := p.client.ListIssueLabels(ctx, owner, repo)
+	var labels []*gitcode.Label
+	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitcode.Label, error) {
+			return p.client.ListIssueLabelsWithOptions(ctx, esc(owner), esc(repo), gitcode.ListOptions{Page: page, PerPage: perPage})
+		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListLabels", err)
 	}
@@ -25,7 +35,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 // CreateLabel implements provider.LabelManager. GitCode's label API has no
 // description field; opts.Description is ignored.
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
-	label, err := p.client.CreateIssueLabel(ctx, owner, repo, opts.Name, opts.Color)
+	label, err := p.client.CreateIssueLabel(ctx, esc(owner), esc(repo), opts.Name, opts.Color)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateLabel", err)
 	}
@@ -48,7 +58,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 		// caller-supplied '#' from doubling.
 		updateOpts.Color = "#" + strings.TrimPrefix(*opts.Color, "#")
 	}
-	label, err := p.client.UpdateIssueLabel(ctx, owner, repo, name, updateOpts)
+	label, err := p.client.UpdateIssueLabel(ctx, esc(owner), esc(repo), esc(name), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateLabel", err)
 	}
@@ -57,7 +67,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	if err := p.client.DeleteIssueLabel(ctx, owner, repo, name); err != nil {
+	if err := p.client.DeleteIssueLabel(ctx, esc(owner), esc(repo), esc(name)); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteLabel", err)
 	}
 	return nil
