@@ -34,6 +34,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   first-match 语义依赖注册顺序，且「查重+追加」原子性 `container.Slice`
   无对应原语；判定依据见 [AGENTS.md](AGENTS.md)。
 
+### Migration notes（github 平台）
+
+- 直接构造 `github.Repository` 传给 create 的下游：改用
+  `CreateRepositoryRequest`；`CreateRepoOptions.DefaultBranch` 在 GitHub 上
+  此前即被 API 忽略（v92 载荷发出即被忽略），v0.103.0 起不再发出——需要改
+  默认分支用 `UpdateRepo`。
+
 ## [0.102.0] - 2026-11-04
 
 ### Changed（breaking：gitcode 平台能力面再收缩）
