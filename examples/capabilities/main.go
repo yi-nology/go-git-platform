@@ -17,8 +17,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/yi-nology/go-git-platform/provider"
 
@@ -71,6 +74,9 @@ func printDeclarations(caps provider.CapabilitySet) {
 		"Notifications": caps.Notifications, "Reactions": caps.Reactions,
 		"BranchProtections": caps.BranchProtections, "Collaborators": caps.Collaborators,
 		"DeployKeys": caps.DeployKeys, "RepoStats": caps.RepoStats, "Users": caps.Users,
+		"WebhookConfig": caps.WebhookConfig, "Gists": caps.Gists,
+		"Starred": caps.Starred, "Migrations": caps.Migrations,
+		"ReleaseAssets": caps.ReleaseAssets,
 	} {
 		mark := "  -"
 		if on {
@@ -82,11 +88,15 @@ func printDeclarations(caps provider.CapabilitySet) {
 }
 
 // runProbes executes one read-only operation per declared capability.
-// Entity-scoped probes (Reviews, CommitStatuses, Reactions) only run when
-// their entity is supplied via CR_NUMBER / COMMIT_SHA / ISSUE_NUMBER.
+// Entity-scoped probes (Reviews, CommitStatuses, Reactions, WebhookConfig,
+// Migrations, ReleaseAssets) only run when their entity is supplied via
+// CR_NUMBER / COMMIT_SHA / ISSUE_NUMBER / WEBHOOK_ID / MIGRATION_ID
+// (+ optional MIGRATION_ORG for org-level migrations) / ASSET_ID.
 func runProbes(ctx context.Context, p provider.Provider, caps provider.CapabilitySet, owner, repo string) {
 	probes := baseProbes(p, caps, owner, repo)
+	probes = append(probes, accountProbes(p, caps)...)
 	probes = append(probes, entityProbes(p, caps, owner, repo)...)
+	probes = append(probes, idScopedProbes(p, caps, owner, repo)...)
 
 	failures := 0
 	for _, pr := range probes {
@@ -192,6 +202,27 @@ func baseProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo st
 	}
 }
 
+// accountProbes covers the account-scoped capabilities: they read the token
+// user's own data (gists, starred repos) and need neither OWNER nor REPO.
+func accountProbes(p provider.Provider, caps provider.CapabilitySet) []probe {
+	return []probe{
+		{"Gists", caps.Gists, func(ctx context.Context) error {
+			gists, err := p.(provider.GistManager).ListMyGists(ctx, 1, 5)
+			if err != nil {
+				return err
+			}
+			return printf("    %d gists (page 1)\n", len(gists))
+		}},
+		{"Starred", caps.Starred, func(ctx context.Context) error {
+			repos, err := p.(provider.StarredManager).ListStarred(ctx, 1, 5)
+			if err != nil {
+				return err
+			}
+			return printf("    %d starred repos (page 1)\n", len(repos))
+		}},
+	}
+}
+
 // entityProbes covers the entity-scoped capabilities: they run only when
 // the entity is provided via CR_NUMBER / COMMIT_SHA / ISSUE_NUMBER.
 func entityProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo string) []probe {
@@ -221,6 +252,56 @@ func entityProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo 
 				return err
 			}
 			return printf("    %d reactions on issue %s\n", len(reactions), num)
+		}})
+	}
+
+	return probes
+}
+
+// idScopedProbes covers the ID-scoped capabilities: they run only when the
+// target ID is supplied via WEBHOOK_ID / MIGRATION_ID (+ optional
+// MIGRATION_ORG for org-level migrations) / ASSET_ID.
+func idScopedProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo string) []probe {
+	var probes []probe
+	if id := os.Getenv("WEBHOOK_ID"); id != "" && caps.WebhookConfig {
+		probes = append(probes, probe{"WebhookConfig", true, func(ctx context.Context) error {
+			whID, err := strconv.ParseInt(id, 10, 64)
+			if err != nil {
+				return fmt.Errorf("bad WEBHOOK_ID %q: %w", id, err)
+			}
+			hook, err := p.(provider.WebhookConfigManager).GetWebhook(ctx, owner, repo, whID)
+			if err != nil {
+				return err
+			}
+			return printf("    webhook %d → %d events\n", whID, len(hook.Events))
+		}})
+	}
+	if id := os.Getenv("MIGRATION_ID"); id != "" && caps.Migrations {
+		probes = append(probes, probe{"Migrations", true, func(ctx context.Context) error {
+			mID, err := strconv.ParseInt(id, 10, 64)
+			if err != nil {
+				return fmt.Errorf("bad MIGRATION_ID %q: %w", id, err)
+			}
+			org := os.Getenv("MIGRATION_ORG") // 空 = 用户级迁移
+			m, err := p.(provider.MigrationManager).GetMigration(ctx, org, mID)
+			if err != nil {
+				return err
+			}
+			return printf("    migration %d → %s\n", mID, m.State)
+		}})
+	}
+	if id := os.Getenv("ASSET_ID"); id != "" && caps.ReleaseAssets {
+		probes = append(probes, probe{"ReleaseAssets", true, func(ctx context.Context) error {
+			aID, err := strconv.ParseInt(id, 10, 64)
+			if err != nil {
+				return fmt.Errorf("bad ASSET_ID %q: %w", id, err)
+			}
+			// 只读语义但会流式拉全量附件字节——落到 io.Discard，显式 opt-in。
+			start := time.Now()
+			if err := p.(provider.ReleaseAssetManager).DownloadReleaseAsset(ctx, owner, repo, aID, io.Discard); err != nil {
+				return err
+			}
+			return printf("    asset %d downloaded in %s\n", aID, time.Since(start).Round(time.Millisecond))
 		}})
 	}
 
