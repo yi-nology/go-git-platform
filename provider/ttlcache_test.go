@@ -81,17 +81,34 @@ func TestTTLCache_MissCountPerLookup(t *testing.T) {
 // Misses（与收编前的历史实现一致）。
 func TestTTLCache_ConcurrentMissCountsEachLookup(t *testing.T) {
 	c := newTTLCache[string](time.Minute, 0)
+
+	// 到齐门闩 + 沉降窗口：回源函数等到全部调用方完成「计数→进入查找」
+	// 后才回填。此前的 10ms sleep 是调度竞态——CI macOS runner 高负载时
+	// goroutine 启动延迟可超过 10ms，晚到的查找命中已回填的缓存（v0.103.1
+	// CI macos 腿实证 7 miss + 1 hit）；纯门闩（只等计数）在 race 检测器
+	// 下仍有「计数后、查找前」被抢占的间隙（压测实证 6 miss + 2 hit），
+	// 5ms 沉降覆盖该纯用户态间隙，2s 超时兜底防挂死。
+	const callers = 8
+	var arrived atomic.Int64
+	deadline := time.Now().Add(2 * time.Second)
+	//nolint:unparam // 闭包签名由 getOrBuild 的 func 类型钉死，error 位恒 nil 是本用例的事实
 	build := func() (string, error) {
-		time.Sleep(10 * time.Millisecond)
+		for arrived.Load() < callers {
+			if time.Now().After(deadline) {
+				break // 防御：调度异常时按超时放行，不挂死测试
+			}
+			time.Sleep(time.Millisecond)
+		}
+		time.Sleep(5 * time.Millisecond) // 沉降：等全部调用方真正进入查找
 		return "value", nil
 	}
 
-	const callers = 8
 	var wg sync.WaitGroup
 	for i := 0; i < callers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			arrived.Add(1)
 			_, _ = c.getOrBuild("k", build)
 		}()
 	}

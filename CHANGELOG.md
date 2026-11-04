@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.103.2] - 2026-11-04
+
+### Fixed
+
+- **provider: 修 `TestTTLCache_ConcurrentMissCountsEachLookup` 调度竞态**
+  （v0.103.1 CI macos 腿红的原因，测试自身缺陷非产品回归）——builder 原本
+  只 sleep 10ms，CI runner 高负载时 goroutine 启动延迟可超过 10ms，晚到的
+  查找命中已回填的缓存（实证 7 miss + 1 hit）。改为「到齐门闩 + 沉降窗口」：
+  回源函数等全部 8 个调用方完成「计数→进入查找」后才回填（计数后、查找前
+  的纯用户态间隙由 5ms 沉降覆盖——纯门闩在 race 检测器下压测仍会露出该
+  间隙，实证 6 miss + 2 hit；2s 超时兜底防挂死）；`-race ×300` 压测验证。
+  锁定的契约不变：并发未命中每次查找各计一次 Miss。
+
 ## [0.103.1] - 2026-11-04
 
 ### Security
