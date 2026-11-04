@@ -159,6 +159,15 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = new(opts.TargetBranch)
 	}
+	// assignees 经 Users API 精确匹配解析为用户 ID（GitLab 线路收 ID 不收
+	// login）；nil/空 = 不变（len>0 才落线，见 UpdateCROptions）。
+	if len(opts.Assignees) > 0 {
+		assigneeIDs, err := p.resolveUserIDs(ctx, "UpdateCR", opts.Assignees)
+		if err != nil {
+			return nil, err
+		}
+		updateOpts.AssigneeIDs = &assigneeIDs
+	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateCR", err)

@@ -33,6 +33,16 @@ type addCRCommentIn struct {
 	Body   string `json:"body"`
 }
 
+type updateCRIn struct {
+	Owner        string   `json:"owner"`
+	Repo         string   `json:"repo"`
+	Number       string   `json:"number"`
+	Title        string   `json:"title,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	TargetBranch string   `json:"target_branch,omitempty"`
+	Assignees    []string `json:"assignees,omitempty" jsonschema:"replace the assignee set (logins); omit to leave unchanged"`
+}
+
 func registerCRs(s *mcp.Server, st *state) {
 	add(s, st, "create_cr", "Create change request", "Open a pull/merge request from source_branch into target_branch.", true, func(ctx context.Context, in createCRIn) (*provider.ChangeRequest, error) {
 		return st.p.CreateCR(ctx, provider.CreateCROptions{
@@ -44,6 +54,18 @@ func registerCRs(s *mcp.Server, st *state) {
 
 	add(s, st, "merge_cr", "Merge change request", "Merge a pull/merge request.", true, func(ctx context.Context, in mergeCRIn) (*provider.ChangeRequest, error) {
 		return st.p.MergeCR(ctx, in.Owner, in.Repo, in.Number, provider.MergeCROptions{Squash: in.Squash})
+	})
+
+	// update_cr edits title/description/target-branch and can replace the
+	// assignee set (per-platform expressiveness is registered in each
+	// backend's divergence ledger: GitHub/GitLab/Gitea/Forgejo replace,
+	// Gitee converges via read-modify-write, Tencent applies the first,
+	// GitCode ignores the field).
+	add(s, st, "update_cr", "Update change request", "Edit a pull/merge request's title, description, target branch, or assignees. Assignees (when given) replace the set; omit to leave unchanged.", true, func(ctx context.Context, in updateCRIn) (*provider.ChangeRequest, error) {
+		return st.p.UpdateCR(ctx, in.Owner, in.Repo, in.Number, provider.UpdateCROptions{
+			Title: in.Title, Description: in.Description,
+			TargetBranch: in.TargetBranch, Assignees: in.Assignees,
+		})
 	})
 
 	add(s, st, "add_cr_comment", "Comment on change request", "Add a note/comment to a pull/merge request.", true, func(ctx context.Context, in addCRCommentIn) (map[string]any, error) {

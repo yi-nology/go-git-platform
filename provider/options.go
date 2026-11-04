@@ -79,6 +79,10 @@ type UpdateCROptions struct {
 	Title        string `json:"title,omitempty"`
 	Description  string `json:"description,omitempty"`
 	TargetBranch string `json:"target_branch,omitempty"`
+	// Assignees 全量替换 CR 指派人（logins；后端按平台词表解析为 ID/单值线）。
+	// 空（nil 或空切片）= 指派人不变。**清空不可表达**——与
+	// UpdateIssueOptions.Assignees 同款口径（len>0 才落线）。
+	Assignees []string `json:"assignees,omitempty"`
 }
 
 // DiscussionOptions contains options for creating a discussion comment.

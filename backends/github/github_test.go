@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -668,5 +669,43 @@ func TestListReleases_AssetsConverted(t *testing.T) {
 		a.BrowserDownloadURL != "https://github.com/o/r/releases/download/v1.0.0/app.zip" ||
 		a.URL != "https://api.github.com/repos/o/r/releases/assets/99" {
 		t.Errorf("unexpected asset urls/type: %+v", a)
+	}
+}
+
+// TestUpdateCRAssignees_PreludesPullEdit locks the GitHub assignee wiring:
+// a non-empty opts.Assignees PATCHes the issue line (PR number = issue
+// number) with the assignees body, and the PR edit still runs afterwards.
+func TestUpdateCRAssignees_PreludesPullEdit(t *testing.T) {
+	var mu sync.Mutex
+	var issuePathSeen bool
+	var assignees []string
+	var pullPathSeen bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/issues/1"):
+			issuePathSeen = true
+			var body struct {
+				Assignees []string `json:"assignees"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			assignees = body.Assignees
+		case strings.HasSuffix(r.URL.Path, "/pulls/1"):
+			pullPathSeen = true
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	if _, err := p.UpdateCR(context.Background(), "owner", "repo", "1",
+		provider.UpdateCROptions{Assignees: []string{"alice"}}); err != nil {
+		t.Fatalf("UpdateCR: %v", err)
+	}
+	if !issuePathSeen || !pullPathSeen {
+		t.Fatalf("expected issue PATCH + pull PATCH, issue=%v pull=%v", issuePathSeen, pullPathSeen)
+	}
+	if len(assignees) != 1 || assignees[0] != "alice" {
+		t.Fatalf("issue assignees body = %v, want [alice]", assignees)
 	}
 }

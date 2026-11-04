@@ -54,6 +54,8 @@ var divergences = []provider.Divergence{
 		Reason: "The release update endpoint takes no draft or prerelease flags."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 		Reason: "TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
+	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
+		Reason: "The MR update endpoint takes a single assignee_id; a non-empty opts.Assignees applies the first login (resolved to a user ID via the users API) and drops the rest."},
 }
 
 // Divergences returns the registered divergence ledger for the Tencent Code backend.

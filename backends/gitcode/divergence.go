@@ -27,6 +27,8 @@ var divergences = []provider.Divergence{
 		Reason: "The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented."},
 	{Capability: "NotificationManager", Method: "MarkNotificationsRead", Kind: provider.DivergenceStub,
 		Reason: "The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented."},
+	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.Assignees", Kind: provider.DivergenceIgnore,
+		Reason: "GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped."},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

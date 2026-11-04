@@ -20,6 +20,12 @@ var divergences = []provider.Divergence{
 		Reason: "Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 		Reason: "Gitee's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
+	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
+		Reason: "Gitee has no assignee field on the pull-update endpoint; a non-empty opts.Assignees converges via read-modify-write over the pull assignee add/remove endpoints. Concurrent editors can lose updates in the window."},
+	{Capability: "IssueManager", Method: "CreateIssue", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
+		Reason: "Gitee's issue wire takes a single assignee field; multiple logins are comma-joined into it, which only round-trips if the platform re-splits the joined value (undocumented platform behavior; single-assignee use is the verified shape)."},
+	{Capability: "IssueManager", Method: "UpdateIssue", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
+		Reason: "See CreateIssue: the issue wire takes a single assignee field; multiple logins are comma-joined into it."},
 }
 
 // Divergences returns the registered divergence ledger for the Gitee backend.

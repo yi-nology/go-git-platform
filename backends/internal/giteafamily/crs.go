@@ -66,6 +66,9 @@ type FamilyEditPullRequestOption struct {
 	Body  *string
 	Base  string
 	State *string
+	// Assignees 全量替换 PR 指派人（logins）；nil/空 = 不变（len>0 才落线，
+	// 与 UpdateCROptions.Assignees 口径一致）。
+	Assignees []string
 }
 
 // FamilyMergePullRequestOption mirrors the family's merge body
@@ -244,6 +247,9 @@ func UpdateCR(ctx context.Context, f Family, c PRPort, owner, repo, number strin
 	}
 	if opts.TargetBranch != "" {
 		editOpts.Base = opts.TargetBranch
+	}
+	if len(opts.Assignees) > 0 {
+		editOpts.Assignees = opts.Assignees
 	}
 	pr, err := c.EditPullRequest(ctx, owner, repo, n, editOpts)
 	if err != nil {

@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.104.0] - 2026-11-04
+
+### Added（CR 指派人写面）
+
+- **`UpdateCROptions` 增 `Assignees []string`**（结构体加字段=非 breaking）：
+  全量替换 CR 指派人（logins），空 = 不变（与 `UpdateIssueOptions.Assignees`
+  同款 len>0 口径，清空不可表达）。七平台接线形态与分歧登记：
+  - **GitHub**：PR 编号即 issue 编号，走 `Issues.Update` assignees 线
+    （PR edit wire 不带该字段），替换语义完整；
+  - **GitLab**：logins 经 Users API 解析为 `assignee_ids`（复用
+    `resolveUserIDs` 模式）；
+  - **Gitea/Forgejo**：家族 PR edit body 增 `Assignees`（两成员 SDK 均原生
+    支持）；
+  - **Gitee**：PATCH pull 无 assignee 字段——读改写收敛差集到 add/remove
+    端点（mapping 分歧：并发编辑有丢更新窗口）；
+  - **工蜂**：MR update 线路收单个 `assignee_id`——多派取第一个（mapping
+    分歧）；
+  - **GitCode**：pull-update wire 无字段且其 `/pulls/{n}/assignees` 路由是
+    评审人语义——accept-and-drop（ignore 分歧）。
+- **顺带修正**：Gitee issue 指派人的逗号 join 存量行为此前**未登记**分歧
+  （违反台账纪律），本轮补 `CreateIssue`/`UpdateIssue` mapping 登记。
+- **mcp 新增 `update_cr` 工具**（写）——编辑 title/description/target
+  branch/assignees，随各后端分歧形态走。
+- 契约面：giteafamily 引擎透传断言 + GitHub/Gitee 线级测试（issue 线
+  pre-step、RMW 差集收敛）；分歧台账校验套件守住登记完整性。
+
 ## [0.103.2] - 2026-11-04
 
 ### Fixed

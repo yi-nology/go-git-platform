@@ -181,6 +181,17 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = gongfeng.Ptr(opts.TargetBranch)
 	}
+	// 工蜂的 MR 线路只收单个 assignee_id——多派取第一个（mapping 分歧已
+	// 登记）。nil/空 = 不变（len>0 才落线，见 UpdateCROptions）。
+	if len(opts.Assignees) > 0 {
+		ids, err := p.resolveUserIDs(ctx, "UpdateCR", opts.Assignees[:1])
+		if err != nil {
+			return nil, err
+		}
+		if len(ids) > 0 {
+			updateOpts.AssigneeID = gongfeng.Ptr(ids[0])
+		}
+	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateCR", err)

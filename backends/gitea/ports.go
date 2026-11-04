@@ -940,6 +940,7 @@ func (s sdkPorts) EditPullRequest(ctx context.Context, owner, repo string, index
 		st := gitea.StateType(*opt.State)
 		edit.State = &st
 	}
+	edit.Assignees = opt.Assignees
 	pr, _, err := s.c.PullRequests.EditPullRequest(ctx, owner, repo, index, edit)
 	return familyPR(pr), err
 }

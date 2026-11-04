@@ -11,6 +11,7 @@ type fakePRPort struct {
 	mergeStatus int
 	mergeErr    error
 	pr          *FamilyPullRequest
+	editOpts    FamilyEditPullRequestOption
 }
 
 func (f *fakePRPort) CreatePullRequest(context.Context, string, string, FamilyCreatePullRequestOption) (*FamilyPullRequest, error) {
@@ -25,7 +26,8 @@ func (f *fakePRPort) ListPullRequests(context.Context, string, string, FamilyLis
 func (f *fakePRPort) MergePullRequest(context.Context, string, string, int64, FamilyMergePullRequestOption) (int, error) {
 	return f.mergeStatus, f.mergeErr
 }
-func (f *fakePRPort) EditPullRequest(context.Context, string, string, int64, FamilyEditPullRequestOption) (*FamilyPullRequest, error) {
+func (f *fakePRPort) EditPullRequest(_ context.Context, _ string, _ string, _ int64, opt FamilyEditPullRequestOption) (*FamilyPullRequest, error) {
+	f.editOpts = opt
 	return f.pr, nil
 }
 func (f *fakePRPort) ListPullRequestCommits(context.Context, string, string, int64, ListOptions) ([]*Commit, error) {
@@ -71,5 +73,31 @@ func TestMergeCR_2xxSucceeds(t *testing.T) {
 	}
 	if _, err := MergeCR(context.Background(), *fam, port, "o", "r", "1", provider.MergeCROptions{}); err != nil {
 		t.Fatalf("200 merge should succeed, got %v", err)
+	}
+}
+
+// TestUpdateCR_AssigneesPassThrough locks the family engine's assignee
+// plumbing: opts.Assignees lands on the PR edit body verbatim, and the
+// empty/nil case must not reach the port at all (UpdateCROptions semantics:
+// empty = unchanged).
+func TestUpdateCR_AssigneesPassThrough(t *testing.T) {
+	fam := &Family{Platform: provider.PlatformGitea}
+	port := &fakePRPort{pr: &FamilyPullRequest{Index: 1, State: "open"}}
+
+	if _, err := UpdateCR(context.Background(), *fam, port, "o", "r", "1",
+		provider.UpdateCROptions{Assignees: []string{"alice", "bob"}}); err != nil {
+		t.Fatalf("UpdateCR: %v", err)
+	}
+	if len(port.editOpts.Assignees) != 2 || port.editOpts.Assignees[0] != "alice" || port.editOpts.Assignees[1] != "bob" {
+		t.Fatalf("edit opts assignees = %v, want [alice bob]", port.editOpts.Assignees)
+	}
+
+	port.editOpts = FamilyEditPullRequestOption{}
+	if _, err := UpdateCR(context.Background(), *fam, port, "o", "r", "1",
+		provider.UpdateCROptions{}); err != nil {
+		t.Fatalf("UpdateCR empty: %v", err)
+	}
+	if len(port.editOpts.Assignees) > 0 {
+		t.Fatalf("empty opts.Assignees must not reach the port, got %v", port.editOpts.Assignees)
 	}
 }

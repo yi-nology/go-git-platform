@@ -1017,6 +1017,7 @@ func (s sdkPorts) EditPullRequest(ctx context.Context, owner, repo string, index
 		st := forgejo.StateType(*opt.State)
 		edit.State = &st
 	}
+	edit.Assignees = opt.Assignees
 	pr, _, err := s.c.EditPullRequest(owner, repo, index, edit)
 	return familyPR(pr), err
 }

@@ -2,6 +2,7 @@ package gitee
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
@@ -107,10 +108,72 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 
 // UpdateCR implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "UpdateCR", number)
+	if err != nil {
+		return nil, err
+	}
+	// Gitee 的 assignee 线路是独立的 add/remove 端点（PATCH pull 不带
+	// assignee 字段）——全量替换走读改写收敛差集。nil/空 = 不变（len>0
+	// 才落线，见 UpdateCROptions）。并发编辑下有丢更新窗口（mapping 分歧
+	// 已登记）。
+	if len(opts.Assignees) > 0 {
+		if err := p.setCRAssignees(ctx, owner, repo, n, opts.Assignees); err != nil {
+			return nil, err
+		}
+	}
 	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
 		Title: gitee.String(opts.Title),
 		Body:  gitee.String(opts.Description),
 	}, "UpdateCR")
+}
+
+// setCRAssignees converges the CR's assignee set to target via the platform's
+// add/remove endpoints (each call comma-joins its batch).
+func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int, target []string) error {
+	cr, err := p.GetCR(ctx, owner, repo, strconv.Itoa(n))
+	if err != nil {
+		return err
+	}
+	toAdd, toRemove := assigneeDiff(cr.Assignees, target)
+	if len(toAdd) > 0 {
+		if _, _, err := p.client.PullRequests.AddAssignees(ctx, esc(owner), esc(repo), n, toAdd); err != nil {
+			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+		}
+	}
+	if len(toRemove) > 0 {
+		if _, _, err := p.client.PullRequests.RemoveAssignees(ctx, esc(owner), esc(repo), n, toRemove); err != nil {
+			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+		}
+	}
+	return nil
+}
+
+// assigneeDiff computes the add/remove batches that converge the current
+// assignee list to target (login matching is case-insensitive).
+func assigneeDiff(current []*provider.CRUser, target []string) (toAdd, toRemove []string) {
+	currentSet := make(map[string]struct{}, len(current))
+	for _, a := range current {
+		if a != nil && a.Username != "" {
+			currentSet[strings.ToLower(a.Username)] = struct{}{}
+		}
+	}
+	targetSet := make(map[string]struct{}, len(target))
+	for _, t := range target {
+		targetSet[strings.ToLower(t)] = struct{}{}
+	}
+	for _, t := range target {
+		if _, ok := currentSet[strings.ToLower(t)]; !ok {
+			toAdd = append(toAdd, t)
+		}
+	}
+	for _, a := range current {
+		if a != nil && a.Username != "" {
+			if _, ok := targetSet[strings.ToLower(a.Username)]; !ok {
+				toRemove = append(toRemove, a.Username)
+			}
+		}
+	}
+	return toAdd, toRemove
 }
 
 // patchCR applies a PATCH /pulls/{number} update via the SDK.

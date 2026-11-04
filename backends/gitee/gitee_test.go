@@ -748,3 +748,62 @@ func TestIsNotFound(t *testing.T) {
 		t.Errorf("expected IsNotFound, got %v", err)
 	}
 }
+
+// TestUpdateCRAssignees_RMWDiff locks the Gitee assignee wiring: UpdateCR
+// with a non-empty assignee set reads the current PR, then converges the
+// diff via the pull assignee add/remove endpoints before the PATCH.
+func TestUpdateCRAssignees_RMWDiff(t *testing.T) {
+	var mu sync.Mutex
+	var calls []capturedRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			_ = json.NewDecoder(r.Body).Decode(&body)
+		}
+		mu.Lock()
+		calls = append(calls, capturedRequest{r.Method, r.URL.Path, r.URL.Query(), body})
+		mu.Unlock()
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pulls/1"):
+			// 当前指派人 = carol ⇒ 目标 {alice,bob} 应增 alice,bob、删 carol。
+			writeJSON(w, map[string]any{
+				"id": 1, "number": 1, "title": "t", "state": "open",
+				"head":      map[string]any{"ref": "a", "sha": "h"},
+				"base":      map[string]any{"ref": "main", "sha": "b"},
+				"user":      map[string]any{"login": "dev", "id": 1},
+				"assignees": []any{map[string]any{"login": "carol"}},
+			})
+		default:
+			writeJSON(w, map[string]any{"id": 1, "number": 1, "title": "t", "state": "open"})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	if _, err := p.UpdateCR(context.Background(), "owner", "repo", "1",
+		provider.UpdateCROptions{Assignees: []string{"alice", "bob"}}); err != nil {
+		t.Fatalf("UpdateCR: %v", err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	var added, removed, patched bool
+	for _, c := range calls {
+		switch {
+		case c.method == http.MethodPost && strings.HasSuffix(c.path, "/pulls/1/assignees"):
+			added = true
+			if s, _ := c.body["assignees"].(string); s != "alice,bob" {
+				t.Errorf("add batch = %q, want \"alice,bob\"", s)
+			}
+		case c.method == http.MethodDelete && strings.HasSuffix(c.path, "/pulls/1/assignees"):
+			removed = true
+			if q := c.query.Get("assignees"); q != "carol" {
+				t.Errorf("remove batch = %q, want \"carol\"", q)
+			}
+		case c.method == http.MethodPatch && strings.HasSuffix(c.path, "/pulls/1"):
+			patched = true
+		}
+	}
+	if !added || !removed || !patched {
+		t.Fatalf("expected add+remove+patch calls, got added=%v removed=%v patched=%v calls=%+v", added, removed, patched, calls)
+	}
+}

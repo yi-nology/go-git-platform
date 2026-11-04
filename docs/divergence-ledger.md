@@ -59,6 +59,9 @@ This document is generated from the backends' registered divergence ledgers
 | CommitStatusManager | CreateCommitStatus |  | mapping | Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral). |
 | CommitStatusManager | ListCommitStatuses |  | mapping | Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitee's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| ChangeRequestManager | UpdateCR | opts.Assignees | mapping | Gitee has no assignee field on the pull-update endpoint; a non-empty opts.Assignees converges via read-modify-write over the pull assignee add/remove endpoints. Concurrent editors can lose updates in the window. |
+| IssueManager | CreateIssue | opts.Assignees | mapping | Gitee's issue wire takes a single assignee field; multiple logins are comma-joined into it, which only round-trips if the platform re-splits the joined value (undocumented platform behavior; single-assignee use is the verified shape). |
+| IssueManager | UpdateIssue | opts.Assignees | mapping | See CreateIssue: the issue wire takes a single assignee field; multiple logins are comma-joined into it. |
 
 ## gitea
 
@@ -87,6 +90,7 @@ This document is generated from the backends' registered divergence ledgers
 | NotificationManager | ListNotifications |  | stub | GitCode serves no global notification inbox — /notifications 404s live (probe round 2026-11-03); only the repo-scoped endpoints exist, so the method fails with ErrNotImplemented. |
 | NotificationManager | MarkNotificationRead |  | stub | The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented. |
 | NotificationManager | MarkNotificationsRead |  | stub | The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented. |
+| ChangeRequestManager | UpdateCR | opts.Assignees | ignore | GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped. |
 
 ## tencent_code
 
@@ -116,3 +120,4 @@ This document is generated from the backends' registered divergence ledgers
 | ReleaseManager | CreateRelease | opts.Target, opts.Draft, opts.Prerelease | ignore | The release create endpoint carries only tag/title/description. |
 | ReleaseManager | UpdateRelease | opts.Draft, opts.Prerelease | ignore | The release update endpoint takes no draft or prerelease flags. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| ChangeRequestManager | UpdateCR | opts.Assignees | mapping | The MR update endpoint takes a single assignee_id; a non-empty opts.Assignees applies the first login (resolved to a user ID via the users API) and drops the rest. |
