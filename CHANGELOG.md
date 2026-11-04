@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.101.1] - 2026-11-04
+
+### Fixed
+
+- **gitlab: `CreateWebhook`/`UpdateWebhook` 补 note（评论）事件族**（#32，
+  by zy84338719）——事件映射此前只有 push/merge-request/tag-push 三族，
+  Events 里的 "note"/"comment"/"issue_comment" 被静默丢弃，`EnsureWebhook`
+  建出的钩子永远收不到评论事件（argus 的 @bot 评论面在 GitLab 上无法经
+  SDK 完成 webhook 自动化）。现 Create 显式置 `NoteEvents`（含别名
+  comment/issue_comment），Update 将 note 加入「非 nil Events 显式置全
+  部派生位」集合——note 不在集合中时发显式 false 表达移除，与 push/MR/
+  tag-push 族的既有语义对齐；`convertHook` 反向映射本就带 note，读回一
+  致。两个线测钉住：create 别名映射与显式 false、update 表达/移除 note。
+
 ## [0.101.0] - 2026-11-03
 
 ### Changed（breaking：gitcode 平台能力面收缩）

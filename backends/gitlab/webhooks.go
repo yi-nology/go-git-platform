@@ -32,6 +32,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 		}
 		hookOpts.MergeRequestsEvents = new(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
 		hookOpts.TagPushEvents = new(em["tag_push"] || em["tag"])
+		hookOpts.NoteEvents = new(em["note"] || em["comment"] || em["issue_comment"])
 	}
 	hook, _, err := p.client.Projects.AddProjectHook(pid, hookOpts, gitlab.WithContext(ctx))
 	if err != nil {
@@ -53,7 +54,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // endpoint is boolean-flag based: omitted flags mean "unchanged", so a
 // non-nil Events slice must set every derived flag explicitly (true for
 // members, false for the rest) to express removal — mirroring the create
-// mapping's scope (push / merge-request / tag-push families).
+// mapping's scope (push / merge-request / tag-push / note families).
 func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
 	hookOpts := &gitlab.EditProjectHookOptions{}
 	if opts.URL != nil {
@@ -70,6 +71,10 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 		hookOpts.PushEvents = new(em["push"])
 		hookOpts.MergeRequestsEvents = new(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
 		hookOpts.TagPushEvents = new(em["tag_push"] || em["tag"])
+		// The note family joins the explicit-replacement set: a non-nil
+		// Events slice must state every derived flag (false included), or
+		// "removal" is not expressible and stale note subscriptions leak.
+		hookOpts.NoteEvents = new(em["note"] || em["comment"] || em["issue_comment"])
 	}
 	hook, _, err := p.client.Projects.EditProjectHook(pidOf(owner, repo), webhookID, hookOpts, gitlab.WithContext(ctx))
 	if err != nil {
