@@ -12,7 +12,7 @@ require (
 	github.com/oekit/logx v0.7.1
 	github.com/oekit/pkg v0.28.0
 	github.com/stretchr/testify v1.12.1
-	github.com/yi-nology/go-gitcode v0.13.0
+	github.com/yi-nology/go-gitcode v0.14.0
 	github.com/yi-nology/go-gongfeng v0.2.1
 	gitlab.com/gitlab-org/api/client-go/v3 v3.40.0
 	golang.org/x/crypto v0.58.0

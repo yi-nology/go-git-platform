@@ -238,16 +238,6 @@ func convertCollaborator(c *gitcode.Collaborator) *provider.Collaborator {
 	}
 }
 
-func convertBranchProtectionRule(r *gitcode.BranchProtectionRule) *provider.BranchProtection {
-	return &provider.BranchProtection{
-		BranchName:               r.Name,
-		RequiredApprovingReviews: r.RequiredApprovingReviews,
-		RequiredStatusChecks:     r.RequiredStatusChecks,
-		AllowForcePushes:         r.AllowForcePushes,
-		AllowDeletions:           r.AllowDeletions,
-	}
-}
-
 func convertGitcodeRepo(r *gitcode.Repository) *provider.PlatformRepo {
 	if r == nil {
 		return nil

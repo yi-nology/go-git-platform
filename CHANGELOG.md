@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.102.0] - 2026-11-04
+
+### Changed（breaking：gitcode 平台能力面再收缩）
+
+- **deps: go-gitcode v0.13.0 → v0.14.0**（SDK live 探针第二轮：kanban 面
+  整面重路由到真 wire `/org/{org}/kanban/*`；分支保护面收缩）。
+
+### Fixed（live 实证驱动的 gitcode 能力收缩·续）
+
+live 探针第二轮（body 分类法：GitCode 业务错误 body = 路由存在）证实：
+分支保护真 wire 只有 `PUT/DELETE /branches/{name}/setting`（要求已有保
+护；`/protect-branches` 有文档页但 GET/POST live 404，`/setting/new` 与
+`/wildcard/setting` 死——保护管理是 web-UI 管的，API 无创建无列表）。
+gitcode 后端的 `BranchProtections` 能力依赖 list+create+delete（converge
+流），不可用即摘除：
+
+- **BranchProtectionManager 摘除**（branch_protection.go 整文件 +
+  convertBranchProtectionRule）——`Capabilities().BranchProtections` 不
+  再为真，mcp `protection` 工具集对 gitcode 自动隐藏；
+- 契约夹具同步摘除（被摘能力的 mock 路由在真实服务不存在，保留夹具等
+  于为死路由维护绿色测试——同 v0.101.0 先例论证）；
+- 顺带修正：SDK 的 git/blobs 上轮误用 commit SHA 探测，本轮以真实 blob
+  SHA 复探 200（compare/raw/contents/search/discuss 亦全部 live 200），
+  文档化对照面（commits/issues/pulls/labels/milestones/releases/hooks/
+  collaborators/branches）全部 live 200。
+
 ## [0.101.1] - 2026-11-04
 
 ### Fixed
