@@ -92,13 +92,13 @@ if caps := p.Capabilities(); caps.Reviews {
 | Labels | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `LabelManager` |
 | Milestones | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `MilestoneManager` |
 | Reviews | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | `ReviewManager` |
-| CommitStatuses | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CommitStatusManager` |
-| Notifications | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `NotificationManager` |
+| CommitStatuses | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ | ✅ | `CommitStatusManager` |
+| Notifications | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | `NotificationManager` |
 | Reactions | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | `ReactionManager` |
-| BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `BranchProtectionManager` |
+| BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ | ✅ | `BranchProtectionManager` |
 | Collaborators | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
 | WebhookConfig | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `WebhookConfigManager` |
-| DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — | `DeploymentKeyManager` |
+| DeployKeys | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ | — | `DeploymentKeyManager` |
 | RepoStats | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `RepoStatsManager` |
 | Users | — | ✅ | — | — | — | — | ✅ | `UserManager` |
 | Gists | ✅ | — | — | — | — | — | — | `GistManager` |
@@ -108,6 +108,14 @@ if caps := p.Capabilities(); caps.Reviews {
 | CI failure logs | — | ✅ | — | — | — | — | — | `CILogManager` (type-assert only) |
 
 The matrix stays honest: `examples/capabilities` probes every declared capability with read-only calls (`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`).
+
+GitCode 脚注（2026-11-04 live 探针实证，证据链见
+[go-gitcode docs/wire-provenance.md](https://github.com/yi-nology/go-gitcode/blob/master/docs/wire-provenance.md)）：
+¹ GitCode 的 commit statuses / reactions / branch-protection / deploy-keys
+路由 live 404——能力已摘除，`Capabilities()` 不再宣称，直接类型断言失败；
+² 通知仅仓库域可用（全局 inbox 404，全局方法返回
+`ErrNotImplemented`）；仓库域方法与 `GetArchive`（同样 404，返回
+`ErrNotImplemented`）详见 divergence 台账。
 
 ### Local git operations
 
