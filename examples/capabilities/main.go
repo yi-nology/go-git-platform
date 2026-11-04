@@ -78,6 +78,9 @@ func printDeclarations(caps provider.CapabilitySet) {
 		"Starred": caps.Starred, "Migrations": caps.Migrations,
 		"ReleaseAssets": caps.ReleaseAssets,
 		"CILogs":        caps.CILogs,
+		"Deployments":   caps.Deployments,
+		"RepoTemplates": caps.RepoTemplates,
+		"ForkSync":      caps.ForkSync,
 	} {
 		mark := "  -"
 		if on {
@@ -185,6 +188,13 @@ func baseProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo st
 				return err
 			}
 			return printf("    %d forks\n", len(forks))
+		}},
+		{"Deployments", caps.Deployments, func(ctx context.Context) error {
+			deps, _, err := p.(provider.DeploymentManager).ListDeployments(ctx, owner, repo, "", 1, 5)
+			if err != nil {
+				return err
+			}
+			return printf("    %d deployments (page 1)\n", len(deps))
 		}},
 		{"Users", caps.Users, func(ctx context.Context) error {
 			login := os.Getenv("PLATFORM_USER")

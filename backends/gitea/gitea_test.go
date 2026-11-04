@@ -384,3 +384,36 @@ func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
 		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
 	}
 }
+
+// TestCreateRepoFromTemplate_WireTest locks the Gitea template wiring: the
+// generate route is hit with the name/owner body and the family conversion
+// preserves identity fields.
+func TestCreateRepoFromTemplate_WireTest(t *testing.T) {
+	var gotPath string
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/generate") {
+			gotPath = r.Method + " " + r.URL.Path
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			writeJSON(w, map[string]any{"id": 7, "name": "new-repo", "full_name": "owner/new-repo", "owner": map[string]any{"login": "owner", "id": 1}})
+			return
+		}
+		writeJSON(w, map[string]any{})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	repo, err := p.CreateRepoFromTemplate(context.Background(), "tpl", "base",
+		provider.CreateRepoFromTemplateOptions{Owner: "owner", Name: "new-repo", Private: true})
+	if err != nil {
+		t.Fatalf("CreateRepoFromTemplate: %v", err)
+	}
+	if repo.Name != "new-repo" {
+		t.Fatalf("template repo mapping: %+v", repo)
+	}
+	if gotPath != "POST /api/v1/repos/tpl/base/generate" {
+		t.Errorf("route: %s", gotPath)
+	}
+	if gotBody["name"] != "new-repo" || gotBody["private"] != true {
+		t.Errorf("body: %v", gotBody)
+	}
+}

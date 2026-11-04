@@ -22,6 +22,7 @@ const (
 	toolsetWebhooks = "webhooks"      // webhook CRUD (+ single get/update where supported)
 	toolsetTC       = "tencentcode"   // 工蜂-native workflow (code reviews, subscriptions, global listings)
 	toolsetCI       = "ci"            // CI failure diagnostics (failed job log tails)
+	toolsetExtras   = "repo-extras"   // deployments / templates / fork sync
 )
 
 // defaultPerPage is the page size used when a tool caller leaves per_page
@@ -61,13 +62,21 @@ var toolsets = []toolset{
 		_, ok := p.(provider.CILogManager)
 		return ok
 	}, registered: registerCI},
+	// repo extras: three toolsets in one entry, each tool additionally
+	// gated on its capability at registration time.
+	{name: toolsetExtras, enabled: func(p provider.Provider) bool {
+		_, dm := p.(provider.DeploymentManager)
+		_, tm := p.(provider.TemplateRepoManager)
+		_, fm := p.(provider.ForkSyncManager)
+		return dm || tm || fm
+	}, registered: registerRepoExtras},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
 	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
 	toolsetProtect: true, toolsetCollab: true, toolsetWebhooks: true,
-	toolsetTC: true, toolsetCI: true,
+	toolsetTC: true, toolsetCI: true, toolsetExtras: true,
 }
 
 // perPage resolves the per_page tool parameter with the default fallback.

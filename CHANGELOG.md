@@ -4,6 +4,30 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.106.0] - 2026-11-04
+
+### Added（部署/模板/Fork 同步三能力收官）
+
+- **`DeploymentManager`（GitHub）**：`CreateDeployment` / `ListDeployments`
+  （可按 environment 过滤）/ `CreateDeploymentStatus`（写侧词表在工具与
+  后端双层守卫：pending|in_progress|queued|success|failure|error|canceled|
+  inactive）。GitLab 的 deployment 记录是 CI 产物且无手工状态线——不声明
+  （absence-by-not-declaring），不硬凑。
+- **`TemplateRepoManager`（GitHub / Gitea）**：`CreateRepoFromTemplate`
+  ——GitHub `POST /repos/{o}/{r}/generate`、Gitea 同路径 generate 线；
+  **Gitea 要求显式目标 owner**（generate 端点无认证用户缺省，空值以统一
+  422 拒绝并在能力文档标注）。
+- **`ForkSyncManager`（GitHub）**：`SyncFork` 走 merge-upstream 端点——
+  fork 分支从上游同名分支快进/合并；冲突不代解，报错留给手工。
+- `CapabilitySet` 增 `Deployments` / `RepoTemplates` / `ForkSync` 三字段
+  （非 breaking），经 `DeriveCapabilities` 统一推导 + 契约套件双向锁定。
+- **mcp 新增 `repo-extras` 工具集**：`create_deployment`(写)
+  `list_deployments` `create_deployment_status`(写)
+  `create_repo_from_template`(写) `sync_fork`(写)，逐能力门控挂载。
+- 契约面：GitHub/Gitea 线级测试（四路由 body 断言 + generate 要求 owner
+  的守卫）；巡检示例补 Deployments/RepoTemplates/ForkSync 声明与探针；
+  README 矩阵三行、mcp README 工具表同步。
+
 ## [0.105.0] - 2026-11-04
 
 ### Added（CI 失败诊断扩面：GitLab 独占 → GitHub/GitLab/Gitea 三家）

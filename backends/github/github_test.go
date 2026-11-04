@@ -797,3 +797,78 @@ func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
 		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
 	}
 }
+
+// TestRepoExtras_WireTest locks the deployment/template/fork-sync wiring:
+// each capability call hits its route with the right body and the unified
+// conversion does not drop identity fields.
+func TestRepoExtras_WireTest(t *testing.T) {
+	var mu sync.Mutex
+	var bodies []map[string]any
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.Body != nil {
+			var b map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			bodies = append(bodies, b)
+		}
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/deployments") && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 55, "sha": "abc", "ref": "main", "environment": "prod"})
+		case strings.Contains(r.URL.Path, "/deployments/55/statuses"):
+			_, _ = w.Write([]byte(`{"id":1,"state":"success"}`))
+		case strings.HasSuffix(r.URL.Path, "/merge-upstream"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "fast-forward", "merge_type": "fast-forward"})
+		case strings.HasSuffix(r.URL.Path, "/generate"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "name": "new-repo", "full_name": "owner/new-repo"})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	ctx := context.Background()
+
+	dep, err := p.CreateDeployment(ctx, "owner", "repo", "main", "prod", provider.CreateDeploymentOptions{Task: "deploy"})
+	if err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+	if dep.ID != 55 || dep.Environment != "prod" {
+		t.Fatalf("deployment mapping: %+v", dep)
+	}
+	if err := p.CreateDeploymentStatus(ctx, "owner", "repo", 55, provider.DeploymentStatusOptions{State: "success", Description: "done"}); err != nil {
+		t.Fatalf("CreateDeploymentStatus: %v", err)
+	}
+	if err := p.SyncFork(ctx, "owner", "repo", "main"); err != nil {
+		t.Fatalf("SyncFork: %v", err)
+	}
+	repo, err := p.CreateRepoFromTemplate(ctx, "tpl", "base", provider.CreateRepoFromTemplateOptions{Name: "new-repo", Private: true})
+	if err != nil {
+		t.Fatalf("CreateRepoFromTemplate: %v", err)
+	}
+	if repo.Name != "new-repo" {
+		t.Fatalf("template repo mapping: %+v", repo)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	joined := strings.Join(paths, "\n")
+	for _, want := range []string{
+		"POST /api/v3/repos/owner/repo/deployments",
+		"POST /api/v3/repos/owner/repo/deployments/55/statuses",
+		"POST /api/v3/repos/owner/repo/merge-upstream",
+		"POST /api/v3/repos/tpl/base/generate",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing route %q, got %v", want, paths)
+		}
+	}
+	if b := bodies[0]; b["ref"] != "main" || b["environment"] != "prod" {
+		t.Errorf("deployment body: %v", b)
+	}
+	if b := bodies[2]; b["branch"] != "main" {
+		t.Errorf("merge-upstream body: %v", b)
+	}
+}

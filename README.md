@@ -106,6 +106,9 @@ if caps := p.Capabilities(); caps.Reviews {
 | Migrations | ✅ | — | — | — | — | — | — | `MigrationManager` |
 | ReleaseAssets | ✅ | — | — | — | — | — | — | `ReleaseAssetManager` |
 | CILogs | ✅ | ✅ | ✅ | — | — | — | — | `CILogManager` (`Capabilities().CILogs`) |
+| Deployments | ✅ | — | — | — | — | — | — | `DeploymentManager` (`Capabilities().Deployments`) |
+| RepoTemplates | ✅ | — | ✅ | — | — | — | — | `TemplateRepoManager` (`Capabilities().RepoTemplates`) |
+| ForkSync | ✅ | — | — | — | — | — | — | `ForkSyncManager` (`Capabilities().ForkSync`) |
 
 The matrix stays honest: `examples/capabilities` probes every declared capability with read-only calls (`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`).
 

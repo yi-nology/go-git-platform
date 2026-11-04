@@ -42,6 +42,9 @@ func testCapabilities(t *testing.T, h Harness) {
 	_, migrationsImpl := p.(provider.MigrationManager)
 	_, releaseAssetsImpl := p.(provider.ReleaseAssetManager)
 	_, ciLogsImpl := p.(provider.CILogManager)
+	_, deploymentsImpl := p.(provider.DeploymentManager)
+	_, repoTemplatesImpl := p.(provider.TemplateRepoManager)
+	_, forkSyncImpl := p.(provider.ForkSyncManager)
 
 	// Declared capabilities must always type-assert, and implemented ones
 	// must be declared — both directions, uniformly across capabilities.
@@ -64,6 +67,9 @@ func testCapabilities(t *testing.T, h Harness) {
 	assertCap(t, "Migrations", "MigrationManager", caps.Migrations, migrationsImpl)
 	assertCap(t, "ReleaseAssets", "ReleaseAssetManager", caps.ReleaseAssets, releaseAssetsImpl)
 	assertCap(t, "CILogs", "CILogManager", caps.CILogs, ciLogsImpl)
+	assertCap(t, "Deployments", "DeploymentManager", caps.Deployments, deploymentsImpl)
+	assertCap(t, "RepoTemplates", "TemplateRepoManager", caps.RepoTemplates, repoTemplatesImpl)
+	assertCap(t, "ForkSync", "ForkSyncManager", caps.ForkSync, forkSyncImpl)
 }
 
 // assertCap fails the test when a declared capability and the concrete
