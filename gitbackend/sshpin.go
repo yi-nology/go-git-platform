@@ -3,7 +3,6 @@ package gitbackend
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -46,7 +45,7 @@ func (b *NativeGitBackend) resolveSSHPin(ctx context.Context, repoPath string, a
 		return auth, noop, nil
 	}
 	if len(targets) == 0 {
-		return auth, noop, fmt.Errorf(
+		return auth, noop, oekiterrors.Errorf(
 			"HostKeyFingerprint 已设置，但无法从命令解析出远端主机（native 钉扎依赖 ssh-keyscan 预校验）。" +
 				"请使用 ssh:// URL、可解析的 remote 名称，或改设 KnownHostsPath")
 	}
@@ -339,7 +338,7 @@ func filterPinnedLines(raw, pin, host string, port int) ([]string, error) {
 		}
 	}
 	if len(matched) == 0 {
-		return nil, fmt.Errorf(
+		return nil, oekiterrors.Errorf(
 			"ssh host key fingerprint mismatch for %s:%d: 扫描到的主机密钥均不匹配钉扎指纹 %s（可能 MITM 或 pin 过期）",
 			host, port, pin)
 	}

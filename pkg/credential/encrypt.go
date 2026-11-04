@@ -6,11 +6,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"sync"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	"golang.org/x/crypto/argon2"
 )
 
@@ -57,7 +57,7 @@ type CryptoManager struct {
 func NewCryptoManager() (*CryptoManager, error) {
 	k := os.Getenv("ENCRYPTION_KEY")
 	if k == "" {
-		return nil, fmt.Errorf("ENCRYPTION_KEY environment variable is required for credential encryption")
+		return nil, oekiterrors.Errorf("ENCRYPTION_KEY environment variable is required for credential encryption")
 	}
 	return NewCryptoManagerFromKey(k), nil
 }
@@ -146,7 +146,7 @@ func (cm *CryptoManager) Decrypt(cryptoText string) (string, error) {
 		return "", errors.New("ciphertext too short")
 	}
 	if data[0] != cipherVersion {
-		return "", fmt.Errorf("unsupported ciphertext version %d (supported %d); re-encrypt the data with the current key", data[0], cipherVersion)
+		return "", oekiterrors.Errorf("unsupported ciphertext version %d (supported %d); re-encrypt the data with the current key", data[0], cipherVersion)
 	}
 	data = data[1:]
 

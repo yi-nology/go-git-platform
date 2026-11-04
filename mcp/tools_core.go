@@ -2,9 +2,10 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/pkg/projection"
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -114,7 +115,7 @@ func registerCore(s *mcp.Server, st *state) {
 
 	add(s, st, "list_crs", "List change requests", "List pull/merge requests of a repository, optionally trimmed to the given fields to save context.", false, func(ctx context.Context, in listCRsIn) (listCRsOut, error) {
 		if in.State != "" && !validCRStates[in.State] {
-			return listCRsOut{}, fmt.Errorf("invalid state %q (open|opened|closed|merged|all)", in.State)
+			return listCRsOut{}, oekiterrors.Errorf("invalid state %q (open|opened|closed|merged|all)", in.State)
 		}
 		opts := provider.ListCROptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {

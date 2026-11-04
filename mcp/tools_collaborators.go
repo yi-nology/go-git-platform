@@ -2,9 +2,10 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -34,7 +35,7 @@ func registerCollaborators(s *mcp.Server, st *state) {
 		switch in.Permission {
 		case "", "read", "write", "admin":
 		default:
-			return nil, fmt.Errorf("invalid permission %q (read|write|admin)", in.Permission)
+			return nil, oekiterrors.Errorf("invalid permission %q (read|write|admin)", in.Permission)
 		}
 		if err := cm.AddCollaborator(ctx, in.Owner, in.Repo, in.User,
 			provider.AddCollaboratorOptions{Permission: in.Permission}); err != nil {

@@ -3,12 +3,12 @@ package gitcode
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -407,7 +407,7 @@ func parseInt64(s string) (int64, error) {
 	var n int64
 	for _, c := range s {
 		if c < '0' || c > '9' {
-			return 0, fmt.Errorf("invalid integer %q", s)
+			return 0, oekiterrors.Errorf("invalid integer %q", s)
 		}
 		n = n*10 + int64(c-'0')
 	}

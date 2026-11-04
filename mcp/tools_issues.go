@@ -2,9 +2,10 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/pkg/projection"
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -61,7 +62,7 @@ func registerIssues(s *mcp.Server, st *state) {
 
 	add(s, st, "list_issues", "List issues", "List issues of a repository, optionally trimmed to the given fields.", false, func(ctx context.Context, in listIssuesIn) (listIssuesOut, error) {
 		if in.State != "" && !validIssueStates[in.State] {
-			return listIssuesOut{}, fmt.Errorf("invalid state %q (open|closed|all)", in.State)
+			return listIssuesOut{}, oekiterrors.Errorf("invalid state %q (open|closed|all)", in.State)
 		}
 		opts := provider.ListIssuesOptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {

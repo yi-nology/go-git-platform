@@ -2,8 +2,9 @@ package github
 
 import (
 	"context"
-	"fmt"
 	"io"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -26,7 +27,7 @@ func (p *Provider) DownloadReleaseAsset(ctx context.Context, owner, repo string,
 	// 既无字节流也无重定向(无 body),按契约报错而非静默成功。
 	if rc == nil {
 		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset",
-			fmt.Errorf("empty asset response: no body (redirect %q)", redirectURL))
+			oekiterrors.Errorf("empty asset response: no body (redirect %q)", redirectURL))
 	}
 	defer func() { _ = rc.Close() }()
 	if _, err := io.Copy(w, rc); err != nil {

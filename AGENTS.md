@@ -26,11 +26,12 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
    消息文本）。消息必须带动态值的格式化构造（含 `%w`，可多个）一律
    `oekiterrors.Errorf`（pkg ≥v0.19.0，与 fmt.Errorf 同型：nil-safe、空串返
    nil、多 `%w` 走 `Unwrap() []error`；需 kv 时先 Errorf 再 Wrap 叠加）。
-   `fmt.Errorf` 只允许两种残留形态：
+   `fmt.Errorf` 只允许一种残留形态：
    - 纯 `%w` **双链**包装——`provider/errors.go` 的 3 处是**永久例外**（分类
-     哨兵 + 原始 cause 双链，oekit Wrap 单 cause 语义不覆盖），别再"迁移"它们；
-   - 无 cause 的新建错误（参数校验等一次性消息）——存量（2026-10-21 审计
-     59 处）不强制迁移，新代码涉及格式化一律 Errorf。
+     哨兵 + 原始 cause 双链，oekit Wrap 单 cause 语义不覆盖），别再"迁移"它们。
+   （2026-11-04 起：无 cause 格式化错误的存量容忍区已取消——当日
+   「能用尽用」指令下 50 处主模块 + 9 处 mcp 全量迁移 `oekiterrors.Errorf`，
+   仅余上述 3 例外；此后 `fmt.Errorf` 在 SDK/mcp 源码中出现即违规。）
    禁止 `%v` 包装、禁止 `_` 丢弃错误。
 2. **日志**：SDK 包面向 `provider.Logger` / `transport.Logger` 注入（默认
    noop）；需要接 oekit 生态时用 `NewLogxLogger(component)`（基于

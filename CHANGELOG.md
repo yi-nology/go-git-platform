@@ -4,6 +4,20 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.108.0] - 2026-11-04
+
+### Changed（oekit 纪律收口：fmt.Errorf 存量容忍区取消）
+
+- **无 cause 格式化错误全量迁移 `oekiterrors.Errorf`**：主模块 50 处 +
+  mcp 9 处（2026-10-21 审计的 59 处存量容忍区在此取消——「能用尽用」指令
+  下的机械迁移，行为兼容：Errorf 与 fmt.Errorf 同型，nil-safe 为增益）。
+  迁移后 `fmt.Errorf` 在 SDK/mcp 源码中仅存于 `provider/errors.go` 例外区
+  （3 处双 `%w` 永久例外 + 同文件内 3 处错误机内部实现）。规则一同步更新：
+  此后 SDK/mcp 源码出现 `fmt.Errorf` 即违规。
+- 同轮复核确认全仓注册表形态的 mutex+map 已清零（githubapp token 缓存 /
+  encrypt material / ratelimit / janitor / ttlcache baseline 均为单键状态
+  字段，不在容器范畴）。
+
 ## [0.107.0] - 2026-11-04
 
 ### Changed（breaking：`JobLog.Truncat` 重命名）

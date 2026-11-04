@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Commit operations ---
@@ -151,7 +153,7 @@ func (b *NativeGitBackend) GetCommit(ctx context.Context, repoPath, hashStr stri
 	}
 	commits := parseCommitLines(stdout)
 	if len(commits) == 0 {
-		return nil, newGitError("GetCommit", repoPath, "", fmt.Errorf("unexpected log format"))
+		return nil, newGitError("GetCommit", repoPath, "", oekiterrors.Errorf("unexpected log format"))
 	}
 	return &commits[0], nil
 }

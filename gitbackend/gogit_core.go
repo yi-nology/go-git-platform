@@ -3,12 +3,12 @@ package gitbackend
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Core operations ---
@@ -264,7 +264,7 @@ func (b *GoGitBackend) RunRaw(ctx context.Context, repoPath string, args []strin
 	if _, err := openRepo("RunRaw", repoPath); err != nil {
 		return "", "", err
 	}
-	return "", "", newGitError("RunRaw", repoPath, "", fmt.Errorf("RunRaw not supported in gogit backend (pure-Go); use native backend for arbitrary git commands"))
+	return "", "", newGitError("RunRaw", repoPath, "", oekiterrors.Errorf("RunRaw not supported in gogit backend (pure-Go); use native backend for arbitrary git commands"))
 }
 
 func (b *GoGitBackend) TestConnection(ctx context.Context, url string, auth AuthConfig) error {

@@ -2,9 +2,9 @@ package mcpserver
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -189,9 +189,9 @@ func parseReviewerEvent(event string) (tencentcode.ReviewerEvent, error) {
 		tencentcode.ReviewEventRequireChange, tencentcode.ReviewEventDeny:
 		return tencentcode.ReviewerEvent(event), nil
 	case "":
-		return "", fmt.Errorf("event is required (approve|comment|require_change|deny)")
+		return "", oekiterrors.Errorf("event is required (approve|comment|require_change|deny)")
 	default:
-		return "", fmt.Errorf("invalid event %q (approve|comment|require_change|deny)", event)
+		return "", oekiterrors.Errorf("invalid event %q (approve|comment|require_change|deny)", event)
 	}
 }
 

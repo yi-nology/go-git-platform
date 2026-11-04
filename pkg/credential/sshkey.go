@@ -49,12 +49,12 @@ func (h *SSHKeyHelper) ProcessPrivateKey(privateKey, passphrase string) (string,
 	if passphrase != "" {
 		rawKey, err := ssh.ParseRawPrivateKeyWithPassphrase([]byte(keyContent), []byte(passphrase))
 		if err != nil {
-			return "", fmt.Errorf("failed to parse encrypted private key: %v", err)
+			return "", oekiterrors.Errorf("failed to parse encrypted private key: %v", err)
 		}
 
 		pemBytes, err := x509.MarshalPKCS8PrivateKey(rawKey)
 		if err != nil {
-			return "", fmt.Errorf("failed to marshal private key: %v", err)
+			return "", oekiterrors.Errorf("failed to marshal private key: %v", err)
 		}
 
 		pemBlock := &pem.Block{
@@ -72,19 +72,19 @@ func (h *SSHKeyHelper) ProcessPrivateKey(privateKey, passphrase string) (string,
 func (h *SSHKeyHelper) CreateTempKeyFile(keyContent string) (string, error) {
 	tmpFile, err := os.CreateTemp("", "git_ssh_key_*")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp key file: %v", err)
+		return "", oekiterrors.Errorf("failed to create temp key file: %v", err)
 	}
 
 	if _, err := tmpFile.WriteString(keyContent); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to write key file: %v", err)
+		return "", oekiterrors.Errorf("failed to write key file: %v", err)
 	}
 	_ = tmpFile.Close()
 
 	if err := os.Chmod(tmpFile.Name(), 0o600); err != nil {
 		_ = os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to set key file permissions: %v", err)
+		return "", oekiterrors.Errorf("failed to set key file permissions: %v", err)
 	}
 
 	return tmpFile.Name(), nil
@@ -130,7 +130,7 @@ func (h *SSHKeyHelper) GetHostKeyCallback() ssh.HostKeyCallback {
 		if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
 			return nil
 		}
-		return fmt.Errorf("host key mismatch for %s", hostname)
+		return oekiterrors.Errorf("host key mismatch for %s", hostname)
 	}
 }
 

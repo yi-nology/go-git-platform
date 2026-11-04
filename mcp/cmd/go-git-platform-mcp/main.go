@@ -33,7 +33,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -81,14 +80,14 @@ func run() error {
 	flag.Parse()
 
 	if *platform == "" {
-		return fmt.Errorf("--platform (or GIT_PLATFORM) is required: github, gitlab, gitea, forgejo, gitee, gitcode, tencentcode")
+		return oekiterrors.Errorf("--platform (or GIT_PLATFORM) is required: github, gitlab, gitea, forgejo, gitee, gitcode, tencentcode")
 	}
 	tok := *token
 	if tok == "" {
 		tok = os.Getenv(*tokenEnv)
 	}
 	if tok == "" {
-		return fmt.Errorf("no token: pass --token or set %s", *tokenEnv)
+		return oekiterrors.Errorf("no token: pass --token or set %s", *tokenEnv)
 	}
 
 	cfg := provider.Config{

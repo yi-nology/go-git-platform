@@ -2,13 +2,13 @@ package gitee
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -155,7 +155,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if resp.StatusCode >= 400 {
 		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive",
-			fmt.Errorf("gitee archive: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(detail))))
+			oekiterrors.Errorf("gitee archive: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(detail))))
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

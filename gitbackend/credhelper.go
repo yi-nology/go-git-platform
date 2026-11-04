@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/shellx"
 )
 
@@ -36,7 +37,7 @@ func (s *credSession) close() {
 // username 为空时默认 "token"（GitHub x-access-token / GitLab oauth2 均可）。
 func newCredSession(username, secret string) (*credSession, error) {
 	if secret == "" {
-		return nil, fmt.Errorf("cred session: empty secret")
+		return nil, oekiterrors.Errorf("cred session: empty secret")
 	}
 	if username == "" {
 		username = "token"

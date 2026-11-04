@@ -8,6 +8,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Remote operations ---
@@ -54,7 +55,7 @@ func (b *GoGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) 
 
 	urls := remote.Config().URLs
 	if len(urls) == 0 {
-		return "", newGitError("GetRemoteURL", repoPath, "", fmt.Errorf("no URLs for remote %s", name))
+		return "", newGitError("GetRemoteURL", repoPath, "", oekiterrors.Errorf("no URLs for remote %s", name))
 	}
 	return urls[0], nil
 }
