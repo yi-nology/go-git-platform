@@ -32,7 +32,7 @@ import (
 
 	oekiterrors "github.com/oekit/pkg/errors"
 
-	"github.com/google/go-github/v92/github"
+	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"

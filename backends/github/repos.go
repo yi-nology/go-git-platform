@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v92/github"
+	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -48,22 +48,16 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 
 // CreateRepo implements provider.RepoManager.
 func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
-	r := &github.Repository{
-		Name:        new(opts.Name),
+	// go-github v93 moved repo creation onto a dedicated request type
+	// (CreateRepositoryRequest); only the fields provider.CreateRepoOptions
+	// carries are populated.
+	body := github.CreateRepositoryRequest{
+		Name:        opts.Name,
 		Description: new(opts.Description),
 		Private:     new(opts.Private),
 		AutoInit:    new(opts.AutoInit),
 	}
-	if opts.DefaultBranch != "" {
-		r.DefaultBranch = new(opts.DefaultBranch)
-	}
-	var result *github.Repository
-	var err error
-	if owner == "" {
-		result, _, err = p.client.Repositories.Create(ctx, "", r)
-	} else {
-		result, _, err = p.client.Repositories.Create(ctx, owner, r)
-	}
+	result, _, err := p.client.Repositories.Create(ctx, owner, body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRepo", err)
 	}
@@ -72,14 +66,11 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 
 // ForkRepo implements provider.RepoManager.
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
-	forkOpts := &github.RepositoryCreateForkOptions{}
-	if opts.Organization != "" {
-		forkOpts.Organization = opts.Organization
+	body := github.CreateForkRequest{
+		Organization: new(opts.Organization),
+		Name:         new(opts.Name),
 	}
-	if opts.Name != "" {
-		forkOpts.Name = opts.Name
-	}
-	r, _, err := p.client.Repositories.CreateFork(ctx, owner, repo, forkOpts)
+	r, _, err := p.client.Repositories.CreateFork(ctx, owner, repo, body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ForkRepo", err)
 	}

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	sdkgithub "github.com/google/go-github/v92/github"
+	sdkgithub "github.com/google/go-github/v93/github"
 
 	ghbackend "github.com/yi-nology/go-git-platform/backends/github"
 	"github.com/yi-nology/go-git-platform/provider"

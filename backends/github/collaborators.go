@@ -3,7 +3,7 @@ package github
 import (
 	"context"
 
-	"github.com/google/go-github/v92/github"
+	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -31,10 +31,9 @@ func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([
 
 // AddCollaborator implements provider.CollaboratorManager.
 func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username string, opts provider.AddCollaboratorOptions) error {
-	githubOpts := &github.RepositoryAddCollaboratorOptions{
-		Permission: opts.Permission,
-	}
-	if _, _, err := p.client.Repositories.AddCollaborator(ctx, owner, repo, username, githubOpts); err != nil {
+	// go-github v93 moved collaborator invitations onto AddCollaboratorRequest.
+	body := github.AddCollaboratorRequest{Permission: new(opts.Permission)}
+	if _, _, err := p.client.Repositories.AddCollaborator(ctx, owner, repo, username, body); err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "AddCollaborator", err)
 	}
 	return nil

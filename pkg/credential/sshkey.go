@@ -11,8 +11,8 @@ import (
 	"net"
 	"os"
 	"strings"
-	"sync"
 
+	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
 
 	"golang.org/x/crypto/ssh"
@@ -21,17 +21,17 @@ import (
 // SSHKeyHelper provides SSH key processing, temp file management,
 // and host key verification for git operations.
 //
-// An SSHKeyHelper is safe for concurrent use: the host-key store is guarded by
-// a mutex so multiple SSH connections can share one helper.
+// An SSHKeyHelper is safe for concurrent use: the host-key store is an
+// oekit container.SafeMap, so multiple SSH connections can share one helper
+// (GetOrSet gives the trust-on-first-use path its atomicity for free).
 type SSHKeyHelper struct {
-	mu       sync.RWMutex
-	hostKeys map[string]ssh.PublicKey
+	hostKeys *container.SafeMap[string, ssh.PublicKey]
 }
 
 // NewSSHKeyHelper creates a new SSHKeyHelper instance.
 func NewSSHKeyHelper() *SSHKeyHelper {
 	return &SSHKeyHelper{
-		hostKeys: make(map[string]ssh.PublicKey),
+		hostKeys: container.NewSafeMap[string, ssh.PublicKey](),
 	}
 }
 
@@ -113,36 +113,24 @@ func (h *SSHKeyHelper) CleanupTempFile(filePath string) {
 
 // AddHostKey registers a known public key for a host.
 func (h *SSHKeyHelper) AddHostKey(host string, key ssh.PublicKey) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.hostKeys[host] = key
+	h.hostKeys.Set(host, key)
 }
 
 // GetHostKeyCallback returns an ssh.HostKeyCallback that accepts new hosts
 // (trust-on-first-use) and verifies returning hosts against stored keys.
 func (h *SSHKeyHelper) GetHostKeyCallback() ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		h.mu.RLock()
-		knownKey, ok := h.hostKeys[hostname]
-		h.mu.RUnlock()
-		if ok {
-			if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
-				return nil
-			}
-			return fmt.Errorf("host key mismatch for %s", hostname)
+		// GetOrSet is the whole TOFU dance, atomically: on first sighting the
+		// presented key is stored (loaded=false → accept); on returning hosts
+		// the stored key comes back (loaded=true) and must match.
+		knownKey, loaded := h.hostKeys.GetOrSet(hostname, key)
+		if !loaded {
+			return nil
 		}
-		// Unknown host: trust-on-first-use. Re-check under the write lock so
-		// a concurrent connection cannot trigger a duplicate/mismatched write.
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if knownKey, ok := h.hostKeys[hostname]; ok {
-			if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
-				return nil
-			}
-			return fmt.Errorf("host key mismatch for %s", hostname)
+		if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
+			return nil
 		}
-		h.hostKeys[hostname] = key
-		return nil
+		return fmt.Errorf("host key mismatch for %s", hostname)
 	}
 }
 

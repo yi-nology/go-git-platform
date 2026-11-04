@@ -150,7 +150,7 @@ func TestUserAgentAppendsToSDKAgent(t *testing.T) {
 	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
 	hc := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		r = r.Clone(r.Context())
-		r.Header.Set("User-Agent", "go-github/v92")
+		r.Header.Set("User-Agent", "go-github/v93")
 		return c.RoundTripper().RoundTrip(r)
 	})}
 	resp, err := hc.Get(srv.URL + "/x")
@@ -158,7 +158,7 @@ func TestUserAgentAppendsToSDKAgent(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	_ = resp.Body.Close()
-	if !strings.Contains(ua, "go-github/v92") || !strings.Contains(ua, "go-git-platform/") {
+	if !strings.Contains(ua, "go-github/v93") || !strings.Contains(ua, "go-git-platform/") {
 		t.Fatalf("User-Agent = %q, want both product tokens", ua)
 	}
 }

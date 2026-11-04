@@ -44,10 +44,7 @@ type Config struct {
 // "github.com/yi-nology/go-git-platform/backends/all" with a blank
 // identifier to register every platform shipped with the SDK.
 func NewProvider(cfg Config) (Provider, error) {
-	registryMu.RLock()
-	ctor, ok := registry[cfg.Platform]
-	registryMu.RUnlock()
-
+	ctor, ok := registry.Get(cfg.Platform)
 	if !ok {
 		return nil, oekiterrors.Wrap(ErrPlatformNotSupported, "platform not registered", "platform", cfg.Platform)
 	}

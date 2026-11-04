@@ -83,11 +83,38 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   型拒绝语义）；`timex`（日期算术/格式化，无多 layout 解析原语，
   gitcode/gitee 的 due_on 多格式解析保留为领域助手）；`shellx`（POSIX
   shell 转义，gitbackend 走 argv 直 exec 不经 shell）；`container`
-  （SafeMap 等——本仓 mutex+map 注册表皆为 init 注册+读路径形态，换容器
-  零行为收益，存量不迁移）；`bloomx`/`pack`/`strmap`/`encoding`/`cli`/
+  （**2026-11-04 起采纳 SafeMap**：用户授权 oekit 全量化的 breaking 重构后
+  存量裁定更新——provider 注册表/webhook validator 注册表/
+  statusExtractors/credential hostKeys/gitbackend 后端注册表五处
+  mutex+map 已迁 SafeMap，
+  GetOrSet 的原子性顺带把 credential 的 TOFU 双检锁与注册表的查重 panic
+  简化为一步；例外：detect.go hostAliases 保持 slice——子域 first-match
+  语义依赖注册顺序，map 迭代无序会改变行为，且查重+追加的原子性
+  container.Slice 无对应原语，硬迁会弱化 fail-fast；janitor 的 mutex 是状态字段
+  非 map，不在容器范畴）；`bloomx`/`pack`/`strmap`/`encoding`/`cli`/
   `contextx`/`bufiox`/`enumx`/`mathx`/`stringx`/`slicex`/`ptrx`（无匹配
   形态：本仓无布隆/迁移资产包/CLI 分发需求，指针助手用外部 SDK 自带的，
   contains 类循环用 stdlib slices）。
+- **pkg v0.29–v0.33 / concurrency v0.23.x / logx v0.8.x 增量审计（2026-11-04，
+  随「git 相关依赖全量升级」先行审计再动工，无新增引入；本条即结论存档）**。
+  本轮依赖线：pkg v0.28→v0.33、concurrency v0.22→v0.23.4、logx v0.7.1→
+  v0.8.2，另 go-github v92→v93 / gitlab client-go v3.40→v3.43 / gitea sdk
+  v1.4→v1.5.1（go-git/forgejo/gitcode/gongfeng/gitee/x/* 已在最新）。pkg
+  侧逐版本对照：v0.29 为大批 bugfix 发版（cache 六连修 + `HashKey` 长度前缀
+  无歧义编码——经 provider/ttlcache.go 全量委托**被动受益**，无引入点）；
+  v0.30 `singleflighttest` 契约套件（无自研 singleflight）、`convert` 增
+  nil 安全 `Opt*`/`AnyToStrOr`/`AnyToInt32`（mcp 层经 MCP SDK 类型化解码，
+  无 any→T 手写解析点）；v0.31 `cli` 子命令别名/Table/Report（SDK 无 CLI
+  分发面）；v0.32 `stringx.LastN`、`cache.NXSetter`/`SetNX`（无 NX 语义
+  消费点）；v0.33 `stringx.Filter`/`KeepFunc`/`DeleteFunc`、cache 选择性
+  stale（无字符串过滤与 stale 兜底消费点）。concurrency v0.23.x 全是
+  singleflight（DoChan 收尾）/budget（溢出+`Used`）/gopool（Close 竞态）/
+  breaker（重复样本）修复——本仓不消费这四个包（batch 引擎 `syncx.FanInLimitCtx`
+  未受影响），被动受益。logx v0.8.0 `Nop()`/`LevelOff`/`ParseLogLevel("OFF")`
+  ——SDK 注入面默认 noop 自维护（引 logx.Nop 会让 logx 变硬依赖，违反注入
+  纪律）；mcp 二进制无「彻底关日志」需求。v0.7.2 `WithAttrs` 脱敏修复经
+  transport `NewLogxLogger` 桥被动受益。全量结论：零新增引入，升级收益为
+  被动 bugfix（pkg/cache、async、logx 底座）。
 
 ## 规则二：公共契约红线
 

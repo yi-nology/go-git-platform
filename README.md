@@ -8,7 +8,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 [![CI](https://github.com/yi-nology/go-git-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/yi-nology/go-git-platform/actions/workflows/ci.yml)
 [![Release](https://github.com/yi-nology/go-git-platform/actions/workflows/release.yml/badge.svg)](https://github.com/yi-nology/go-git-platform/actions/workflows/release.yml)
 [![Latest Release](https://img.shields.io/github/v/release/yi-nology/go-git-platform?include_prereleases)](https://github.com/yi-nology/go-git-platform/releases)
-[![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go)](https://go.dev/)
 
 ## English
 
@@ -31,7 +31,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
   - SSH **host-key fingerprint pinning** enforced on both git backends (keyscan pre-verification, fail-closed)
   - Constant-time webhook signature comparison; SHA-256 token hashing in cache keys
 - **Contract tests + divergence ledger** — a cross-platform suite keeps behavior consistent; every deliberate departure is machine-readably registered and rendered to [docs/divergence-ledger.md](docs/divergence-ledger.md)
-- **oekit-native plumbing** — built on the [oekit](https://oekit.github.io) ecosystem's bottom layer: panic-recovering goroutines (`concurrency/async`, batch items can't crash the host), structured error wrapping (`pkg/errors.Wrap`, kv context), and a lazy-resolved logging bridge (`NewLogxLogger` follows the consumer's `logx.SetDefault`)
+- **oekit-native plumbing** — built on the [oekit](https://oekit.github.io) ecosystem's bottom layer: panic-recovering goroutines (`concurrency/async`, batch items can't crash the host), structured error wrapping (`pkg/errors.Wrap`, kv context), concurrent registries on `pkg/container.SafeMap` (platform/backend/validator/credential tables), and a lazy-resolved logging bridge (`NewLogxLogger` follows the consumer's `logx.SetDefault`)
 
 ### Quick Start
 
@@ -142,7 +142,7 @@ GitCode 脚注（2026-11-04 live 探针实证，证据链见
 - **契约测试** (`backends/contracttest/`): 跨平台统一测试套件, 确保接口行为一致
 - **分歧台账** (`Divergence`): 每个后端把与统一语义的偏离 (stub/ignore/mapping/detour) 机器可读地登记, 由 `Provider.Divergences()` 与 `provider.Ignores` 等谓词暴露; 渲染文档在 [docs/divergence-ledger.md](docs/divergence-ledger.md), 编辑后用 `go generate ./...` 再生成。契约套件会在台账与实际行为漂移时失败
 - **错误归一** (`provider.ProviderError`): 经 `statusCoder` 接口与各后端注册的 `StatusExtractor`(`provider.RegisterStatusExtractor`) 提取 HTTP 状态码并分类到哨兵错误——无 reflection、无错误消息解析(v0.83.0 起); 平台 SDK 错误统一经 `oekiterrors.Wrap` 携带 kv 结构化上下文
-- **oekit 底层生态**: goroutine 经 `oekit/concurrency/async` 启动(panic 自动 recover, 批处理单项 panic 转为该项 Err); 错误包装用 `oekit/pkg/errors.Wrap`(nil-safe + kv); 可选接入 `oekit/logx`(`provider.NewLogxLogger`, 随消费方 `logx.SetDefault` 懒解析跟随)。规则见 [AGENTS.md](AGENTS.md)
+- **oekit 底层生态**: goroutine 经 `oekit/concurrency/async` 启动(panic 自动 recover, 批处理单项 panic 转为该项 Err); 错误包装用 `oekit/pkg/errors.Wrap`(nil-safe + kv); 并发注册表走 `oekit/pkg/container.SafeMap`(平台/后端/validator/凭据表); 可选接入 `oekit/logx`(`provider.NewLogxLogger`, 随消费方 `logx.SetDefault` 懒解析跟随)。规则见 [AGENTS.md](AGENTS.md)
 - **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群); 限流类错误携带 `Retry-After`/`ResetAt` 恢复窗口 (`provider.RateLimitRecovery`)
 - **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效; 顶层 `githubapp` 包提供 JWT 铸造 + installation token 换取, 可直接作为 TokenSource 接入
 - **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额

@@ -4,17 +4,17 @@ go 1.27.3
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
-	gitea.dev/sdk v1.4.0
+	gitea.dev/sdk v1.5.1
 	github.com/go-git/go-git/v5 v5.19.3
-	github.com/google/go-github/v92 v92.0.0
+	github.com/google/go-github/v93 v93.0.0
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
-	github.com/oekit/concurrency v0.22.0
-	github.com/oekit/logx v0.7.1
-	github.com/oekit/pkg v0.28.0
+	github.com/oekit/concurrency v0.23.4
+	github.com/oekit/logx v0.8.2
+	github.com/oekit/pkg v0.33.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.14.0
 	github.com/yi-nology/go-gongfeng v0.2.1
-	gitlab.com/gitlab-org/api/client-go/v3 v3.40.0
+	gitlab.com/gitlab-org/api/client-go/v3 v3.43.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/time v0.16.0
@@ -61,7 +61,7 @@ require (
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/skeema/knownhosts v1.3.3 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.103.0] - 2026-11-04
+
+### Changed（deps：git 平台 SDK 全量升级）
+
+- **deps: oekit 三件套**——pkg v0.28.0 → v0.33.0、concurrency v0.22.0 →
+  v0.23.4、logx v0.7.1 → v0.8.2。零 API 面变化，收益为被动 bugfix：pkg/cache
+  六连修 + `HashKey` 长度前缀无歧义编码（经 provider/ttlcache.go 全量委托
+  传导）、logx `WithAttrs` 脱敏修复（经 `NewLogxLogger` 桥传导）。oekit
+  新原语增量审计已存档 [AGENTS.md](AGENTS.md)（零新增引入）。
+- **deps: go-github v92.0.0 → v93.0.0**（major 线跃迁）——上游选项结构改
+  指针字段并改名 `AddCollaboratorRequest`（原 `RepositoryAddCollaboratorOptions`），
+  backends/github 已全部适配；provider 层 wire shape 与公共契约不变。
+- **deps: gitlab client-go v3.40.0 → v3.43.0**、**gitea.dev/sdk v1.4.0 →
+  v1.5.1**——零适配面（backends/gitlab、backends/gitea 零文件改动）。
+- 其余 git 相关依赖经查已在上游最新：go-git v5.19.3、forgejo-sdk v3.0.0、
+  go-gitcode v0.14.0、go-gongfeng v0.2.1、go-gitee（master 分支 2026-05-21
+  后无新提交）、golang.org/x/*。
+- mcp 模块 go.mod 同步 tidy 跟随（Dependabot 只更根 go.mod）。
+
+### Changed（refactor：注册表面全面接入 oekit `container.SafeMap`）
+
+- 五处手写 mutex+map 注册表迁 `oekit/pkg/container.SafeMap`：provider 平台
+  注册表、`WebhookValidatorRegistry`、`statusExtractors`、
+  `pkg/credential` SSH hostKeys（`GetOrSet` 顺带把 TOFU 双检锁并成一步）、
+  `gitbackend` 后端注册表。公共契约不变（`Register` 仍查重 panic、
+  `WebhookValidatorRegistry.Register` 仍覆盖语义）。
+- 例外存档：`provider/detect.go` hostAliases 保持有序 slice——子域
+  first-match 语义依赖注册顺序，且「查重+追加」原子性 `container.Slice`
+  无对应原语；判定依据见 [AGENTS.md](AGENTS.md)。
+
 ## [0.102.0] - 2026-11-04
 
 ### Changed（breaking：gitcode 平台能力面再收缩）

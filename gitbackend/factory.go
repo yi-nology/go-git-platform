@@ -2,7 +2,8 @@ package gitbackend
 
 import (
 	"fmt"
-	"sync"
+
+	"github.com/oekit/pkg/container"
 )
 
 // GitBackendConstructor creates a GitBackend instance.
@@ -14,37 +15,33 @@ type Options struct {
 	Logger Logger
 }
 
-var (
-	backendRegistry   = map[string]GitBackendConstructor{}
-	backendRegistryMu sync.RWMutex
-)
+// backendRegistry is the backend-name → constructor registry, backed by an
+// oekit container.SafeMap (the write side is init()-time, the read side is
+// any goroutine). Same registry shape as provider/registry.go.
+var backendRegistry = container.NewSafeMap[string, GitBackendConstructor]()
 
 // Register registers a GitBackend constructor.
+// Panics on duplicate registration (fail-fast convention shared by every
+// registry in this package).
 func Register(name string, ctor GitBackendConstructor) {
-	backendRegistryMu.Lock()
-	defer backendRegistryMu.Unlock()
-	if _, exists := backendRegistry[name]; exists {
+	if _, loaded := backendRegistry.GetOrSet(name, ctor); loaded {
 		panic(fmt.Sprintf("gitbackend: %q already registered", name))
 	}
-	backendRegistry[name] = ctor
 }
 
 // NewGitBackend creates a GitBackend using the registry.
 // If opts.Type is empty, it auto-detects (native first, fallback to gogit).
 func NewGitBackend(opts Options) (GitBackend, error) {
-	backendRegistryMu.RLock()
-	defer backendRegistryMu.RUnlock()
-
 	if opts.Type != "" {
-		ctor, ok := backendRegistry[opts.Type]
+		ctor, ok := backendRegistry.Get(opts.Type)
 		if !ok {
 			return nil, fmt.Errorf("gitbackend: unknown type %q", opts.Type)
 		}
 		return ctor(opts)
 	}
 
-	nativeCtor, hasNative := backendRegistry["native"]
-	gogitCtor, hasGogit := backendRegistry["gogit"]
+	nativeCtor, hasNative := backendRegistry.Get("native")
+	gogitCtor, hasGogit := backendRegistry.Get("gogit")
 	return newAutoBackend(opts, nativeCtor, hasNative, gogitCtor, hasGogit)
 }
 

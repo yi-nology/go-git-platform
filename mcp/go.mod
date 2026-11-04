@@ -4,15 +4,15 @@ go 1.27.3
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/oekit/concurrency v0.22.0
-	github.com/oekit/logx v0.7.1
-	github.com/oekit/pkg v0.28.0
+	github.com/oekit/concurrency v0.23.4
+	github.com/oekit/logx v0.8.2
+	github.com/oekit/pkg v0.33.0
 	github.com/yi-nology/go-git-platform v0.61.0
 )
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 // indirect
-	gitea.dev/sdk v1.4.0 // indirect
+	gitea.dev/sdk v1.5.1 // indirect
 	github.com/42wim/httpsig v1.3.0 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
@@ -32,7 +32,7 @@ require (
 	github.com/go-openapi/swag/typeutils v0.29.2 // indirect
 	github.com/go-openapi/swag/yamlutils v0.29.2 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/google/go-github/v92 v92.0.0 // indirect
+	github.com/google/go-github/v93 v93.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -46,8 +46,8 @@ require (
 	github.com/yi-nology/go-gitcode v0.14.0 // indirect
 	github.com/yi-nology/go-gongfeng v0.2.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	gitlab.com/gitlab-org/api/client-go/v3 v3.40.0 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	gitlab.com/gitlab-org/api/client-go/v3 v3.43.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect

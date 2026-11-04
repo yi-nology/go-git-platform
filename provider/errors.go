@@ -4,8 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
+
+	"github.com/oekit/pkg/container"
 )
 
 // Sentinel errors classify transport and provider failures so callers can
@@ -206,13 +207,10 @@ type statusCoder interface {
 // handles wrapping).
 type StatusExtractor func(err error) (int, bool)
 
-// statusExtractors maps each platform to its SDK error extractor. Written
-// from backend init() (single-goroutine startup), read from Wrap on any
-// goroutine; the RWMutex mirrors the provider registry's discipline.
-var (
-	statusMu         sync.RWMutex
-	statusExtractors = map[Platform]StatusExtractor{}
-)
+// statusExtractors maps each platform to its SDK error extractor, backed
+// by oekit container.SafeMap. Written from backend init() (single-goroutine
+// startup), read from Wrap on any goroutine.
+var statusExtractors = container.NewSafeMap[Platform, StatusExtractor]()
 
 // RegisterStatusExtractor teaches Wrap how to read the HTTP status out of the
 // named platform's SDK error values — the explicit, type-safe replacement for
@@ -226,20 +224,15 @@ func RegisterStatusExtractor(p Platform, fn StatusExtractor) {
 	if fn == nil {
 		panic("provider: RegisterStatusExtractor with nil extractor")
 	}
-	statusMu.Lock()
-	defer statusMu.Unlock()
-	if _, dup := statusExtractors[p]; dup {
+	if _, loaded := statusExtractors.GetOrSet(p, fn); loaded {
 		panic("provider: duplicate status extractor for " + string(p))
 	}
-	statusExtractors[p] = fn
 }
 
 // statusExtractorFor returns the platform's registered extractor's verdict
 // for err.
 func statusExtractorFor(p Platform, err error) (int, bool) {
-	statusMu.RLock()
-	fn := statusExtractors[p]
-	statusMu.RUnlock()
+	fn, _ := statusExtractors.Get(p)
 	if fn == nil {
 		return 0, false
 	}

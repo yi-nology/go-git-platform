@@ -16,9 +16,9 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -79,15 +79,15 @@ func (v ValidatorFunc) Validate(r *http.Request, body []byte, secret string) err
 
 // WebhookValidatorRegistry indexes WebhookValidator implementations by
 // platform. It is safe for concurrent use; registrations happen during
-// package init and reads happen on the request path.
+// package init and reads happen on the request path. Storage delegates to
+// oekit container.SafeMap.
 type WebhookValidatorRegistry struct {
-	mu         sync.RWMutex
-	validators map[Platform]WebhookValidator
+	validators *container.SafeMap[Platform, WebhookValidator]
 }
 
 // NewWebhookValidatorRegistry builds an empty registry.
 func NewWebhookValidatorRegistry() *WebhookValidatorRegistry {
-	return &WebhookValidatorRegistry{validators: map[Platform]WebhookValidator{}}
+	return &WebhookValidatorRegistry{validators: container.NewSafeMap[Platform, WebhookValidator]()}
 }
 
 // Register associates a validator with a platform.
@@ -95,17 +95,13 @@ func (r *WebhookValidatorRegistry) Register(p Platform, v WebhookValidator) {
 	if v == nil {
 		return
 	}
-	r.mu.Lock()
-	r.validators[p] = v
-	r.mu.Unlock()
+	r.validators.Set(p, v)
 }
 
 // Get returns the validator for the given platform, or nil if none is
 // registered.
 func (r *WebhookValidatorRegistry) Get(p Platform) WebhookValidator {
-	r.mu.RLock()
-	v := r.validators[p]
-	r.mu.RUnlock()
+	v, _ := r.validators.Get(p)
 	return v
 }
 
