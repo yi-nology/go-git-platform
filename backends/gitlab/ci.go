@@ -50,7 +50,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		}
 		out = append(out, provider.JobLog{
 			Name: j.Name, Stage: j.Stage, WebURL: j.WebURL,
-			Trace: tail, Truncat: truncated,
+			Trace: tail, Truncated: truncated,
 		})
 	}
 	return out, nil

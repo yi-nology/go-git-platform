@@ -59,29 +59,19 @@ func (p *Provider) failedJobsForRun(ctx context.Context, owner, repo string, run
 		// canceled/skipped 是连带或未执行，不产生可归因日志；failure/
 		// timed_out/startup_failure 是真失败（timed_out 跑挂了、startup_
 		// failure 是配置没跑起来，两种都要归因）。
-		if !isFailedConclusion(job.GetConclusion()) {
+		if !backendutil.IsFailedCIConclusion(job.GetConclusion()) {
 			continue
 		}
 		tail, truncated := p.jobLogTail(ctx, owner, repo, job.GetID())
 		out = append(out, provider.JobLog{
-			Name:    job.GetName(),
-			Stage:   run.GetName(),
-			WebURL:  job.GetHTMLURL(),
-			Trace:   tail,
-			Truncat: truncated,
+			Name:      job.GetName(),
+			Stage:     run.GetName(),
+			WebURL:    job.GetHTMLURL(),
+			Trace:     tail,
+			Truncated: truncated,
 		})
 	}
 	return out, nil
-}
-
-// isFailedConclusion reports whether an Actions job conclusion counts as a
-// real failure worth attributing.
-func isFailedConclusion(c string) bool {
-	switch c {
-	case "failure", "timed_out", "startup_failure":
-		return true
-	}
-	return false
 }
 
 // jobLogTail fetches the job's presigned log URL and keeps the tail. The

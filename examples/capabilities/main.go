@@ -253,7 +253,7 @@ func entityProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo 
 			if err != nil {
 				return err
 			}
-			return printf("    %d statuses on %s\n", len(statuses), sha[:7])
+			return printf("    %d statuses on %s\n", len(statuses), shortSHA(sha))
 		}})
 	}
 	if sha := os.Getenv("COMMIT_SHA"); sha != "" && caps.CILogs {
@@ -263,9 +263,9 @@ func entityProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo 
 				return err
 			}
 			if len(logs) == 0 {
-				return printf("    no failed jobs on %s (green or no CI run)\n", sha[:7])
+				return printf("    no failed jobs on %s (green or no CI run)\n", shortSHA(sha))
 			}
-			return printf("    %d failed job(s) on %s\n", len(logs), sha[:7])
+			return printf("    %d failed job(s) on %s\n", len(logs), shortSHA(sha))
 		}})
 	}
 	if num := os.Getenv("ISSUE_NUMBER"); num != "" && caps.Reactions {
@@ -329,6 +329,15 @@ func idScopedProbes(p provider.Provider, caps provider.CapabilitySet, owner, rep
 	}
 
 	return probes
+}
+
+// shortSHA abbreviates a commit SHA for display without slicing past the
+// end of short inputs.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }
 
 // printf is fmt.Printf that doubles as an error-free probe step.

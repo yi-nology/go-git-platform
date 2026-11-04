@@ -38,16 +38,16 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		for _, job := range jobs.Jobs {
 			// canceled/skipped 是连带或未执行，不产生可归因日志；failure/
 			// timed_out/startup_failure 是真失败（与 GitHub 后端口径一致）。
-			if !isFailedCIConclusion(job.Conclusion) {
+			if !backendutil.IsFailedCIConclusion(job.Conclusion) {
 				continue
 			}
 			tail, truncated := p.jobLogTail(ctx, owner, repo, job.ID)
 			out = append(out, provider.JobLog{
-				Name:    job.Name,
-				Stage:   run.Path,
-				WebURL:  job.HTMLURL,
-				Trace:   tail,
-				Truncat: truncated,
+				Name:      job.Name,
+				Stage:     run.Path,
+				WebURL:    job.HTMLURL,
+				Trace:     tail,
+				Truncated: truncated,
 			})
 		}
 	}
@@ -67,14 +67,4 @@ func (p *Provider) jobLogTail(ctx context.Context, owner, repo string, jobID int
 		return "", false
 	}
 	return tail, truncated
-}
-
-// isFailedCIConclusion reports whether an Actions job conclusion counts as a
-// real failure worth attributing (same vocabulary as the GitHub backend).
-func isFailedCIConclusion(c string) bool {
-	switch c {
-	case "failure", "timed_out", "startup_failure":
-		return true
-	}
-	return false
 }

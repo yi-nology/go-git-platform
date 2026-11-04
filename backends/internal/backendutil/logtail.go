@@ -41,3 +41,15 @@ func TailOfReader(r io.Reader, budget int) (string, bool, error) {
 	}
 	return joined, false, nil
 }
+
+// IsFailedCIConclusion reports whether a CI job conclusion counts as a real
+// failure worth attributing: failure / timed_out (ran and failed) and
+// startup_failure (misconfigured, never ran) are attributable; canceled and
+// skipped are collateral or not-executed and are not.
+func IsFailedCIConclusion(c string) bool {
+	switch c {
+	case "failure", "timed_out", "startup_failure":
+		return true
+	}
+	return false
+}

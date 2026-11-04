@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.107.0] - 2026-11-04
+
+### Changed（breaking：`JobLog.Truncat` 重命名）
+
+- **`JobLog.Truncat` → `JobLog.Truncated`**（公共 API 拼写修正，Go 字段名
+  变更；**wire 不变**——json tag 一直是 `truncated`）。迁移：改字段引用即
+  可，序列化形态无变化。
+- mcp `get_failed_ci_logs` 工具改为直接返回 `provider.JobLog`（此前逐字段
+  复制到私有 out 类型——无语义差异的重复面）。
+- GitHub/Gitea 两份相同的 CI 失败判定词表提取为
+  `backendutil.IsFailedCIConclusion`（failure/timed_out/startup_failure 计
+  失败；canceled/skipped 不归因）。
+- mcp 写侧词表校验的 `fmt.Errorf` 迁移 `oekiterrors.Errorf`（规则一：新
+  代码格式化一律 Errorf；`tools_status.go` 存量同形顺带迁移）。
+- capabilities 巡检示例补 `shortSHA` 守卫（COMMIT_SHA 短于 7 字符时此前
+  会切片越界）。
+
 ## [0.106.0] - 2026-11-04
 
 ### Added（部署/模板/Fork 同步三能力收官）

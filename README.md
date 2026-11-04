@@ -292,7 +292,7 @@ if caps.Reviews {
 if cl, ok := p.(provider.CILogManager); ok {
     logs, _ := cl.ListFailedJobLogs(ctx, "o", "r", "commit-sha")
     for _, j := range logs {
-        fmt.Println(j.Stage, j.Name, "truncated:", j.Truncat)
+        fmt.Println(j.Stage, j.Name, "truncated:", j.Truncated)
     }
 }
 ```
