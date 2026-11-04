@@ -72,12 +72,15 @@ var toolsets = []toolset{
 	}, registered: registerRepoExtras},
 }
 
-var knownToolsets = map[string]bool{
-	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
-	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
-	toolsetProtect: true, toolsetCollab: true, toolsetWebhooks: true,
-	toolsetTC: true, toolsetCI: true, toolsetExtras: true,
-}
+// knownToolsets is derived from the toolsets registry in init — a
+// hand-maintained copy would drift every time a toolset lands (it did).
+var knownToolsets = func() map[string]bool {
+	m := make(map[string]bool, len(toolsets))
+	for _, ts := range toolsets {
+		m[ts.name] = true
+	}
+	return m
+}()
 
 // perPage resolves the per_page tool parameter with the default fallback.
 func perPage(n int) int {

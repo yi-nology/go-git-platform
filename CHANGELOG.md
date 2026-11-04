@@ -4,6 +4,26 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.109.0] - 2026-11-05
+
+### Changed（重复维护面简化 + 上游反馈闭环）
+
+- **mcp 工具集清单单一事实源化**：`knownToolsets` 从 `toolsets` 注册表
+  init 派生（此前手工复本已随 ci/repo-extras 落地漂移过一次）；
+  `NewServer` 的 unknown-toolset 报错清单改由 `ToolsetNames()` 派生
+  （此前每次加工具集都要手工同步报错文案）。注册表此后是唯一手工点。
+- **巡检示例声明打印改有序切片**：map 迭代无序导致每次运行输出顺序
+  随机（对 diff 不友好）；CapabilitySet 字段展示顺序现在稳定。
+- **上游反馈四连**（本轮迭代的实证问题回流）：
+  [oekit/pkg#178](https://github.com/oekit/pkg/issues/178)
+  （container.Slice 原子查重追加原语——detect.go 迁移阻断点）、
+  [go-gitcode#2](https://github.com/yi-nology/go-gitcode/issues/2)
+  （Actions 缺 head_sha 过滤与 job logs 线路——CI 能力接入阻断点）、
+  [go-gongfeng#1](https://github.com/yi-nology/go-gongfeng/issues/1)
+  （MR 单 assignee_id 与 release 无 by-tag 端点）、
+  [go-gitee#5](https://github.com/next-bin/go-gitee/issues/5)
+  （issue assignee 逗号 join 语义确认请求）。
+
 ## [0.108.0] - 2026-11-04
 
 ### Changed（oekit 纪律收口：fmt.Errorf 存量容忍区取消）

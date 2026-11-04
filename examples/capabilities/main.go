@@ -67,26 +67,30 @@ func main() {
 // by the contract suites.
 func printDeclarations(caps provider.CapabilitySet) {
 	fmt.Println("declared capabilities:")
-	for name, on := range map[string]bool{
-		"Issues": caps.Issues, "Search": caps.Search,
-		"Labels": caps.Labels, "Milestones": caps.Milestones,
-		"Reviews": caps.Reviews, "CommitStatuses": caps.CommitStatuses,
-		"Notifications": caps.Notifications, "Reactions": caps.Reactions,
-		"BranchProtections": caps.BranchProtections, "Collaborators": caps.Collaborators,
-		"DeployKeys": caps.DeployKeys, "RepoStats": caps.RepoStats, "Users": caps.Users,
-		"WebhookConfig": caps.WebhookConfig, "Gists": caps.Gists,
-		"Starred": caps.Starred, "Migrations": caps.Migrations,
-		"ReleaseAssets": caps.ReleaseAssets,
-		"CILogs":        caps.CILogs,
-		"Deployments":   caps.Deployments,
-		"RepoTemplates": caps.RepoTemplates,
-		"ForkSync":      caps.ForkSync,
+	// 有序切片：map 迭代无序会让每次运行的输出顺序随机。
+	for _, e := range []struct {
+		name string
+		on   bool
+	}{
+		{"Issues", caps.Issues}, {"Search", caps.Search},
+		{"Labels", caps.Labels}, {"Milestones", caps.Milestones},
+		{"Reviews", caps.Reviews}, {"CommitStatuses", caps.CommitStatuses},
+		{"Notifications", caps.Notifications}, {"Reactions", caps.Reactions},
+		{"BranchProtections", caps.BranchProtections}, {"Collaborators", caps.Collaborators},
+		{"DeployKeys", caps.DeployKeys}, {"RepoStats", caps.RepoStats}, {"Users", caps.Users},
+		{"WebhookConfig", caps.WebhookConfig}, {"Gists", caps.Gists},
+		{"Starred", caps.Starred}, {"Migrations", caps.Migrations},
+		{"ReleaseAssets", caps.ReleaseAssets},
+		{"CILogs", caps.CILogs},
+		{"Deployments", caps.Deployments},
+		{"RepoTemplates", caps.RepoTemplates},
+		{"ForkSync", caps.ForkSync},
 	} {
 		mark := "  -"
-		if on {
+		if e.on {
 			mark = "  ✓"
 		}
-		fmt.Printf("%s %s\n", mark, name)
+		fmt.Printf("%s %s\n", mark, e.name)
 	}
 	fmt.Println()
 }
