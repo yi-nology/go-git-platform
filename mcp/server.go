@@ -69,7 +69,7 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	selected := map[string]bool{}
 	for _, t := range opts.Toolsets {
 		if !knownToolsets[t] {
-			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search, releases)", t)
+			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search, releases, protection, collaborators, webhooks, tencentcode, ci)", t)
 		}
 		selected[t] = true
 	}

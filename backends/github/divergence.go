@@ -14,6 +14,8 @@ var divergences = []provider.Divergence{
 		Reason: "Archive downloads stream through the raw transport client rather than go-github."},
 	{Capability: "WebhookConfigManager", Method: "UpdateWebhook", Field: "opts.Events (empty)", Kind: provider.DivergenceIgnore,
 		Reason: "go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from \"unchanged\" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets)."},
+	{Capability: "CILogManager", Method: "ListFailedJobLogs", Field: "", Kind: provider.DivergenceMapping,
+		Reason: "A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline."},
 }
 
 // Divergences returns the registered divergence ledger for the GitHub backend.

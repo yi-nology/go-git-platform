@@ -12,9 +12,6 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// giteafamilyDivergences is the Gitea view of the family divergence ledger.
-var giteafamilyDivergences = giteafamily.Divergences("Gitea")
-
 // sdkPorts adapts the gitea SDK to the family engine's ports. The gitea SDK
 // is the family's upstream vocabulary, so the adapters are direct
 // delegation apart from trimming the unused *Response returns and projecting

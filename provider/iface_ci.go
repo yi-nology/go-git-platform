@@ -13,13 +13,17 @@ type JobLog struct {
 }
 
 // CILogManager fetches failure diagnostics from a platform's CI system.
-// It is an optional capability interface: consumers should type-assert
-// before use. Only GitLab exposes per-job logs through its public REST API
-// today; GitHub check-runs carry only summaries/annotations, so absence is
-// expressed by not implementing the interface instead of stubbing.
+// It is an optional capability interface: consumers should check
+// Capabilities().CILogs (or type-assert) before use. GitLab reads its
+// native pipelines; GitHub and Gitea map onto their Actions surfaces
+// (runs-by-SHA → failed jobs → job log tails); platforms without a
+// job-log wire express absence by not declaring the capability.
 type CILogManager interface {
 	// ListFailedJobLogs returns the failed jobs of the most recent pipeline
-	// for a commit, each with the tail of its execution log. A commit with
-	// no pipeline (or a green one) yields an empty slice, not an error.
+	// run for a commit, each with the tail of its execution log. A commit
+	// with no CI run (or a green one) yields an empty slice, not an error.
+	// Platforms whose CI fans out a commit into multiple pipelines (one per
+	// workflow) report the latest run per pipeline definition — see each
+	// backend's divergence ledger for the exact fan-out semantics.
 	ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]JobLog, error)
 }

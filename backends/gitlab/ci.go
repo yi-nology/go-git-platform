@@ -1,20 +1,15 @@
 package gitlab
 
 import (
-	"bufio"
 	"context"
-	"io"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ciTraceTailBytes 失败日志尾部保留量：CI 失败的根因几乎总在日志尾部
-// （报错与堆栈），头部只有无关的 setup 输出。20KB 对 LLM 归因足够。
-const ciTraceTailBytes = 20_000
-
-// ListFailedJobLogs implements provider.CILogManager（可选能力，仅 GitLab）：
+// ListFailedJobLogs implements provider.CILogManager：
 // 最近一条 pipeline 的失败 job → trace 尾部。无 pipeline / 全绿 → 空切片。
 func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
 	pid := pidOf(owner, repo)
@@ -67,37 +62,5 @@ func (p *Provider) traceTail(ctx context.Context, pid string, jobID int64) (stri
 	if err != nil {
 		return "", false, provider.Wrap(provider.PlatformGitLab, "GetTraceFile", err)
 	}
-	return tailOfReader(r, ciTraceTailBytes)
-}
-
-// tailOfReader 读流并保留尾部 budget 字节（行粒度扫描避免整文驻留内存；
-// trace 可能数十 MB）。
-func tailOfReader(r io.Reader, budget int) (string, bool, error) {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64*1024), 1024*1024)
-	var lines []string
-	total := 0
-	for sc.Scan() {
-		lines = append(lines, sc.Text())
-		total += len(sc.Text()) + 1
-		for total > budget*4 { // 行数软上限：超 4 倍预算从头部丢弃
-			total -= len(lines[0]) + 1
-			lines = lines[1:]
-		}
-	}
-	if err := sc.Err(); err != nil {
-		return "", false, err
-	}
-	joined := ""
-	for i := len(lines) - 1; i >= 0; i-- {
-		if joined == "" {
-			joined = lines[i]
-			continue
-		}
-		if len(joined)+len(lines[i])+1 > budget {
-			return joined, true, nil
-		}
-		joined = lines[i] + "\n" + joined
-	}
-	return joined, false, nil
+	return backendutil.TailOfReader(r, backendutil.CILogTailBytes)
 }

@@ -47,6 +47,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | ReleaseManager | GetArchive |  | detour | Archive downloads stream through the raw transport client rather than go-github. |
 | WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
+| CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline. |
 
 ## gitee
 
@@ -70,6 +71,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | GetCR | BaseSHA | mapping | Gitea payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitea's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple Actions runs (one per workflow file path); failed jobs are collected from the latest run per workflow path (runs return newest-first, first sighting wins) instead of a single pipeline. |
 
 ## forgejo
 

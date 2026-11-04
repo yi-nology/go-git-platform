@@ -77,6 +77,7 @@ func printDeclarations(caps provider.CapabilitySet) {
 		"WebhookConfig": caps.WebhookConfig, "Gists": caps.Gists,
 		"Starred": caps.Starred, "Migrations": caps.Migrations,
 		"ReleaseAssets": caps.ReleaseAssets,
+		"CILogs":        caps.CILogs,
 	} {
 		mark := "  -"
 		if on {
@@ -243,6 +244,18 @@ func entityProbes(p provider.Provider, caps provider.CapabilitySet, owner, repo 
 				return err
 			}
 			return printf("    %d statuses on %s\n", len(statuses), sha[:7])
+		}})
+	}
+	if sha := os.Getenv("COMMIT_SHA"); sha != "" && caps.CILogs {
+		probes = append(probes, probe{"CILogs", true, func(ctx context.Context) error {
+			logs, err := p.(provider.CILogManager).ListFailedJobLogs(ctx, owner, repo, sha)
+			if err != nil {
+				return err
+			}
+			if len(logs) == 0 {
+				return printf("    no failed jobs on %s (green or no CI run)\n", sha[:7])
+			}
+			return printf("    %d failed job(s) on %s\n", len(logs), sha[:7])
 		}})
 	}
 	if num := os.Getenv("ISSUE_NUMBER"); num != "" && caps.Reactions {

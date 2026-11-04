@@ -20,7 +20,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 
 - **Unified transport layer** — one auth/retry/hooks/rate-limit/logging pipeline for every platform; third-party SDKs (go-github, gitlab client-go, …) plug in via `http.RoundTripper`
 - **Capability-gated optional APIs** — 17 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
-- **CI failure diagnostics** — `CILogManager` (GitLab) returns failed jobs with the tail of their execution logs, sized for LLM consumption
+- **CI failure diagnostics** — `CILogManager` (GitHub / GitLab / Gitea) returns failed jobs with the tail of their execution logs, sized for LLM consumption; declared via `Capabilities().CILogs`
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
 - **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
 - **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget
@@ -105,7 +105,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Starred | ✅ | — | — | — | — | — | — | `StarredManager` |
 | Migrations | ✅ | — | — | — | — | — | — | `MigrationManager` |
 | ReleaseAssets | ✅ | — | — | — | — | — | — | `ReleaseAssetManager` |
-| CI failure logs | — | ✅ | — | — | — | — | — | `CILogManager` (type-assert only) |
+| CILogs | ✅ | ✅ | ✅ | — | — | — | — | `CILogManager` (`Capabilities().CILogs`) |
 
 The matrix stays honest: `examples/capabilities` probes every declared capability with read-only calls (`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`).
 
@@ -296,7 +296,7 @@ if cl, ok := p.(provider.CILogManager); ok {
 
 完整的能力×平台矩阵见 [英文 Capability matrix](#capability-matrix)(与 `Capabilities()` 声明一一对应, `examples/capabilities` 是其可运行巡检版本)。要点:
 
-- **CILogManager 只在 GitLab 实现**: GitLab 是唯一公开暴露逐作业日志的平台; GitHub check-runs 只有摘要/注解, 缺失以"不实现该接口"表达而非桩方法
+- **CILogManager 在 GitHub / GitLab / Gitea 实现**: GitLab 走原生 pipeline trace; GitHub/Gitea 映射到 Actions 面(runs-by-SHA → 失败 job → 日志尾部, 一个 SHA 多 workflow 时按 workflow 取最新 run, 见分歧台账); 无逐作业日志线路的平台以"不声明该能力"表达而非桩方法
 - **Gitee 不声明 Reviews / Reactions / Users**; **GitHub 不声明 Users**(走独立 REST 即可); **腾讯工蜂不声明 Search / Notifications / Reactions**(工蜂 API 无对应端点); **NoteManager 仅 GitLab / 腾讯工蜂实现**(GitLab 家族 MR 与 issue 注释分 iid 命名空间, GitHub 家族 issue 即 PR 由 IssueManager 覆盖)
 
 ### 自动化与 Agent 场景(等待/批量/投影/MCP)
@@ -549,7 +549,7 @@ go-git-platform/
 │   ├── wait.go / batch.go       # Agent 原语: CI 门禁等待 + 有界并发批量
 │   ├── commitstatus.go          # 提交状态工具
 │   ├── divergence.go            # 分歧台账类型 + 谓词
-│   ├── iface_ci.go              # CILogManager (可选, GitLab)
+│   ├── iface_ci.go              # CILogManager (可选, GitHub/GitLab/Gitea)
 │   └── iface_*.go               # 其余 20+ 子接口 (按领域拆分)
 │
 ├── transport/                   # 统一 HTTP 传输层

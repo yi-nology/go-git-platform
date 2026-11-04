@@ -709,3 +709,91 @@ func TestUpdateCRAssignees_PreludesPullEdit(t *testing.T) {
 		t.Fatalf("issue assignees body = %v, want [alice]", assignees)
 	}
 }
+
+// TestListFailedJobLogs_WorkflowDedup locks the GitHub CI wiring: runs for a
+// SHA are deduped per workflow (latest run only), failed jobs are collected
+// across the surviving runs, and each job's presigned log is fetched and
+// tailed.
+func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
+	var mu sync.Mutex
+	jobRoutesSeen := map[string]bool{}
+	logRequested := false
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/actions/runs"):
+			// workflow 11 一条 run；workflow 22 两条 run（201 新、301 旧）——
+			// 301 的 job 路由绝不能被查询（dedup 契约）。
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 3,
+				"workflow_runs": []any{
+					map[string]any{"id": 201, "name": "release", "workflow_id": 22, "head_sha": "abc"},
+					map[string]any{"id": 301, "name": "release", "workflow_id": 22, "head_sha": "abc"},
+					map[string]any{"id": 101, "name": "ci", "workflow_id": 11, "head_sha": "abc"},
+				},
+			})
+		case strings.HasSuffix(path, "/actions/runs/101/jobs"):
+			jobRoutesSeen["101"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"jobs": []any{map[string]any{
+					"id": 9001, "name": "build", "conclusion": "failure",
+					"html_url": "https://example.com/jobs/9001",
+				}},
+			})
+		case strings.HasSuffix(path, "/actions/runs/201/jobs"):
+			jobRoutesSeen["201"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"jobs": []any{map[string]any{
+					"id": 9002, "name": "publish", "conclusion": "startup_failure",
+					"html_url": "https://example.com/jobs/9002",
+				}},
+			})
+		case strings.HasSuffix(path, "/actions/runs/301/jobs"):
+			jobRoutesSeen["301"] = true // dedup 违约：旧 run 被查询
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "jobs": []any{}})
+		case strings.HasSuffix(path, "/logs/9001") || strings.HasSuffix(path, "/logs/9002"):
+			logRequested = true
+			_, _ = w.Write([]byte("setup ok\nerror: build failed\n"))
+		default:
+			// GetWorkflowJobLogs 需要 302 到最终日志地址。
+			if strings.Contains(path, "/jobs/900") {
+				// SDK 只跟随 301，302 的 Location 原样返回给调用方自行拉取
+				// ——Location 必须是绝对地址（presigned URL 语义）。
+				jobID := strings.TrimSuffix(path, "/logs")
+				http.Redirect(w, r, srv.URL+"/logs/"+jobID[strings.LastIndex(jobID, "/")+1:], http.StatusFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	logs, err := p.ListFailedJobLogs(context.Background(), "owner", "repo", "abc")
+	if err != nil {
+		t.Fatalf("ListFailedJobLogs: %v", err)
+	}
+	if jobRoutesSeen["301"] {
+		t.Fatalf("dedup violated: old run 301 was queried (routes seen: %v)", jobRoutesSeen)
+	}
+	if !jobRoutesSeen["101"] || !jobRoutesSeen["201"] {
+		t.Fatalf("latest runs 101/201 must be queried, seen=%v", jobRoutesSeen)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("want 2 failed jobs, got %d: %+v", len(logs), logs)
+	}
+	byName := map[string]provider.JobLog{}
+	for _, l := range logs {
+		byName[l.Name] = l
+	}
+	if byName["build"].Stage != "ci" || byName["publish"].Stage != "release" {
+		t.Fatalf("unexpected job mapping: %+v", logs)
+	}
+	if !logRequested || !strings.Contains(logs[0].Trace, "build failed") {
+		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
+	}
+}

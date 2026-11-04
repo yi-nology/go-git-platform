@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,9 +30,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 func newTestProvider(t *testing.T, srv *httptest.Server) *gitea.Provider {
 	t.Helper()
 	// The Gitea SDK calls GET /api/v1/version on NewClient; serve it.
+	// 1.26.0+ clears the Actions endpoints' server-version gate (the CI
+	// log suite exercises them).
 	versionSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/version" {
-			writeJSON(w, map[string]string{"version": "1.22.0"})
+			writeJSON(w, map[string]string{"version": "1.26.0"})
 			return
 		}
 		srv.Config.Handler.ServeHTTP(w, r)
@@ -314,5 +317,70 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got < 2 {
 		t.Errorf("expected at least 2 calls, got %d", got)
+	}
+}
+
+// TestListFailedJobLogs_WorkflowDedup locks the Gitea CI wiring: runs for a
+// SHA are deduped per workflow path (latest run only), failed jobs are
+// collected from the surviving runs, and each job's log reader is tailed.
+func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
+	var mu sync.Mutex
+	jobRoutesSeen := map[string]bool{}
+	logRequested := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/actions/runs"):
+			// workflow a.yml 两条 run（1 新、2 旧）——run 2 的 job 路由绝不能
+			// 被查询（dedup 契约）。
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 2,
+				"workflow_runs": []any{
+					map[string]any{"id": 1, "path": ".gitea/workflows/ci.yml", "head_sha": "abc"},
+					map[string]any{"id": 2, "path": ".gitea/workflows/ci.yml", "head_sha": "abc"},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/actions/runs/1/jobs"):
+			jobRoutesSeen["1"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"jobs": []any{map[string]any{
+					"id": 9, "name": "build", "conclusion": "failure",
+					"html_url": "https://example.com/jobs/9",
+				}},
+			})
+		case strings.HasSuffix(r.URL.Path, "/actions/runs/2/jobs"):
+			jobRoutesSeen["2"] = true // dedup 违约：旧 run 被查询
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "jobs": []any{}})
+		case strings.HasSuffix(r.URL.Path, "/actions/jobs/9/logs"):
+			logRequested = true
+			_, _ = w.Write([]byte("setup ok\nerror: test failed\n"))
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	logs, err := p.ListFailedJobLogs(context.Background(), "owner", "repo", "abc")
+	if err != nil {
+		t.Fatalf("ListFailedJobLogs: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if jobRoutesSeen["2"] {
+		t.Fatalf("dedup violated: old run 2 was queried (routes seen: %v)", jobRoutesSeen)
+	}
+	if !jobRoutesSeen["1"] {
+		t.Fatalf("latest run 1 must be queried, seen=%v", jobRoutesSeen)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("want 1 failed job, got %d: %+v", len(logs), logs)
+	}
+	if logs[0].Name != "build" || logs[0].Stage != ".gitea/workflows/ci.yml" {
+		t.Fatalf("unexpected job mapping: %+v", logs[0])
+	}
+	if !logRequested || !strings.Contains(logs[0].Trace, "test failed") {
+		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
 	}
 }

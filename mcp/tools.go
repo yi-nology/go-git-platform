@@ -21,6 +21,7 @@ const (
 	toolsetCollab   = "collaborators" // repository member management
 	toolsetWebhooks = "webhooks"      // webhook CRUD (+ single get/update where supported)
 	toolsetTC       = "tencentcode"   // 工蜂-native workflow (code reviews, subscriptions, global listings)
+	toolsetCI       = "ci"            // CI failure diagnostics (failed job log tails)
 )
 
 // defaultPerPage is the page size used when a tool caller leaves per_page
@@ -54,13 +55,19 @@ var toolsets = []toolset{
 		_, ok := p.(tencentcode.TencentCodeExtras)
 		return ok
 	}, registered: registerTencentCode},
+	// CI failure diagnostics: mounts when the backend implements
+	// CILogManager (GitHub / GitLab / Gitea; absence = not mounted).
+	{name: toolsetCI, enabled: func(p provider.Provider) bool {
+		_, ok := p.(provider.CILogManager)
+		return ok
+	}, registered: registerCI},
 }
 
 var knownToolsets = map[string]bool{
 	toolsetCore: true, toolsetCRs: true, toolsetIssues: true,
 	toolsetStatus: true, toolsetSearch: true, toolsetReleases: true,
 	toolsetProtect: true, toolsetCollab: true, toolsetWebhooks: true,
-	toolsetTC: true,
+	toolsetTC: true, toolsetCI: true,
 }
 
 // perPage resolves the per_page tool parameter with the default fallback.

@@ -28,6 +28,7 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 	_, starred := p.(StarredManager)
 	_, migrations := p.(MigrationManager)
 	_, releaseAssets := p.(ReleaseAssetManager)
+	_, ciLogs := p.(CILogManager)
 	return CapabilitySet{
 		Issues:            issues,
 		Search:            search,
@@ -47,5 +48,6 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 		Starred:           starred,
 		Migrations:        migrations,
 		ReleaseAssets:     releaseAssets,
+		CILogs:            ciLogs,
 	}
 }

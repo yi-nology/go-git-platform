@@ -4,6 +4,31 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.105.0] - 2026-11-04
+
+### Added（CI 失败诊断扩面：GitLab 独占 → GitHub/GitLab/Gitea 三家）
+
+- **`CILogManager`（CI 失败 job 日志尾部，agent 归因的核心原语）扩到
+  GitHub 与 Gitea**——三家线路：
+  - **GitLab**：原生 pipeline trace（既有实现，零改动）；
+  - **GitHub**：runs-by-SHA（`ListRepositoryWorkflowRuns` 的 head_sha
+    过滤）→ 失败 job（failure/timed_out/startup_failure 计失败，
+    canceled/skipped 不归因）→ presigned job log 拉取尾部；
+  - **Gitea**：`ListRepoRuns` 的 head_sha 过滤 → 失败 job → job log
+    reader 拉尾部。
+- **`CapabilitySet` 增 `CILogs` 字段**（结构体加字段=非 breaking）——此前
+  CILogManager 是唯一不在机器可读声明里的可选能力（type-assert-only），
+  现经 `DeriveCapabilities` 统一推导，契约套件双向锁定。
+- **结构重构**：GitLab 的 trace 尾部截断提取为
+  `backendutil.TailOfReader`+`CILogTailBytes`（20KB），三后端共享。
+- **mapping 分歧登记 ×2**（GitHub/Gitea）：一个 SHA 可扇出多个 workflow
+  run——按 workflow 取最新 run 收集失败 job（而非单一 pipeline 语义）。
+- **mcp 新增 `ci` 工具集**：`get_failed_ci_logs`（gated CILogManager，
+  自动随平台挂载）。
+- 契约面：capabilities 套件补 `CILogs` 双向断言；GitHub/Gitea 线级测试
+  锁 workflow 去重（旧 run 的 jobs 路由绝不被查询）与日志尾部拉取；
+  README 矩阵/要点/巡检探针同步。
+
 ## [0.104.0] - 2026-11-04
 
 ### Added（CR 指派人写面）
