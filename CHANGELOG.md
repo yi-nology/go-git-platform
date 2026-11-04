@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.103.1] - 2026-11-04
+
+### Security
+
+- **deps: golang.org/x/net v0.60.0 → v0.62.0**——关掉两个 module 级漏洞
+  GO-2026-6866 / GO-2026-6860（x/net html 渲染的命名空间遍历与文本节点合并
+  平方复杂度；本仓代码不直接消费 html 渲染路径，属 require 面卫生）。零
+  API 适配面。
+- **deps: golang.org/x/crypto v0.58.0 → v0.58.1-0.20261009181718-2f1f834330b2**
+  （公告钉的 master 修复提交，tag 未发）——关掉 GO-2026-5932（openpgp 包
+  失修告警；本仓不 import openpgp，同为 require 面卫生）。升级后主模块
+  与 mcp 模块 govulncheck 均「No vulnerabilities found」。
+
 ## [0.103.0] - 2026-11-04
 
 ### Changed（deps：git 平台 SDK 全量升级）
