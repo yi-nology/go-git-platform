@@ -152,7 +152,7 @@ func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret strin
 	if err != nil {
 		return oekiterrors.Wrap(ErrWebhookValidation, "decode signature", "err", err)
 	}
-	actual := signBody(secret, body)
+	actual := signBodyHash(secret, body, "sha256")
 	if subtle.ConstantTimeCompare(actual, expected) != 1 {
 		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
 	}
@@ -349,14 +349,8 @@ func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) er
 	return nil
 }
 
-// signBody returns the HMAC-SHA256 of body keyed by secret, as raw bytes.
-func signBody(secret string, body []byte) []byte {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(body)
-	return mac.Sum(nil)
-}
-
-// signBodyHash is the generic form. It returns the raw digest so callers can
+// signBodyHash is the generic HMAC digest. It returns the raw digest so
+// callers can
 // compare with decoded signatures in constant time.
 func signBodyHash(secret string, body []byte, algo string) []byte {
 	var h hash.Hash
