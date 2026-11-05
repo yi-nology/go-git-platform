@@ -226,6 +226,12 @@ type CreateWebhookOptions struct {
 	URL    string   `json:"url"`
 	Secret string   `json:"secret,omitempty"`
 	Events []string `json:"events,omitempty"`
+	// EnsureSecretMode is consumed only by EnsureWebhook (CreateWebhook
+	// ignores it): EnsureSecretKeep trusts a URL+events match and keeps
+	// the platform-held secret; EnsureSecretAlwaysUpdate rewrites the
+	// secret on a match, converging host-side rotations. See
+	// EnsureSecretMode for the write-only rationale.
+	EnsureSecretMode EnsureSecretMode `json:"ensure_secret_mode,omitempty"`
 }
 
 // UpdateWebhookOptions contains options for updating a webhook (patch-style:
