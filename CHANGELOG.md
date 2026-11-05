@@ -8,6 +8,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`EnsureWebhook` 的 `EnsureSecretMode`（issue #34）**：平台 webhook secret
+  write-only（List/Create 响应都不返回），URL+事件集 matched 的 hook 无法
+  比对 secret——宿主侧轮换后 ensure 报 unchanged 并保留平台旧 secret，宿主
+  用新 secret 验签 fail-closed 全拒、事件静默丢失。新增
+  `CreateWebhookOptions.EnsureSecretMode`（仅 EnsureWebhook 消费，
+  CreateWebhook 忽略）：缺省 `EnsureSecretKeep` 保持现状；
+  `EnsureSecretAlwaysUpdate` 在 matched 且 opts.Secret 非空时经
+  `WebhookConfigManager.UpdateWebhook` 原地补写 secret（保 hook 平台 ID，
+  一次 API 往返，报 EnsureUpdated）——argus bootstrap 的「ensure 后无条件
+  UpdateWebhook」workaround 收编进 SDK。manager 未实现
+  WebhookConfigManager 时显式报错而非静默保留旧 secret；空 secret 无可
+  收敛，跳过补写报 unchanged。五组单测（原地补写/缺省保持/空 secret
+  跳过/裸 manager 报错 + 既有回归）。
 - **`IssueManager.DeleteIssueComment`（issue #33）**：删除评论收进能力接口。
   签名 `(ctx, owner, repo, number, commentID int64) error`，与
   UpdateIssueComment 同一地址空间与 number 语义：comment 直址平台

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"slices"
 )
 
@@ -20,6 +21,29 @@ const (
 	EnsureUnchanged EnsureAction = "unchanged"
 )
 
+// EnsureSecretMode controls how EnsureWebhook treats a matching hook's
+// secret. Platform webhook secrets are write-only on every platform (list
+// responses never return them), so a hook that already matches URL + events
+// cannot be verified to carry the desired secret — it may be stale after a
+// host-side rotation, and a stale secret makes every delivery fail
+// signature validation (fail-closed, silently).
+type EnsureSecretMode string
+
+const (
+	// EnsureSecretKeep (default, also the zero value) trusts the match:
+	// a hook that already matches URL + events is left untouched even if
+	// opts.Secret differs from what the platform may hold.
+	EnsureSecretKeep EnsureSecretMode = ""
+	// EnsureSecretAlwaysUpdate rewrites the secret whenever the hook
+	// matches and opts.Secret is non-empty, converging rotations in the
+	// same ensure call: the in-place patch goes through
+	// WebhookConfigManager.UpdateWebhook (implemented by every backend),
+	// keeps the hook's platform ID, and reports EnsureUpdated. A manager
+	// that does not also implement WebhookConfigManager is an error —
+	// silently keeping a possibly-stale secret would defeat the mode.
+	EnsureSecretAlwaysUpdate EnsureSecretMode = "always-update"
+)
+
 // EnsureWebhook makes the repository carry exactly one webhook for
 // opts.URL with opts.Events, creating or replacing as needed, and returns
 // the resulting webhook plus the action taken. It is the idempotent
@@ -32,7 +56,9 @@ const (
 //   - Same URL, same event set → unchanged. Secrets are write-only on
 //     every platform (list responses never return them), so an existing
 //     hook's secret is not comparable; re-running with a different secret
-//     reports unchanged and keeps the old secret.
+//     reports unchanged and keeps the old secret. Set
+//     CreateWebhookOptions.EnsureSecretMode to EnsureSecretAlwaysUpdate
+//     to rewrite the secret in that case instead (rotation convergence).
 //   - Same URL, different event set → updated. The WebhookManager
 //     interface has no update method, so the hook is deleted and
 //     recreated; its platform ID changes as a result.
@@ -61,6 +87,12 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 	}
 
 	if len(matches) == 1 && equalEvents(matches[0].Events, desired) {
+		// Secret write-only: the match says nothing about the stored
+		// secret. always-update converges a rotated secret in place
+		// instead of trusting the match.
+		if opts.EnsureSecretMode == EnsureSecretAlwaysUpdate && opts.Secret != "" {
+			return ensureWebhookSecret(ctx, p, opts, matches[0])
+		}
 		return EnsureUnchanged, matches[0], nil
 	}
 
@@ -87,6 +119,24 @@ func equalEvents(a, sortedB []string) bool {
 	sa := slices.Clone(a)
 	slices.Sort(sa)
 	return slices.Equal(sa, sortedB)
+}
+
+// ensureWebhookSecret is the EnsureSecretAlwaysUpdate convergence path for
+// a hook that already matches URL + events: patch the secret in place via
+// WebhookConfigManager (keeps the platform ID, one API round-trip). A
+// manager without the config surface is an error — silently keeping a
+// possibly-stale secret would defeat the mode.
+func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebhookOptions, hook *PlatformWebhook) (EnsureAction, *PlatformWebhook, error) {
+	wcm, ok := p.(WebhookConfigManager)
+	if !ok {
+		return "", nil, errors.New("provider: EnsureSecretAlwaysUpdate requires the manager to also implement WebhookConfigManager")
+	}
+	secret := opts.Secret
+	out, err := wcm.UpdateWebhook(ctx, opts.Owner, opts.Repo, hook.ID, UpdateWebhookOptions{Secret: &secret})
+	if err != nil {
+		return "", nil, err
+	}
+	return EnsureUpdated, out, nil
 }
 
 // EnsureBranchProtection converges the branch protection rule for

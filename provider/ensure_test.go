@@ -10,9 +10,10 @@ import (
 // --- fakes ---
 
 type fakeWebhookManager struct {
-	hooks   []*PlatformWebhook
-	nextID  int64
-	created CreateWebhookOptions
+	hooks       []*PlatformWebhook
+	nextID      int64
+	created     CreateWebhookOptions
+	updatedByID map[int64]string // webhook ID → secret patched in
 }
 
 func (f *fakeWebhookManager) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
@@ -29,6 +30,30 @@ func (f *fakeWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhook
 	h := &PlatformWebhook{ID: f.nextID, URL: opts.URL, Events: events}
 	f.hooks = append(f.hooks, h)
 	return h, nil
+}
+
+func (f *fakeWebhookManager) UpdateWebhook(_ context.Context, _, _ string, webhookID int64, opts UpdateWebhookOptions) (*PlatformWebhook, error) {
+	if f.updatedByID == nil {
+		f.updatedByID = map[int64]string{}
+	}
+	if opts.Secret != nil {
+		f.updatedByID[webhookID] = *opts.Secret
+	}
+	for _, h := range f.hooks {
+		if h.ID == webhookID {
+			return h, nil
+		}
+	}
+	return nil, errors.New("no such hook")
+}
+
+func (f *fakeWebhookManager) GetWebhook(_ context.Context, _, _ string, webhookID int64) (*PlatformWebhook, error) {
+	for _, h := range f.hooks {
+		if h.ID == webhookID {
+			return h, nil
+		}
+	}
+	return nil, errors.New("no such hook")
 }
 
 func (f *fakeWebhookManager) DeleteWebhook(_ context.Context, _, _ string, id int64) error {
@@ -182,6 +207,114 @@ func TestEnsureWebhookReplacesOnEventDrift(t *testing.T) {
 	}
 	if len(f.hooks) != 1 || hook.ID != 2 {
 		t.Fatalf("hooks = %+v, want single replaced hook with new ID", f.hooks)
+	}
+}
+
+// EnsureSecretAlwaysUpdate converges a rotated secret on a matching hook:
+// in-place patch (hook ID unchanged), reported as updated.
+func TestEnsureWebhookSecretAlwaysUpdatePatchesOnMatch(t *testing.T) {
+	f := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	id := f.hooks[0].ID
+	action, hook, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "new", EnsureSecretMode: EnsureSecretAlwaysUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != EnsureUpdated {
+		t.Fatalf("action = %q, want updated", action)
+	}
+	if hook.ID != id {
+		t.Fatalf("hook ID = %d, want in-place patch keeping %d", hook.ID, id)
+	}
+	if got := f.updatedByID[id]; got != "new" {
+		t.Fatalf("patched secret = %q, want new", got)
+	}
+	if len(f.hooks) != 1 {
+		t.Fatalf("hooks = %+v, want the single hook preserved", f.hooks)
+	}
+}
+
+// Default mode keeps the pre-#34 behavior: a matching hook is untouched
+// even when the secret differs (no patch goes out).
+func TestEnsureWebhookSecretDefaultKeepsOnMatch(t *testing.T) {
+	f := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	action, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "rotated"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != EnsureUnchanged {
+		t.Fatalf("action = %q, want unchanged", action)
+	}
+	if len(f.updatedByID) != 0 {
+		t.Fatalf("unexpected patches: %v", f.updatedByID)
+	}
+}
+
+// always-update on an empty desired secret is a no-op: there is nothing to
+// converge, and rewriting to empty is not a platform-portable operation.
+func TestEnsureWebhookSecretAlwaysUpdateSkipsEmptySecret(t *testing.T) {
+	f := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	action, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", EnsureSecretMode: EnsureSecretAlwaysUpdate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != EnsureUnchanged {
+		t.Fatalf("action = %q, want unchanged", action)
+	}
+	if len(f.updatedByID) != 0 {
+		t.Fatalf("unexpected patches: %v", f.updatedByID)
+	}
+}
+
+// bareWebhookManager implements WebhookManager only (no UpdateWebhook) —
+// the always-update mode must fail loudly on such a manager instead of
+// silently keeping a possibly-stale secret.
+type bareWebhookManager struct {
+	hooks []*PlatformWebhook
+}
+
+func (f *bareWebhookManager) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
+	return f.hooks, nil
+}
+
+func (f *bareWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
+	h := &PlatformWebhook{ID: int64(len(f.hooks) + 1), URL: opts.URL, Events: opts.Events}
+	f.hooks = append(f.hooks, h)
+	return h, nil
+}
+
+func (f *bareWebhookManager) DeleteWebhook(_ context.Context, _, _ string, id int64) error {
+	for i, h := range f.hooks {
+		if h.ID == id {
+			f.hooks = append(f.hooks[:i], f.hooks[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (f *bareWebhookManager) ParseWebhookEvent(*http.Request, string) (*NormalizedEvent, error) {
+	return nil, ErrNotImplemented
+}
+
+func (f *bareWebhookManager) ValidateWebhookSignature(*http.Request, string) error { return nil }
+
+func TestEnsureWebhookSecretAlwaysUpdateRequiresConfigManager(t *testing.T) {
+	f := &bareWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "old"}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "new", EnsureSecretMode: EnsureSecretAlwaysUpdate})
+	if err == nil {
+		t.Fatal("expected an error for a manager without WebhookConfigManager")
 	}
 }
 
