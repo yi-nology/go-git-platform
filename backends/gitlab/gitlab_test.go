@@ -373,3 +373,53 @@ func TestIsNotFound(t *testing.T) {
 		t.Errorf("expected IsNotFound, got %v", err)
 	}
 }
+
+// TestListFailedJobLogs_WireTest locks the GitLab CI log wiring: the SHA
+// filter is sent to the pipelines endpoint, and failed jobs are collected
+// with their trace tails.
+func TestListFailedJobLogs_WireTest(t *testing.T) {
+	var gotPipelinesQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Pipelines 列表路径以 /pipelines 结尾（不含 /jobs）。
+		if strings.HasSuffix(r.URL.Path, "/pipelines") {
+			gotPipelinesQuery = r.URL.RawQuery
+		}
+		// Trace 路径含 /jobs/:id/trace——优先匹配 trace，再匹配 jobs 列表。
+		if strings.Contains(r.URL.Path, "/trace") {
+			_, _ = w.Write([]byte("setup ok\nerror: test failed\n"))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/pipelines") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": 1, "status": "failed", "sha": "abc"},
+			})
+			return
+		}
+		if strings.Contains(r.URL.Path, "/jobs") {
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"id": 9, "name": "build", "stage": "test", "status": "failed", "web_url": "https://x/9"},
+				{"id": 10, "name": "lint", "stage": "test", "status": "success", "web_url": "https://x/10"},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	logs, err := p.ListFailedJobLogs(context.Background(), "owner", "repo", "abc")
+	if err != nil {
+		t.Fatalf("ListFailedJobLogs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("want 1 failed job (success job filtered), got %d: %+v", len(logs), logs)
+	}
+	if logs[0].Name != "build" || logs[0].Stage != "test" {
+		t.Errorf("job mapping: %+v", logs[0])
+	}
+	if !strings.Contains(logs[0].Trace, "test failed") {
+		t.Errorf("trace tail not fetched: %q", logs[0].Trace)
+	}
+	if !strings.Contains(gotPipelinesQuery, "sha=abc") {
+		t.Errorf("SHA filter not sent: %s", gotPipelinesQuery)
+	}
+}
