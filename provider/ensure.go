@@ -91,16 +91,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		// secret. always-update converges a rotated secret in place
 		// instead of trusting the match.
 		if opts.EnsureSecretMode == EnsureSecretAlwaysUpdate && opts.Secret != "" {
-			wcm, ok := p.(WebhookConfigManager)
-			if !ok {
-				return "", nil, errors.New("provider: EnsureSecretAlwaysUpdate requires the manager to also implement WebhookConfigManager")
-			}
-			secret := opts.Secret
-			hook, err := wcm.UpdateWebhook(ctx, opts.Owner, opts.Repo, matches[0].ID, UpdateWebhookOptions{Secret: &secret})
-			if err != nil {
-				return "", nil, err
-			}
-			return EnsureUpdated, hook, nil
+			return ensureWebhookSecret(ctx, p, opts, matches[0])
 		}
 		return EnsureUnchanged, matches[0], nil
 	}
@@ -128,6 +119,24 @@ func equalEvents(a, sortedB []string) bool {
 	sa := slices.Clone(a)
 	slices.Sort(sa)
 	return slices.Equal(sa, sortedB)
+}
+
+// ensureWebhookSecret is the EnsureSecretAlwaysUpdate convergence path for
+// a hook that already matches URL + events: patch the secret in place via
+// WebhookConfigManager (keeps the platform ID, one API round-trip). A
+// manager without the config surface is an error — silently keeping a
+// possibly-stale secret would defeat the mode.
+func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebhookOptions, hook *PlatformWebhook) (EnsureAction, *PlatformWebhook, error) {
+	wcm, ok := p.(WebhookConfigManager)
+	if !ok {
+		return "", nil, errors.New("provider: EnsureSecretAlwaysUpdate requires the manager to also implement WebhookConfigManager")
+	}
+	secret := opts.Secret
+	out, err := wcm.UpdateWebhook(ctx, opts.Owner, opts.Repo, hook.ID, UpdateWebhookOptions{Secret: &secret})
+	if err != nil {
+		return "", nil, err
+	}
+	return EnsureUpdated, out, nil
 }
 
 // EnsureBranchProtection converges the branch protection rule for
