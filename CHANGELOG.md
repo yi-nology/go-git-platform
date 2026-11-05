@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.113.0] - 2026-11-05
+
+### Changed（简化收尾：退化封装清理）
+
+- **`signBody` 合并到 `signBodyHash`**：`signBody`（SHA256 专用）是
+  `signBodyHash("sha256")` 的退化形式，唯一调用点 `HMACSHA256Validator`
+  直接用通用形式；删掉 `signBody` 减少一层间接。
+- 同轮全面扫描确认代码库高成熟度：`IDCache` 已全量委托 oekit
+  `pkg/cache.LocalCache`、`labelresolve` 分层合理（无缓存版 + 缓存版）、
+  giteafamily 引擎无重复、gitbackend 双实现（native/gogit）实现方式根本
+  不同不重复、webhook 5 validator 各平台签名格式不同不合并、transport
+  42 函数无退化封装。
+
 ## [0.112.0] - 2026-11-05
 
 ### Changed（契约套件补齐：RepoTemplates 行为锁定）
