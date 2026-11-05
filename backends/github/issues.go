@@ -187,6 +187,16 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
+// DeleteIssueComment implements provider.IssueManager. The delete endpoint
+// addresses the comment directly, so number is unused. Deletion is
+// permanent; the platform only lets the comment's author perform it.
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	if _, err := p.client.Issues.DeleteComment(ctx, owner, repo, commentID); err != nil {
+		return provider.Wrap(provider.PlatformGitHub, "DeleteIssueComment", err)
+	}
+	return nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels,
 // exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {

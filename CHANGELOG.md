@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`IssueManager.DeleteIssueComment`（issue #33）**：删除评论收进能力接口。
+  签名 `(ctx, owner, repo, number, commentID int64) error`，与
+  UpdateIssueComment 同一地址空间与 number 语义：comment 直址平台
+  （GitHub、Gitea、Forgejo、GitCode、Gitee）忽略 number，GitLab 与工蜂经
+  issue 路由必须携带 issue number。各后端底层删除 API 均现成（工蜂 SDK 无
+  该端点，沿用 DeleteNote 的 NewRequest/Do raw 模式）；Gitea/Forgejo 经
+  giteafamily 新增 `DeleteIssueComment` 引擎 helper（走既有 DiffPort 的
+  DeleteIssueComment 端口）。doc 注明平台 authorship 门禁与「删除永久，
+  要保留历史请用 UpdateIssueComment」。contracttest 的 assertIssueComments
+  补删除断言（DELETE 动词 + issue 路由平台复检 notes 路径形状）。
+
 ## [0.113.0] - 2026-11-05
 
 ### Changed（简化收尾：退化封装清理）

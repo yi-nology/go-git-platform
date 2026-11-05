@@ -280,8 +280,9 @@ func assertIssueCommentsPaginated(t *testing.T, im provider.IssueManager, reques
 }
 
 // assertIssueComments checks comment listing (body), creation (wire body),
-// and editing (verb + body, plus the issue-routed note path on platforms
-// that address notes through the issue).
+// editing (verb + body, plus the issue-routed note path on platforms that
+// address notes through the issue), and deletion (verb + issue-routed note
+// path on the same platforms).
 func assertIssueComments(t *testing.T, h IssuesHarness, im provider.IssueManager, requests *[]recordedRequest) {
 	t.Helper()
 	assertIssueCommentsPaginated(t, im, requests)
@@ -298,6 +299,24 @@ func assertIssueComments(t *testing.T, h IssuesHarness, im provider.IssueManager
 	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "body", "an edited comment")
 	if h.UpdateCommentViaIssue {
 		assertIssueNoteEditPath(t, *requests)
+	}
+	if err := im.DeleteIssueComment(context.Background(), "owner", "repo", "1", 1); err != nil {
+		t.Fatalf("DeleteIssueComment: %v", err)
+	}
+	// Deletion hits the same address space as the edit (direct on GitHub,
+	// Gitea, Forgejo, GitCode, Gitee; issue-routed notes on GitLab, 工蜂):
+	// a backend that swapped the number/commentID plumbing would DELETE a
+	// different path and fail here.
+	if h.UpdateCommentViaIssue {
+		last := (*requests)[len(*requests)-1]
+		if last.Method != http.MethodDelete || !issueNoteEditPath.MatchString(last.Path) {
+			t.Fatalf("expected DELETE on the issue-routed note path .../issues/1/notes/1, got %s %s", last.Method, last.Path)
+		}
+	} else {
+		last := (*requests)[len(*requests)-1]
+		if last.Method != http.MethodDelete {
+			t.Fatalf("expected a DELETE after DeleteIssueComment, got %s %s", last.Method, last.Path)
+		}
 	}
 }
 

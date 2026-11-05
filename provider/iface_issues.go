@@ -30,6 +30,18 @@ type IssueManager interface {
 	// directly (GitHub, Gitea, Forgejo, GitCode, Gitee); GitLab and Tencent
 	// 工蜂 route through the issue, so it must carry that issue's number.
 	UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*IssueComment, error)
+	// DeleteIssueComment removes a comment. commentID is the
+	// IssueComment.ID from CreateIssueComment or ListIssueComments, the
+	// same address space UpdateIssueComment writes to; the platform
+	// enforces authorship — only the comment's author (typically the token
+	// identity rotating its own report comment) may delete — so the call
+	// fails for anyone else's comment. number is ignored on platforms
+	// whose delete endpoint addresses the comment directly (GitHub, Gitea,
+	// Forgejo, GitCode, Gitee); GitLab and Tencent 工蜂 route through the
+	// issue, so it must carry that issue's number. Deletion is permanent:
+	// callers wanting "edit instead" semantics (summary-comment rotation
+	// that preserves history) should prefer UpdateIssueComment.
+	DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error
 	ListIssueLabels(ctx context.Context, owner, repo string) ([]*IssueLabel, error)
 	AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error
 	RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error

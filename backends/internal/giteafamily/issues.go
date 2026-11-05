@@ -299,6 +299,17 @@ func UpdateIssueComment(ctx context.Context, f Family, c IssuePort, owner, repo,
 	return convertIssueComment(comment), nil
 }
 
+// DeleteIssueComment removes a comment. The family's delete endpoint lives
+// on DiffPort and addresses the comment directly (number is unused);
+// deletion is permanent and the platform only lets the comment's author
+// perform it.
+func DeleteIssueComment(ctx context.Context, f Family, c DiffPort, owner, repo, number string, commentID int64) error {
+	if _, err := c.DeleteIssueComment(ctx, owner, repo, commentID); err != nil {
+		return provider.Wrap(f.Platform, "DeleteIssueComment", err)
+	}
+	return nil
+}
+
 // ListIssueLabels lists the repository-level labels, exhausting pagination.
 func ListIssueLabels(ctx context.Context, f Family, c LabelPort, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*Label, error) {

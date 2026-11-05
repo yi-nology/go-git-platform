@@ -229,6 +229,21 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(note), nil
 }
 
+// DeleteIssueComment implements provider.IssueManager. GitLab deletes issue
+// notes through the issue like its edit endpoint, so number must carry the
+// issue's IID. Deletion is permanent; the platform only lets the note's
+// author perform it.
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "DeleteIssueComment", number)
+	if err != nil {
+		return err
+	}
+	if _, err := p.client.Notes.DeleteIssueNote(pidOf(owner, repo), n, commentID, gitlab.WithContext(ctx)); err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "DeleteIssueComment", err)
+	}
+	return nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels,
 // exhausting pagination (the loop advances until an empty page).
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
