@@ -4,8 +4,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"sync"
 
+	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -147,9 +147,12 @@ var knownHostPlatforms = []struct {
 // hostAliases holds hosts registered at init time via RegisterHostAlias, so
 // a self-hosted alias (or a private deployment on a known domain shape) can
 // be classified without editing this package. Registered aliases are matched
-// before the built-in table.
-var hostMu sync.RWMutex
-var hostAliases []hostEntry
+// before the built-in table — the ordered registry shape stays on
+// container.Slice: subdomain first-match semantics depend on registration
+// order, and oekit v0.34.1's AppendIfAbsent covers the atomic
+// check-and-append the registry discipline requires (find-first-matching,
+// fail-fast on duplicate). Snapshot/Range iterate over a stable copy.
+var hostAliases = container.NewSlice[hostEntry]()
 
 type hostEntry struct {
 	host     string
@@ -169,14 +172,13 @@ func RegisterHostAlias(host string, platform Platform, baseURL string) {
 	if platform == "" {
 		panic("provider: RegisterHostAlias with empty platform")
 	}
-	hostMu.Lock()
-	defer hostMu.Unlock()
-	for _, e := range hostAliases {
-		if strings.EqualFold(e.host, host) {
-			panic("provider: duplicate host alias registration for " + host)
-		}
+	entry := hostEntry{host: strings.ToLower(host), platform: platform, baseURL: baseURL}
+	// 查重+追加的原子性由容器原语承诺：eq 做大小写归一，命中即拒绝。
+	if !hostAliases.AppendIfAbsent(entry, func(a, b hostEntry) bool {
+		return strings.EqualFold(a.host, b.host)
+	}) {
+		panic("provider: duplicate host alias registration for " + host)
 	}
-	hostAliases = append(hostAliases, hostEntry{host: strings.ToLower(host), platform: platform, baseURL: baseURL})
 }
 
 func classifyHost(host string) (Platform, string, error) {
@@ -187,13 +189,19 @@ func classifyHost(host string) (Platform, string, error) {
 	if h, _, err := net.SplitHostPort(lower); err == nil {
 		lower = h
 	}
-	hostMu.RLock()
-	aliases := hostAliases
-	hostMu.RUnlock()
-	for _, k := range aliases {
+	// 别名匹配在容器快照上进行（读侧不持锁；注册期写入不影响本次遍历）。
+	var found bool
+	var match hostEntry
+	hostAliases.Range(func(_ int, k hostEntry) bool {
 		if lower == k.host || strings.HasSuffix(lower, "."+k.host) {
-			return k.platform, k.baseURL, nil
+			found = true
+			match = k
+			return false
 		}
+		return true
+	})
+	if found {
+		return match.platform, match.baseURL, nil
 	}
 	for _, k := range knownHostPlatforms {
 		if lower == k.host || strings.HasSuffix(lower, "."+k.host) {

@@ -322,7 +322,7 @@ func TestDetectPlatform_SSH_SelfHosted_Unrecognized(t *testing.T) {
 // registration panics (same convention as Register).
 func TestRegisterHostAlias(t *testing.T) {
 	RegisterHostAlias("git.company.internal", PlatformGitLab, "https://git.company.internal/api/v4")
-	defer func() { hostAliases = nil }()
+	defer hostAliases.Clear()
 
 	res, err := DetectPlatform("git@git.company.internal:team/proj.git")
 	if err != nil {

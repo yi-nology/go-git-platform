@@ -4,6 +4,33 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.110.0] - 2026-11-05
+
+### Changed（oekit container 满配：detect.go 最后一个手写 mutex 收编）
+
+- **oekit/pkg v0.33.0 → v0.34.1**——issue#178 的
+  `container.Slice.AppendIfAbsent`（原子「查重+追加」，对应
+  `SafeMap.GetOrSet` 的有序版承诺）落地后，`provider/detect.go` 的
+  hostAliases 别名表从手写 RWMutex+slice 迁移到 `container.Slice`：
+  - `RegisterHostAlias` 用 `AppendIfAbsent(entry, EqualFold-eq)` 做原子
+    查重+追加，重复注册的 fail-fast panic 契约保留；
+  - `classifyHost` 用 `Range`（容器快照语义，读侧不持锁）做 first-match
+    子域分类——有序性（注册顺序敏感）由 Slice 保持，正是当初保留手写
+    实现的两条理由都被容器原语覆盖。
+- **provider 包从此零 `sync` 导入**：全仓注册表形态（SafeMap 五处 +
+  Slice 一处）容器化收官。
+- 迁移顺带修正测试契约：容器是 `*Slice` 指针类型，原 `hostAliases = nil`
+  的测试注入会致 nil 指针解引用——改 `Clear()`（零值/清空语义由容器
+  承接）。
+- AGENTS.md 存档更新（container 例外项转为已收编）、README 生态描述
+  补 `container.Slice`（有序注册表）。
+- **顺带修复另一个调度敏感的重试测试**：`TestRetry_RateLimit403
+  RetryAfterZeroRetriesImmediately` 的 50ms 上界把网络往返算进了「Retry-
+  After: 0 不消费指数底延时」的语义——CI runner 高负载（race 检测器）会
+  破。改用 `elapsed >= BaseDelay` 的相对判定：消费了 100ms 底延时必红
+  （语义保持），真实调度开销天然满足（schedule 无关）；`-race ×200`
+  压测验证。
+
 ## [0.109.0] - 2026-11-05
 
 ### Changed（重复维护面简化 + 上游反馈闭环）

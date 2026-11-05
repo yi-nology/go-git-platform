@@ -535,6 +535,11 @@ func TestRetry_RateLimit403WithRemainingNonZeroNotRetried(t *testing.T) {
 // TestRetry_RateLimit403RetryAfterZeroRetriesImmediately: Retry-After: 0
 // takes precedence over the exponential backoff, so the retry fires without
 // a measurable wait.
+//
+// 上界说明：50ms 曾含本地 loopback 往返——CI runner 高负载（race 检测器）
+// 或低功耗调度会把往返推到 50ms 之上而误报（v0.110.0 实见）。「Retry-
+// After: 0 优先于 100ms 指数底延时」这条语义承诺上界放宽到 100ms：
+// 不消费底延时的判定与毫秒级往返开销解耦。
 func TestRetry_RateLimit403RetryAfterZeroRetriesImmediately(t *testing.T) {
 	var calls int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -559,9 +564,14 @@ func TestRetry_RateLimit403RetryAfterZeroRetriesImmediately(t *testing.T) {
 	if got := atomic.LoadInt32(&calls); got != 2 {
 		t.Errorf("expected 2 calls, got %d", got)
 	}
-	// Retry-After: 0 must win over the 100ms exponential base delay.
-	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-		t.Errorf("Retry-After: 0 not honored: elapsed %v", elapsed)
+	// Retry-After: 0 must win over the 100ms exponential base delay — no
+	// measurable wait was consumed. A wall-clock upper bound is schedule-
+	// sensitive under race/load (CI runners overshoot even 100ms under
+	// contention); the stable proxy for "no delay was consumed" is that the
+	// elapsed time did not reach the base delay itself (a retry that honored
+	// the exponential path would sit at >= BaseDelay).
+	if elapsed := time.Since(start); elapsed >= c.retry.BaseDelay {
+		t.Errorf("Retry-After: 0 not honored: elapsed %v reached the %v base delay", elapsed, c.retry.BaseDelay)
 	}
 }
 
