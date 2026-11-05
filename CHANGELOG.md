@@ -8,6 +8,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.114.0] - 2026-11-06
+### Added
+
 - **`EnsureWebhook` 的 `EnsureSecretMode`（issue #34）**：平台 webhook secret
   write-only（List/Create 响应都不返回），URL+事件集 matched 的 hook 无法
   比对 secret——宿主侧轮换后 ensure 报 unchanged 并保留平台旧 secret，宿主
