@@ -2,6 +2,8 @@ package tencentcode
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -267,6 +269,28 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateIssueComment", err)
 	}
 	return convertIssueComment(note), nil
+}
+
+// DeleteIssueComment implements provider.IssueManager. 工蜂 addresses issue
+// notes through the issue like its edit endpoint, so number must carry the
+// issue's number. Deletion is permanent; the platform only lets the note's
+// author perform it. The gongfeng SDK does not expose a delete-issue-note
+// endpoint, so we use the SDK client's NewRequest/Do for a raw API call
+// (same pattern as DiffManager.DeleteNote).
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "DeleteIssueComment", number)
+	if err != nil {
+		return err
+	}
+	path := fmt.Sprintf("projects/%s/issues/%d/notes/%d", backendutil.Esc(pid(owner, repo)), n, commentID)
+	req, err := p.client.NewRequest(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteIssueComment", err)
+	}
+	if _, err := p.client.Do(req, nil); err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "DeleteIssueComment", err)
+	}
+	return nil
 }
 
 // ListIssueLabels implements provider.IssueManager: repository-level
