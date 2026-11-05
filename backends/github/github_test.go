@@ -872,3 +872,31 @@ func TestRepoExtras_WireTest(t *testing.T) {
 		t.Errorf("merge-upstream body: %v", b)
 	}
 }
+
+// TestListDeployments_WireTest locks the GitHub deployments listing: the
+// environment filter is sent, and the response converts to []provider.Deployment.
+func TestListDeployments_WireTest(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"id": 55, "sha": "abc", "ref": "main", "environment": "prod"},
+			{"id": 56, "sha": "def", "ref": "dev", "environment": "staging"},
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	deps, _, err := p.ListDeployments(context.Background(), "owner", "repo", "prod", 1, 30)
+	if err != nil {
+		t.Fatalf("ListDeployments: %v", err)
+	}
+	if len(deps) != 2 {
+		t.Fatalf("want 2 deployments, got %d", len(deps))
+	}
+	if deps[0].ID != 55 || deps[0].Environment != "prod" {
+		t.Errorf("deployment mapping: %+v", deps[0])
+	}
+	if !strings.Contains(gotQuery, "environment=prod") {
+		t.Errorf("environment filter not sent: %s", gotQuery)
+	}
+}
