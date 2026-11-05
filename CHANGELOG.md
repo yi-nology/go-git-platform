@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.112.0] - 2026-11-05
+
+### Changed（契约套件补齐：RepoTemplates 行为锁定）
+
+- **RepoTemplates 契约套件**（`contracttest/repo_templates.go`）：
+  `CreateRepoFromTemplate` 返回 `*provider.PlatformRepo` 且 Name 非空——
+  GitHub/Gitea 双平台接线。此前只有 `assertCap` 声明断言，无行为锁定。
+  契约套件覆盖对照 CapabilitySet 21 字段：15 项有行为套件、6 项单平台
+  能力（Gists/Starred/Migrations/ReleaseAssets/Deployments/ForkSync）
+  由后端线级测试覆盖——单平台能力不需要跨平台契约。
+
 ## [0.111.0] - 2026-11-05
 
 ### Changed（重复助手提取 + CILogManager 契约套件补齐）

@@ -53,6 +53,9 @@ func TestGitHub_Contract(t *testing.T) {
 			ListResponse:   `[{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
 			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 		},
+		RepoTemplates: &contracttest.RepoTemplatesHarnessConfig{
+			GenerateResponse: `{"id":7,"name":"new-repo","full_name":"owner/new-repo","private":false}`,
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,

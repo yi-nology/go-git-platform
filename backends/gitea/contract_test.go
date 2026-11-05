@@ -61,6 +61,9 @@ func TestGitea_Contract(t *testing.T) {
 		},
 		// Gitea release shape: github-like keys (tag_name/name/body/draft/
 		// prerelease), url for the release page.
+		RepoTemplates: &contracttest.RepoTemplatesHarnessConfig{
+			GenerateResponse: `{"id":7,"name":"new-repo","full_name":"owner/new-repo","owner":{"login":"owner","id":1},"private":false}`,
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"path":".gitea/workflows/ci.yml","head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
