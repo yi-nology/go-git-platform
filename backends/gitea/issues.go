@@ -52,6 +52,11 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return giteafamily.UpdateIssueComment(ctx, p.family, p.ports, owner, repo, number, commentID, body)
 }
 
+// DeleteIssueComment implements provider.IssueManager.
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	return giteafamily.DeleteIssueComment(ctx, p.family, p.ports, owner, repo, number, commentID)
+}
+
 // ListIssueLabels implements provider.IssueManager.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	return giteafamily.ListIssueLabels(ctx, p.family, p.ports, owner, repo)

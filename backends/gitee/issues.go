@@ -180,6 +180,21 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(note), nil
 }
 
+// DeleteIssueComment implements provider.IssueManager. The delete endpoint
+// addresses the comment directly, so number is unused; gitee's comment IDs
+// are int32 on the wire, so the same range guard as the edit path applies.
+// Deletion is permanent; the platform only lets the comment's author
+// perform it.
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	if commentID < 0 || commentID > math.MaxInt32 {
+		return provider.Wrapf(provider.PlatformGitee, "DeleteIssueComment", "comment id %d out of gitee's int32 range", commentID)
+	}
+	if _, err := p.client.Issues.DeleteComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), commentID); err != nil {
+		return provider.Wrap(provider.PlatformGitee, "DeleteIssueComment", err)
+	}
+	return nil
+}
+
 // AddIssueLabels implements provider.IssueManager via the SDK.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
 	_, _, err := p.client.Issues.AddLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, labels)

@@ -183,6 +183,16 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	return convertIssueComment(comment), nil
 }
 
+// DeleteIssueComment implements provider.IssueManager. The delete endpoint
+// addresses the comment directly, so number is unused. Deletion is
+// permanent; the platform only lets the comment's author perform it.
+func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	if err := p.client.DeleteIssueComment(ctx, owner, repo, commentID); err != nil {
+		return provider.Wrap(provider.PlatformGitCode, "DeleteIssueComment", err)
+	}
+	return nil
+}
+
 // ListIssueLabels implements provider.IssueManager. go-gitcode v0.8.0
 // exposes the documented page/per_page query on the label-list endpoint,
 // so the walk runs through the SDK (server default is 100 per page).
