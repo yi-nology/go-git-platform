@@ -71,6 +71,9 @@ func (f fakeProvider) ListIssueComments(ctx context.Context, owner, repo, number
 func (f fakeProvider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
 	return nil, nil
 }
+func (f fakeProvider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
+	return nil
+}
 func (f fakeProvider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	return nil, nil
 }
@@ -143,7 +146,7 @@ func TestReadOnlyDropsMutations(t *testing.T) {
 	p := fakeProvider{caps: provider.CapabilitySet{Issues: true}}
 	names := listTools(t, connect(t, p, Options{ReadOnly: true}))
 
-	for _, absent := range []string{"create_cr", "merge_cr", "add_cr_comment", "create_issue", "add_issue_comment"} {
+	for _, absent := range []string{"create_cr", "merge_cr", "add_cr_comment", "create_issue", "add_issue_comment", "delete_issue_comment"} {
 		if names[absent] {
 			t.Errorf("mutating tool %q mounted in read-only mode", absent)
 		}

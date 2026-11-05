@@ -42,6 +42,17 @@ type addIssueCommentIn struct {
 	Body   string `json:"body"`
 }
 
+type deleteIssueCommentIn struct {
+	Owner     string `json:"owner"`
+	Repo      string `json:"repo"`
+	Number    string `json:"number"`
+	CommentID int64  `json:"comment_id"`
+}
+
+type deleteIssueCommentOut struct {
+	Deleted bool `json:"deleted"`
+}
+
 type closeIssueIn struct {
 	Owner  string `json:"owner"`
 	Repo   string `json:"repo"`
@@ -94,6 +105,13 @@ func registerIssues(s *mcp.Server, st *state) {
 
 	add(s, st, "add_issue_comment", "Comment on issue", "Add a comment to an issue.", true, func(ctx context.Context, in addIssueCommentIn) (*provider.IssueComment, error) {
 		return im.CreateIssueComment(ctx, in.Owner, in.Repo, in.Number, in.Body)
+	})
+
+	add(s, st, "delete_issue_comment", "Delete issue comment", "Delete one comment by its ID (permanent; the platform only lets the comment's author delete).", true, func(ctx context.Context, in deleteIssueCommentIn) (deleteIssueCommentOut, error) {
+		if err := im.DeleteIssueComment(ctx, in.Owner, in.Repo, in.Number, in.CommentID); err != nil {
+			return deleteIssueCommentOut{}, err
+		}
+		return deleteIssueCommentOut{Deleted: true}, nil
 	})
 
 	add(s, st, "close_issue", "Close issue", "Close an issue.", true, func(ctx context.Context, in closeIssueIn) (*provider.Issue, error) {
