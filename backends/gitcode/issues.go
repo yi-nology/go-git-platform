@@ -145,7 +145,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*gitcode.IssueComment, error) {
-		return p.client.ListIssueCommentsWithOptions(ctx, esc(owner), esc(repo), n, gitcode.ListIssueCommentsOptions{
+		return p.client.ListIssueCommentsWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, gitcode.ListIssueCommentsOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: backendutil.IssueCommentPageSize},
 		})
 	})
@@ -189,7 +189,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	var labels []*gitcode.Label
 	labels, err := backendutil.AllPages(func(page int) ([]*gitcode.Label, error) {
-		return p.client.ListIssueLabelsWithOptions(ctx, esc(owner), esc(repo), gitcode.ListOptions{
+		return p.client.ListIssueLabelsWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{
 			Page: page, PerPage: backendutil.LabelPageSize,
 		})
 	})

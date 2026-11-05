@@ -35,7 +35,6 @@ import (
 	"context"
 	"crypto/tls"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -185,7 +184,7 @@ var (
 // doRequest executes a JSON request through the gongfeng SDK client.
 // Used by extras.go and diffs.go for endpoints not covered by SDK services.
 // Variable path segments interpolated by the caller (owner/repo pid, branch,
-// note ID, ...) must already be esc()-escaped: the SDK client joins the
+// note ID, ...) must already be backendutil.Esc()-escaped: the SDK client joins the
 // base URL and the path verbatim, so unescaped '#', '?', '%', or spaces
 // would corrupt or truncate the URL.
 func (p *Provider) doRequest(ctx context.Context, op, method, path string, body, result any) error {
@@ -211,7 +210,7 @@ func extractTotalCount(resp *gongfeng.Response, fallback int) int {
 // pid returns the project identifier in "owner/repo" format for SDK calls.
 // The SDK's typed methods pass it through parseID (url.PathEscape), so the
 // pid stays unescaped there; raw doRequest/NewRequest paths must instead
-// interpolate esc(pid(...)) — see esc below.
+// interpolate backendutil.Esc(pid(...)) — see esc below.
 func pid(owner, repo string) string {
 	return owner + "/" + repo
 }
@@ -223,4 +222,4 @@ func pid(owner, repo string) string {
 // otherwise corrupt or truncate the URL. (SDK-covered calls hand the pid
 // to gongfeng's typed methods, which escape via parseID, and are out of
 // scope here.)
-func esc(s string) string { return url.PathEscape(s) }
+// esc was a one-line alias for backendutil.Esc; use the shared helper.

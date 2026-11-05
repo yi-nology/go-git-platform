@@ -2,7 +2,6 @@ package gitcode
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	gitcode "github.com/yi-nology/go-gitcode"
@@ -23,7 +22,7 @@ import (
 // `due_on` omitempty (date-only string on the wire), so an unset due date
 // stays off the wire instead of wiping the stored one — the SDK covers
 // create/update directly and the former raw-transport detour is gone.
-// Owner/repo still go through esc() at call sites: the SDK interpolates
+// Owner/repo still go through backendutil.Esc() at call sites: the SDK interpolates
 // path segments verbatim, and unescaped '#', '?', '%', or spaces would
 // corrupt the URL.
 
@@ -43,7 +42,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 	var milestones []*gitcode.Milestone
 	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitcode.Milestone, error) {
-			return p.client.ListMilestonesWithOptions(ctx, esc(owner), esc(repo), buildOpts(page, perPage))
+			return p.client.ListMilestonesWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), buildOpts(page, perPage))
 		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListMilestones", err)
@@ -61,7 +60,7 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 	if err != nil {
 		return nil, err
 	}
-	m, err := p.client.GetMilestone(ctx, esc(owner), esc(repo), int(id))
+	m, err := p.client.GetMilestone(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(id))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetMilestone", err)
 	}
@@ -79,7 +78,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	if opts.DueOn != nil {
 		sdkOpts.DueOn = opts.DueOn.Format(time.RFC3339)
 	}
-	m, err := p.client.CreateMilestoneWithOptions(ctx, esc(owner), esc(repo), sdkOpts)
+	m, err := p.client.CreateMilestoneWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), sdkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateMilestone", err)
 	}
@@ -108,7 +107,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if opts.DueOn != nil {
 		sdkOpts.DueOn = opts.DueOn.Format(time.RFC3339)
 	}
-	m, err := p.client.UpdateMilestone(ctx, esc(owner), esc(repo), int(id), sdkOpts)
+	m, err := p.client.UpdateMilestone(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(id), sdkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateMilestone", err)
 	}
@@ -122,7 +121,7 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 	if err != nil {
 		return err
 	}
-	if err := p.client.DeleteMilestone(ctx, esc(owner), esc(repo), int(id)); err != nil {
+	if err := p.client.DeleteMilestone(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(id)); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteMilestone", err)
 	}
 	return nil
@@ -132,6 +131,6 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 // into SDK paths (owner, repo, ...) pass through this — go-gitcode joins
 // the base URL and the formatted path verbatim, so characters like '#',
 // '?', '%', or spaces would otherwise corrupt or truncate the URL.
-func esc(s string) string { return url.PathEscape(s) }
+// esc was a one-line alias for backendutil.Esc; use the shared helper.
 
 var _ provider.MilestoneManager = (*Provider)(nil)

@@ -3,6 +3,8 @@ package gitee
 import (
 	"context"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -14,7 +16,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	if ref != "" {
 		opts.Ref = gitee.String(ref)
 	}
-	contents, _, err := p.client.Repositories.GetContents(ctx, esc(owner), esc(repo), escPath(path), opts)
+	contents, _, err := p.client.Repositories.GetContents(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(path), opts)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitee, "GetFileContent", err)
 	}
@@ -41,7 +43,7 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 	if opts.Email != "" {
 		createOpts.AuthorEmail = gitee.String(opts.Email)
 	}
-	cc, _, err := p.client.Repositories.CreateFile(ctx, esc(owner), esc(repo), escPath(opts.Path), createOpts)
+	cc, _, err := p.client.Repositories.CreateFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateFile", err)
 	}
@@ -73,7 +75,7 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 	if opts.Email != "" {
 		updateOpts.AuthorEmail = gitee.String(opts.Email)
 	}
-	cc, _, err := p.client.Repositories.UpdateFile(ctx, esc(owner), esc(repo), escPath(opts.Path), updateOpts)
+	cc, _, err := p.client.Repositories.UpdateFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateFile", err)
 	}
@@ -104,7 +106,7 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	if opts.Email != "" {
 		deleteOpts.AuthorEmail = gitee.String(opts.Email)
 	}
-	cc, _, err := p.client.Repositories.DeleteFile(ctx, esc(owner), esc(repo), escPath(opts.Path), deleteOpts)
+	cc, _, err := p.client.Repositories.DeleteFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), deleteOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "DeleteFile", err)
 	}

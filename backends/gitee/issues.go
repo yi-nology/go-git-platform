@@ -28,7 +28,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	if opts.Labels != "" {
 		listOpts.Labels = gitee.String(opts.Labels)
 	}
-	issues, _, err := p.client.Issues.ListByRepo(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
+	issues, _, err := p.client.Issues.ListByRepo(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), listOpts)
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitee, "ListIssues", err)
 	}
@@ -41,7 +41,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 
 // GetIssue implements provider.IssueManager via the SDK.
 func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.Get(ctx, esc(owner), esc(repo), number)
+	issue, _, err := p.client.Issues.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetIssue", err)
 	}
@@ -70,7 +70,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		}
 		createOpts.Milestone = gitee.Int(m)
 	}
-	issue, _, err := p.client.Issues.Create(ctx, esc(opts.Owner), createOpts)
+	issue, _, err := p.client.Issues.Create(ctx, backendutil.Esc(opts.Owner), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateIssue", err)
 	}
@@ -104,7 +104,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		}
 		updateOpts.Milestone = gitee.Int(m)
 	}
-	issue, _, err := p.client.Issues.Edit(ctx, esc(owner), number, updateOpts)
+	issue, _, err := p.client.Issues.Edit(ctx, backendutil.Esc(owner), number, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateIssue", err)
 	}
@@ -123,7 +123,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 
 // patchIssueState flips an issue's state via the SDK's owner-scoped update.
 func (p *Provider) patchIssueState(ctx context.Context, owner, repo, number, state, op string) (*provider.Issue, error) {
-	issue, _, err := p.client.Issues.Edit(ctx, esc(owner), number, &gitee.UpdateIssueOptions{
+	issue, _, err := p.client.Issues.Edit(ctx, backendutil.Esc(owner), number, &gitee.UpdateIssueOptions{
 		Repo:  gitee.String(repo),
 		State: gitee.String(state),
 	})
@@ -140,7 +140,7 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(backendutil.IssueCommentPageSize),
 		}
-		batch, _, err := p.client.Issues.ListIssueComments(ctx, esc(owner), esc(repo), number, opts)
+		batch, _, err := p.client.Issues.ListIssueComments(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, opts)
 		return batch, err
 	})
 	if err != nil {
@@ -158,7 +158,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	opts := &gitee.CreateIssueCommentOptions{
 		Body: gitee.String(body),
 	}
-	note, _, err := p.client.Issues.CreateIssueComment(ctx, esc(owner), esc(repo), number, opts)
+	note, _, err := p.client.Issues.CreateIssueComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, opts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateIssueComment", err)
 	}
@@ -173,7 +173,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 	opts := &gitee.UpdateIssueCommentOptions{
 		Body: gitee.String(body),
 	}
-	note, _, err := p.client.Issues.EditComment(ctx, esc(owner), esc(repo), commentID, opts)
+	note, _, err := p.client.Issues.EditComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), commentID, opts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateIssueComment", err)
 	}
@@ -182,7 +182,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 
 // AddIssueLabels implements provider.IssueManager via the SDK.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	_, _, err := p.client.Issues.AddLabels(ctx, esc(owner), esc(repo), number, labels)
+	_, _, err := p.client.Issues.AddLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, labels)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "AddIssueLabels", err)
 	}
@@ -191,7 +191,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 
 // RemoveIssueLabel implements provider.IssueManager via the SDK.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	_, err := p.client.Issues.RemoveLabel(ctx, esc(owner), esc(repo), number, name)
+	_, err := p.client.Issues.RemoveLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, name)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "RemoveIssueLabel", err)
 	}
@@ -203,7 +203,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 // list is paginated via backendutil.AllPages until an empty page.
 func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*gitee.Label, error) {
-		batch, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+		batch, _, err := p.client.Labels.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 			Page:    page,
 			PerPage: backendutil.LabelPageSize,
 		})

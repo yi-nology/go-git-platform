@@ -27,7 +27,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 		baseOpts.Page = gitee.Int(page)
 		baseOpts.PerPage = gitee.Int(perPage)
-		list, _, err := p.client.Milestones.List(ctx, esc(owner), esc(repo), &baseOpts)
+		list, _, err := p.client.Milestones.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &baseOpts)
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitee, "ListMilestones", err)
 		}
@@ -38,7 +38,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 			o := baseOpts
 			o.Page = gitee.Int(page)
 			o.PerPage = gitee.Int(100)
-			list, _, err := p.client.Milestones.List(ctx, esc(owner), esc(repo), &o)
+			list, _, err := p.client.Milestones.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &o)
 			return list, err
 		})
 		if err != nil {
@@ -58,7 +58,7 @@ func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string)
 	if err != nil {
 		return nil, err
 	}
-	m, _, err := p.client.Milestones.Get(ctx, esc(owner), esc(repo), int(n64))
+	m, _, err := p.client.Milestones.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetMilestone", err)
 	}
@@ -77,7 +77,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	if opts.DueOn != nil {
 		createOpts.DueOn = gitee.String(formatGiteeDueOn(*opts.DueOn))
 	}
-	m, _, err := p.client.Milestones.Create(ctx, esc(owner), esc(repo), createOpts)
+	m, _, err := p.client.Milestones.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateMilestone", err)
 	}
@@ -104,7 +104,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	if opts.DueOn != nil {
 		updateOpts.DueOn = gitee.String(formatGiteeDueOn(*opts.DueOn))
 	}
-	m, _, err := p.client.Milestones.Edit(ctx, esc(owner), esc(repo), int(n64), updateOpts)
+	m, _, err := p.client.Milestones.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateMilestone", err)
 	}
@@ -118,7 +118,7 @@ func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number stri
 	if err != nil {
 		return err
 	}
-	_, err = p.client.Milestones.Delete(ctx, esc(owner), esc(repo), int(n64))
+	_, err = p.client.Milestones.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteMilestone", err)
 	}

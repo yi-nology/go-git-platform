@@ -53,6 +53,10 @@ func TestGitHub_Contract(t *testing.T) {
 			ListResponse:   `[{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
 			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 		},
+		CILogs: &contracttest.CILogsHarnessConfig{
+			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
+			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

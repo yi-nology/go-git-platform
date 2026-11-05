@@ -67,7 +67,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	if err != nil {
 		return err
 	}
-	path := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%s", esc(pid(owner, repo)), n, esc(noteID))
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/notes/%s", backendutil.Esc(pid(owner, repo)), n, backendutil.Esc(noteID))
 	req, err := p.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformTencentCode, "DeleteNote", err)
@@ -86,7 +86,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	if err != nil {
 		return "", err
 	}
-	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", esc(pid(owner, repo)), n)
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions", backendutil.Esc(pid(owner, repo)), n)
 	payload := map[string]any{"body": opts.Body}
 	if opts.FilePath != "" {
 		position := map[string]any{

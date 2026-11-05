@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -61,7 +63,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 
 // ListRepoNotifications implements provider.NotificationManager.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, esc(owner), esc(repo))
+	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, backendutil.Esc(owner), backendutil.Esc(repo))
 	q := url.Values{}
 	if opts.Since != "" {
 		q.Set("since", opts.Since)
@@ -108,7 +110,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	_, err := p.client.Activity.MarkRepoNotificationsAsRead(ctx, esc(owner), esc(repo), nil)
+	_, err := p.client.Activity.MarkRepoNotificationsAsRead(ctx, backendutil.Esc(owner), backendutil.Esc(repo), nil)
 	return provider.Wrap(provider.PlatformGitee, "MarkRepoNotificationsRead", err)
 }
 

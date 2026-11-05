@@ -13,7 +13,7 @@ import (
 // Gitee uses the Checks API (check runs) for CI status reporting.
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
 	status := mapCommitStatus(opts.State)
-	_, _, err := p.client.Checks.Create(ctx, esc(owner), esc(repo), &gitee.CreateCheckRunOptions{
+	_, _, err := p.client.Checks.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.CreateCheckRunOptions{
 		Name:       gitee.String(opts.Context),
 		HeadSHA:    gitee.String(sha),
 		Status:     gitee.String("completed"),
@@ -32,7 +32,7 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
 	runs, err := backendutil.AllPages(func(page int) ([]*gitee.CheckRun, error) {
 		pageNo, perPage := page, 100
-		list, _, err := p.client.Checks.List(ctx, esc(owner), esc(repo), sha,
+		list, _, err := p.client.Checks.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), sha,
 			&gitee.CheckRunListOptions{Page: &pageNo, PerPage: &perPage})
 		if err != nil {
 			return nil, err

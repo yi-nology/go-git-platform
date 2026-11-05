@@ -15,7 +15,7 @@ import (
 // page).
 func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
 	keys, err := backendutil.AllPages(func(page int) ([]*gitee.SSHKey, error) {
-		list, _, err := p.client.Repositories.ListKeys(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+		list, _, err := p.client.Repositories.ListKeys(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 			Page: page, PerPage: 100,
 		})
 		return list, err
@@ -32,7 +32,7 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 
 // AddDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
-	key, _, err := p.client.Repositories.CreateKey(ctx, esc(owner), esc(repo), &gitee.CreateKeyOptions{
+	key, _, err := p.client.Repositories.CreateKey(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.CreateKeyOptions{
 		Title: gitee.String(opts.Title),
 		Key:   gitee.String(opts.Key),
 	})
@@ -44,7 +44,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
-	_, err := p.client.Repositories.DeleteKey(ctx, esc(owner), esc(repo), keyID)
+	_, err := p.client.Repositories.DeleteKey(ctx, backendutil.Esc(owner), backendutil.Esc(repo), keyID)
 	return provider.Wrap(provider.PlatformGitee, "DeleteDeployKey", err)
 }
 

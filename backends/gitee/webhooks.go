@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -48,7 +50,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 			createOpts.MergeRequestsEvents = gitee.Bool(true)
 		}
 	}
-	hook, _, err := p.client.Webhooks.Create(ctx, esc(opts.Owner), esc(opts.Repo), createOpts)
+	hook, _, err := p.client.Webhooks.Create(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateWebhook", err)
 	}
@@ -57,7 +59,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 
 // GetWebhook implements provider.WebhookConfigManager.
 func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
-	hook, _, err := p.client.Webhooks.Get(ctx, esc(owner), esc(repo), webhookID)
+	hook, _, err := p.client.Webhooks.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetWebhook", err)
 	}
@@ -87,7 +89,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 		updateOpts.NoteEvents = gitee.Bool(em["note"] || em["comment"])
 		updateOpts.MergeRequestsEvents = gitee.Bool(em["pull_request"])
 	}
-	hook, _, err := p.client.Webhooks.Edit(ctx, esc(owner), esc(repo), webhookID, updateOpts)
+	hook, _, err := p.client.Webhooks.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateWebhook", err)
 	}
@@ -96,7 +98,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	_, err := p.client.Webhooks.Delete(ctx, esc(owner), esc(repo), webhookID)
+	_, err := p.client.Webhooks.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteWebhook", err)
 	}
@@ -105,7 +107,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 
 // ListWebhooks implements provider.WebhookManager.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
-	hooks, _, err := p.client.Webhooks.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{})
+	hooks, _, err := p.client.Webhooks.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListWebhooks", err)
 	}

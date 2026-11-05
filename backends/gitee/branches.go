@@ -17,7 +17,7 @@ import (
 // page).
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
 	branches, err := backendutil.AllPages(func(page int) ([]*gitee.Branch, error) {
-		list, _, err := p.client.Repositories.ListBranches(ctx, esc(owner), esc(repo), &gitee.ListBranchesOptions{
+		list, _, err := p.client.Repositories.ListBranches(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListBranchesOptions{
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(100),
 		})
@@ -39,7 +39,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 		Refs:       gitee.String(ref),
 		BranchName: gitee.String(branch),
 	}
-	created, _, err := p.client.Repositories.CreateBranch(ctx, esc(owner), esc(repo), opts)
+	created, _, err := p.client.Repositories.CreateBranch(ctx, backendutil.Esc(owner), backendutil.Esc(repo), opts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateBranch", err)
 	}
@@ -55,7 +55,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 // The new SDK does not expose a DeleteBranch method, so we construct the
 // request manually through the client's NewRequest + Do methods.
 func (p *Provider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
-	u := fmt.Sprintf("repos/%s/%s/branches/%s", esc(owner), esc(repo), esc(branch))
+	u := fmt.Sprintf("repos/%s/%s/branches/%s", backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(branch))
 	req, err := p.client.NewRequest(ctx, http.MethodDelete, u, nil)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteBranch", err)

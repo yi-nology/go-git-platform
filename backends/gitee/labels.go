@@ -20,7 +20,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 	var labels []*gitee.Label
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-		list, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+		list, _, err := p.client.Labels.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 			Page: page, PerPage: perPage,
 		})
 		if err != nil {
@@ -30,7 +30,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 	} else {
 		var err error
 		labels, err = backendutil.AllPages(func(page int) ([]*gitee.Label, error) {
-			list, _, err := p.client.Labels.List(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+			list, _, err := p.client.Labels.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 				Page: page, PerPage: 100,
 			})
 			return list, err
@@ -52,7 +52,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 		Name:  gitee.String(opts.Name),
 		Color: gitee.String(opts.Color),
 	}
-	label, _, err := p.client.Labels.Create(ctx, esc(owner), esc(repo), createOpts)
+	label, _, err := p.client.Labels.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateLabel", err)
 	}
@@ -68,7 +68,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	if opts.Color != nil {
 		updateOpts.Color = gitee.String(*opts.Color)
 	}
-	label, _, err := p.client.Labels.Edit(ctx, esc(owner), esc(repo), esc(name), updateOpts)
+	label, _, err := p.client.Labels.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateLabel", err)
 	}
@@ -77,7 +77,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	_, err := p.client.Labels.Delete(ctx, esc(owner), esc(repo), esc(name))
+	_, err := p.client.Labels.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteLabel", err)
 	}

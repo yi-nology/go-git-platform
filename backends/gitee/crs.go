@@ -21,7 +21,7 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 		Labels:            gitee.String(strings.Join(opts.Labels, ",")),
 		PruneSourceBranch: gitee.Bool(opts.RemoveSourceBranch),
 	}
-	pr, _, err := p.client.PullRequests.Create(ctx, esc(opts.Owner), esc(opts.Repo), createOpts)
+	pr, _, err := p.client.PullRequests.Create(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateCR", err)
 	}
@@ -34,7 +34,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	if err != nil {
 		return nil, err
 	}
-	pr, _, err := p.client.PullRequests.Get(ctx, esc(owner), esc(repo), n)
+	pr, _, err := p.client.PullRequests.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCR", err)
 	}
@@ -55,7 +55,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	if opts.TargetBranch != "" {
 		listOpts.Base = gitee.String(opts.TargetBranch)
 	}
-	prs, resp, err := p.client.PullRequests.List(ctx, esc(opts.Owner), esc(opts.Repo), listOpts)
+	prs, resp, err := p.client.PullRequests.List(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), listOpts)
 	if err != nil {
 		return nil, nil, provider.Wrap(provider.PlatformGitee, "ListCRs", err)
 	}
@@ -85,7 +85,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	if opts.Squash {
 		mergeOpts.MergeMethod = gitee.String("squash")
 	}
-	_, err = p.client.PullRequests.Merge(ctx, esc(owner), esc(repo), n, mergeOpts)
+	_, err = p.client.PullRequests.Merge(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, mergeOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "MergeCR", err)
 	}
@@ -136,12 +136,12 @@ func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int
 	}
 	toAdd, toRemove := assigneeDiff(cr.Assignees, target)
 	if len(toAdd) > 0 {
-		if _, _, err := p.client.PullRequests.AddAssignees(ctx, esc(owner), esc(repo), n, toAdd); err != nil {
+		if _, _, err := p.client.PullRequests.AddAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toAdd); err != nil {
 			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
 		}
 	}
 	if len(toRemove) > 0 {
-		if _, _, err := p.client.PullRequests.RemoveAssignees(ctx, esc(owner), esc(repo), n, toRemove); err != nil {
+		if _, _, err := p.client.PullRequests.RemoveAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toRemove); err != nil {
 			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
 		}
 	}
@@ -182,7 +182,7 @@ func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, opts
 	if err != nil {
 		return nil, err
 	}
-	pr, _, err := p.client.PullRequests.Edit(ctx, esc(owner), esc(repo), n, opts)
+	pr, _, err := p.client.PullRequests.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, op, err)
 	}
@@ -195,7 +195,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return err
 	}
-	_, _, err = p.client.PullRequests.ReplaceLabels(ctx, esc(owner), esc(repo), n, labels)
+	_, _, err = p.client.PullRequests.ReplaceLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, labels)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "UpdateCRLabels", err)
 	}
@@ -212,7 +212,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*gitee.PullRequestComments, error) {
-		list, _, err := p.client.PullRequests.ListComments(ctx, esc(owner), esc(repo), n, &gitee.PullRequestCommentListOptions{
+		list, _, err := p.client.PullRequests.ListComments(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, &gitee.PullRequestCommentListOptions{
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(100),
 		})
@@ -237,7 +237,7 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return nil, err
 	}
-	commits, _, err := p.client.PullRequests.ListCommits(ctx, esc(owner), esc(repo), n)
+	commits, _, err := p.client.PullRequests.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListCRCommits", err)
 	}

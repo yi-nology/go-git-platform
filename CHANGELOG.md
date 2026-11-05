@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.111.0] - 2026-11-05
+
+### Changed（重复助手提取 + CILogManager 契约套件补齐）
+
+- **`esc()` 三处重复助手提取到 `backendutil.Esc`**：gitcode/gitee/
+  tencentcode 各有一个一行别名包装 `url.PathEscape`——统一替换为已有
+  的 `backendutil.Esc`，删掉三份副本（gitee 20+ 文件、gitcode 5+ 文件、
+  tencentcode 3+ 文件的调用点同步更新）。
+- **CILogManager 行为契约套件**：`contracttest/cilogs.go` 补齐 CI 失败
+  诊断的跨平台契约——绿提交返回空切片（非 error）、失败提交返回至少
+  一条 JobLog 且 Name/Stage 非空；GitHub/GitLab/Gitea 三家接线配置；
+  Gitea contract_test 版本串 1.22.0→1.26.0（Actions 端点版本门槛）。
+  此前 CILogManager 只有声明断言（`assertCap`），无行为锁定——声明了
+  能力但实现语义漂移不会被契约套件抓住。
+
 ## [0.110.0] - 2026-11-05
 
 ### Changed（oekit container 满配：detect.go 最后一个手写 mutex 收编）

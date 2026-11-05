@@ -18,7 +18,7 @@ func TestGitea_Contract(t *testing.T) {
 			// The Gitea SDK requires /api/v1/version on client init. Wrap the
 			// mock server so the version endpoint is intercepted and every
 			// other request is reverse-proxied through.
-			wrapper := contracttest.VersionProxy(cfg.BaseURL, `{"version":"1.22.0"}`)
+			wrapper := contracttest.VersionProxy(cfg.BaseURL, `{"version":"1.26.0"}`)
 			t.Cleanup(wrapper.Close)
 			cfg.BaseURL = wrapper.URL
 			p, err := gitea.New(cfg)
@@ -61,6 +61,10 @@ func TestGitea_Contract(t *testing.T) {
 		},
 		// Gitea release shape: github-like keys (tag_name/name/body/draft/
 		// prerelease), url for the release page.
+		CILogs: &contracttest.CILogsHarnessConfig{
+			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
+			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"path":".gitea/workflows/ci.yml","head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

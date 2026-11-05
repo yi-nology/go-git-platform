@@ -131,6 +131,10 @@ func TestGitLab_Contract(t *testing.T) {
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
+		CILogs: &contracttest.CILogsHarnessConfig{
+			GreenResponse:  `[]`,
+			FailedResponse: `[{"id":1,"name":"build","stage":"test","status":"failed","web_url":"https://x/1"}]`,
+		},
 		Users: &contracttest.UsersHarnessConfig{
 			GetUserResponse: `[{"id":1,"username":"dev","name":"Dev","avatar_url":"https://gitlab.com/avatars/1"}]`,
 		},

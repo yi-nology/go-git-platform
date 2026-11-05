@@ -3,6 +3,8 @@ package gitee
 import (
 	"context"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -20,7 +22,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 
 // CreateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(opts.BranchName))
+	_, _, err := p.client.Repositories.SetBranchProtection(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(opts.BranchName))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateBranchProtection", err)
 	}
@@ -31,7 +33,7 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 
 // UpdateBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	_, _, err := p.client.Repositories.SetBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
+	_, _, err := p.client.Repositories.SetBranchProtection(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(branch))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateBranchProtection", err)
 	}
@@ -42,7 +44,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 
 // DeleteBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
-	_, err := p.client.Repositories.RemoveBranchProtection(ctx, esc(owner), esc(repo), esc(branch))
+	_, err := p.client.Repositories.RemoveBranchProtection(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(branch))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteBranchProtection", err)
 	}

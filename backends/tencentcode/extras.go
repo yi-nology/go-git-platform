@@ -9,8 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+
 	gongfeng "github.com/yi-nology/go-gongfeng"
+
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // TencentCodeExtras exposes Tencent 工蜂-specific capabilities that are not
@@ -429,7 +432,7 @@ func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo st
 	// For JSON parsing, use a raw API call via the SDK client.
 	var files []*provider.ChangedFile
 	err := t.doRequest(ctx, "GetCodeReviewChangedFiles", "GET",
-		fmt.Sprintf("projects/%s/review/%d/changed_files", esc(pid(owner, repo)), reviewID), nil, &files)
+		fmt.Sprintf("projects/%s/review/%d/changed_files", backendutil.Esc(pid(owner, repo)), reviewID), nil, &files)
 	if err != nil {
 		return nil, err
 	}
@@ -641,7 +644,7 @@ func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte
 		Encoding string `json:"encoding"`
 	}
 	err := t.doRequest(ctx, "GetBlob", "GET",
-		fmt.Sprintf("projects/%s/repository/blobs/%s", esc(pid(owner, repo)), esc(sha)), nil, &blob)
+		fmt.Sprintf("projects/%s/repository/blobs/%s", backendutil.Esc(pid(owner, repo)), backendutil.Esc(sha)), nil, &blob)
 	if err != nil {
 		return nil, err
 	}
@@ -702,18 +705,18 @@ func (t *Provider) DownloadCompareChangedFiles(ctx context.Context, owner, repo,
 
 func (t *Provider) ProtectBranch(ctx context.Context, owner, repo, branch string, opts ProtectBranchOptions) error {
 	return t.doRequest(ctx, "ProtectBranch", "PUT",
-		fmt.Sprintf("projects/%s/repository/branches/%s/protect", esc(pid(owner, repo)), esc(branch)), opts, nil)
+		fmt.Sprintf("projects/%s/repository/branches/%s/protect", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)), opts, nil)
 }
 
 func (t *Provider) UnprotectBranch(ctx context.Context, owner, repo, branch string) error {
 	return t.doRequest(ctx, "UnprotectBranch", "PUT",
-		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", esc(pid(owner, repo)), esc(branch)), nil, nil)
+		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)), nil, nil)
 }
 
 func (t *Provider) ListProtectedBranchMembers(ctx context.Context, owner, repo, branch string) ([]*ProtectedBranchMember, error) {
 	var members []*ProtectedBranchMember
 	err := t.doRequest(ctx, "ListProtectedBranchMembers", "GET",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members", esc(pid(owner, repo)), esc(branch)), nil, &members)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)), nil, &members)
 	if err != nil {
 		return nil, err
 	}
@@ -726,7 +729,7 @@ func (t *Provider) AddProtectedBranchMember(ctx context.Context, owner, repo, br
 		body["access_level"] = opts.AccessLevel
 	}
 	return t.doRequest(ctx, "AddProtectedBranchMember", "POST",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members", esc(pid(owner, repo)), esc(branch)), body, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)), body, nil)
 }
 
 func (t *Provider) UpdateProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int, opts ProtectedBranchMemberOptions) error {
@@ -735,12 +738,12 @@ func (t *Provider) UpdateProtectedBranchMember(ctx context.Context, owner, repo,
 		body["access_level"] = opts.AccessLevel
 	}
 	return t.doRequest(ctx, "UpdateProtectedBranchMember", "PUT",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", esc(pid(owner, repo)), esc(branch), userID), body, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch), userID), body, nil)
 }
 
 func (t *Provider) RemoveProtectedBranchMember(ctx context.Context, owner, repo, branch string, userID int) error {
 	return t.doRequest(ctx, "RemoveProtectedBranchMember", "DELETE",
-		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", esc(pid(owner, repo)), esc(branch), userID), nil, nil)
+		fmt.Sprintf("projects/%s/branches/protected/%s/members/%d", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch), userID), nil, nil)
 }
 
 // ===========================================================================

@@ -11,7 +11,7 @@ import (
 
 // GetCommit implements provider.CommitManager.
 func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
-	commit, _, err := p.client.Repositories.GetCommit(ctx, esc(owner), esc(repo), esc(sha))
+	commit, _, err := p.client.Repositories.GetCommit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(sha))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCommit", err)
 	}
@@ -44,7 +44,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 		baseOpts.Page = gitee.Int(page)
 		baseOpts.PerPage = gitee.Int(perPage)
-		list, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), &baseOpts)
+		list, _, err := p.client.Repositories.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &baseOpts)
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
 		}
@@ -55,7 +55,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 			o := baseOpts
 			o.Page = gitee.Int(page)
 			o.PerPage = gitee.Int(100)
-			list, _, err := p.client.Repositories.ListCommits(ctx, esc(owner), esc(repo), &o)
+			list, _, err := p.client.Repositories.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &o)
 			return list, err
 		})
 		if err != nil {
@@ -71,7 +71,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 
 // CompareCommits implements provider.CommitManager.
 func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
-	cmp, _, err := p.client.Repositories.CompareCommits(ctx, esc(owner), esc(repo), esc(base), esc(head), nil)
+	cmp, _, err := p.client.Repositories.CompareCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(base), backendutil.Esc(head), nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CompareCommits", err)
 	}

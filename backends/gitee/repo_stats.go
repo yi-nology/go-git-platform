@@ -16,7 +16,7 @@ import (
 // page).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
 	forks, err := backendutil.AllPages(func(page int) ([]*gitee.Project, error) {
-		list, _, err := p.client.Repositories.ListForks(ctx, esc(owner), esc(repo), &gitee.ListForksOptions{
+		list, _, err := p.client.Repositories.ListForks(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListForksOptions{
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(100),
 		})
@@ -37,7 +37,7 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 // The new SDK does not expose a dedicated stargazers endpoint, so we use the
 // client's generic NewRequest + Do pattern to call the API directly.
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
-	u := fmt.Sprintf("repos/%s/%s/stargazers", esc(owner), esc(repo))
+	u := fmt.Sprintf("repos/%s/%s/stargazers", backendutil.Esc(owner), backendutil.Esc(repo))
 	req, err := p.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListStargazers", err)
@@ -64,7 +64,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 // is no pagination parameter to exhaust — the platform returns what it
 // returns in a single response.
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
-	contributors, _, err := p.client.Repositories.ListContributors(ctx, esc(owner), esc(repo), nil)
+	contributors, _, err := p.client.Repositories.ListContributors(ctx, backendutil.Esc(owner), backendutil.Esc(repo), nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListContributors", err)
 	}

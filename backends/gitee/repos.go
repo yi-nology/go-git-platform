@@ -63,7 +63,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 
 // GetRepo implements provider.RepoManager.
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
-	r, _, err := p.client.Repositories.Get(ctx, esc(owner), esc(repo))
+	r, _, err := p.client.Repositories.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetRepo", err)
 	}
@@ -72,7 +72,7 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 
 // DeleteRepo implements provider.RepoManager.
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
-	_, err := p.client.Repositories.Delete(ctx, esc(owner), esc(repo))
+	_, err := p.client.Repositories.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteRepo", err)
 	}
@@ -89,7 +89,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	if opts.Private != nil {
 		updateOpts.Private = gitee.Bool(*opts.Private)
 	}
-	r, _, err := p.client.Repositories.Edit(ctx, esc(owner), esc(repo), updateOpts)
+	r, _, err := p.client.Repositories.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRepo", err)
 	}
@@ -102,7 +102,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	if opts.Organization != "" {
 		forkOpts.Organization = gitee.String(opts.Organization)
 	}
-	r, _, err := p.client.Repositories.CreateFork(ctx, esc(owner), esc(repo), forkOpts)
+	r, _, err := p.client.Repositories.CreateFork(ctx, backendutil.Esc(owner), backendutil.Esc(repo), forkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ForkRepo", err)
 	}
@@ -133,7 +133,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		if opts.Private {
 			orgOpts.Private = gitee.Bool(true)
 		}
-		r, _, err = p.client.Repositories.CreateInOrg(ctx, esc(owner), orgOpts)
+		r, _, err = p.client.Repositories.CreateInOrg(ctx, backendutil.Esc(owner), orgOpts)
 	} else {
 		r, _, err = p.client.Repositories.Create(ctx, createOpts)
 	}

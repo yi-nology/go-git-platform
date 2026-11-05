@@ -15,7 +15,7 @@ import (
 // page).
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
 	members, err := backendutil.AllPages(func(page int) ([]*gitee.ProjectMember, error) {
-		list, _, err := p.client.Repositories.ListCollaborators(ctx, esc(owner), esc(repo), &gitee.ListOptions{
+		list, _, err := p.client.Repositories.ListCollaborators(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 			Page:    page,
 			PerPage: 100,
 		})
@@ -37,7 +37,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 	if opts.Permission != "" {
 		addOpts.Permission = gitee.String(opts.Permission)
 	}
-	_, _, err := p.client.Repositories.AddCollaborator(ctx, esc(owner), esc(repo), esc(username), addOpts)
+	_, _, err := p.client.Repositories.AddCollaborator(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(username), addOpts)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "AddCollaborator", err)
 	}
@@ -46,7 +46,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 
 // RemoveCollaborator implements provider.CollaboratorManager.
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
-	_, err := p.client.Repositories.RemoveCollaborator(ctx, esc(owner), esc(repo), esc(username))
+	_, err := p.client.Repositories.RemoveCollaborator(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(username))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "RemoveCollaborator", err)
 	}

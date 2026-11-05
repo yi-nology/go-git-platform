@@ -21,7 +21,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(backendutil.IssueCommentPageSize),
 		}
-		batch, _, err := p.client.Repositories.ListTags(ctx, esc(owner), esc(repo), opts)
+		batch, _, err := p.client.Repositories.ListTags(ctx, backendutil.Esc(owner), backendutil.Esc(repo), opts)
 		return batch, err
 	})
 	if err != nil {
@@ -41,7 +41,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 			Page:    gitee.Int(page),
 			PerPage: gitee.Int(backendutil.IssueCommentPageSize),
 		}
-		batch, _, err := p.client.Repositories.ListReleases(ctx, esc(owner), esc(repo), opts)
+		batch, _, err := p.client.Repositories.ListReleases(ctx, backendutil.Esc(owner), backendutil.Esc(repo), opts)
 		return batch, err
 	})
 	if err != nil {
@@ -69,7 +69,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	if opts.Prerelease {
 		createOpts.Prerelease = gitee.Bool(true)
 	}
-	r, _, err := p.client.Repositories.CreateRelease(ctx, esc(owner), esc(repo), createOpts)
+	r, _, err := p.client.Repositories.CreateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateRelease", err)
 	}
@@ -78,7 +78,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 
 // GetReleaseByTag implements provider.ReleaseManager.
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
-	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
+	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetReleaseByTag", err)
 	}
@@ -88,7 +88,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // UpdateRelease implements provider.ReleaseManager.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
 	// Resolve the release ID by tag first.
-	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
+	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
 	}
@@ -102,7 +102,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	if opts.Prerelease != nil {
 		updateOpts.Prerelease = gitee.Bool(*opts.Prerelease)
 	}
-	updated, _, err := p.client.Repositories.UpdateRelease(ctx, esc(owner), esc(repo), int64(deref(r.ID)), updateOpts)
+	updated, _, err := p.client.Repositories.UpdateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int64(deref(r.ID)), updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
 	}
@@ -112,11 +112,11 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 // DeleteRelease implements provider.ReleaseManager.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
 	// Resolve the release ID by tag first.
-	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, esc(owner), esc(repo), esc(tag))
+	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
 	}
-	_, err = p.client.Repositories.DeleteRelease(ctx, esc(owner), esc(repo), int64(deref(r.ID)))
+	_, err = p.client.Repositories.DeleteRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int64(deref(r.ID)))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
 	}
@@ -138,7 +138,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	if format == "tar.gz" {
 		kind = "tarball"
 	}
-	u := p.baseURL + "/repos/" + esc(owner) + "/" + esc(repo) + "/" + kind
+	u := p.baseURL + "/repos/" + backendutil.Esc(owner) + "/" + backendutil.Esc(repo) + "/" + kind
 	if ref != "" {
 		u += "?ref=" + url.QueryEscape(ref)
 	}

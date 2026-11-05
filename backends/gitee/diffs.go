@@ -19,7 +19,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	if err != nil {
 		return nil, err
 	}
-	files, _, err := p.client.PullRequests.ListFiles(ctx, esc(owner), esc(repo), n)
+	files, _, err := p.client.PullRequests.ListFiles(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "GetCRDiff", err)
 	}
@@ -50,7 +50,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	opts := &gitee.CreatePullRequestCommentOptions{
 		Body: gitee.String(body),
 	}
-	comment, _, err := p.client.PullRequests.CreateComment(ctx, esc(owner), esc(repo), n, opts)
+	comment, _, err := p.client.PullRequests.CreateComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitee, "CreateNote", err)
 	}
@@ -66,7 +66,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	if err != nil {
 		return provider.Wrapf(provider.PlatformGitee, "DeleteNote", "invalid note id %q", noteID)
 	}
-	_, err = p.client.PullRequests.DeleteComment(ctx, esc(owner), esc(repo), id)
+	_, err = p.client.PullRequests.DeleteComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), id)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "DeleteNote", err)
 	}

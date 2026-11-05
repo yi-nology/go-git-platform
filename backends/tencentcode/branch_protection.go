@@ -83,7 +83,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 // platform's unprotect endpoint is a PUT, not a DELETE.
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
 	return p.doRequest(ctx, "DeleteBranchProtection", http.MethodPut,
-		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", esc(pid(owner, repo)), esc(branch)),
+		fmt.Sprintf("projects/%s/repository/branches/%s/unprotect", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)),
 		nil, nil)
 }
 
@@ -92,7 +92,7 @@ func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, bran
 func (p *Provider) putBranchProtection(ctx context.Context, op, owner, repo, branch string, putOpts *ProtectBranchOptions) (*gongfeng.ProtectedBranch, error) {
 	var pb gongfeng.ProtectedBranch
 	err := p.doRequest(ctx, op, http.MethodPut,
-		fmt.Sprintf("projects/%s/repository/branches/%s/protect", esc(pid(owner, repo)), esc(branch)),
+		fmt.Sprintf("projects/%s/repository/branches/%s/protect", backendutil.Esc(pid(owner, repo)), backendutil.Esc(branch)),
 		putOpts, &pb)
 	if err != nil {
 		return nil, err
