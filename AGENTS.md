@@ -60,6 +60,18 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   `guardx/permgate` 运行时逐调用判定与本仓 mcp 注册期裁剪（mutating 工具不
   挂载）形态不同；`textx/diffx` 上游明确划界（解析 vs 本仓 diff 生成领域）。
   上游若新增 tier0 原语再评估。
+  - **2026-11-06 再评估（结构演进后复核）**：oagentkit 已拆为 13 个独立
+    发版仓（`oagentkit/agentkit` 门面废弃）。三点结论更新：① `guardx/egress`
+    新增 `PrivateNoLoopback` 具名策略并明确「内网自建服务是合法场景」
+    ——本仓 self-hosted 顾虑已被上游消化，2026-10-18 的「不适用」结论
+    由「不适用但上游已支持」取代（仍不引入：无消费点）；② `procx.ChildEnv`
+    新增 extra 按名/字面透传（白名单顾虑部分缓解），但仍有两缺口已提
+    [runtime#25](https://github.com/oagentkit/runtime/issues/25)（硬编码
+    尾部追加与 extra 字面注入的重复 environ key 冲突）与
+    [runtime#26](https://github.com/oagentkit/runtime/issues/26)（缺
+    inherit-all-except 模式——git 包装 SDK 的可信父进程场景）；③
+    `guardx/permgate` 新增注册期 `Capability` 自报（与运行时 Check 组合），
+    形态与本仓 mcp 注册期裁剪趋近但仍偏运行时。tier2+ 拖 eino 结论不变。
 - **pkg v0.20.0 的 `pathx.SanitizeRel` / `urlguard.WithExactHosts`、
   v0.18.0 的 `jsonrepair.ExtractArray`、v0.19.0 的 httpjson 退避修复
   （2026-10-21 评估，均无消费点）**：本仓无用户可控仓库相对路径入口
@@ -117,6 +129,19 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   纪律）；mcp 二进制无「彻底关日志」需求。v0.7.2 `WithAttrs` 脱敏修复经
   transport `NewLogxLogger` 桥被动受益。全量结论：零新增引入，升级收益为
   被动 bugfix（pkg/cache、async、logx 底座）。
+- **pkg v0.34–v0.35 增量审计（2026-11-06，随上游反馈闭环补记）**：v0.34.1
+  `container.Slice.AppendIfAbsent`（#178 下游提案落地，detect.go hostAliases
+  已迁 Slice——见 container 条款）与 `ErrActionRunNotFound` 配套面；v0.35.0
+  新原语 `pathx.MatchSimpleGlob`（单星+次星字面量——`pkg/branchfilter` 需
+  多星 + filepath.Match 语义（`*` 不跨 `/`、`feature/*/*` 多层），形态
+  不匹配不引入，branchfilter 保留 stdlib）；`stringx.MaskJSONFields`
+  （JSON 字段级脱敏——暂无消费点，webhook 日志脱敏若长出需求再评估）；
+  v0.35.1 全量 bugfix（mathx NaN 防护/stringx FirstN 口径/Union 保序/
+  cron 方言/cache Key 契约警示/httpjson 204 空体对偶面）——经 ttlcache
+  委托与错误面被动受益。下游反馈回流三连：timex 多 layout 解析（#197）、
+  bufiox 行粒度尾部窗口（#198）、Slice.RemoveIf（#199）——均出自本仓
+  真实消费形态（due_on 解析/CILogManager 尾部截断/别名注销），上游采纳
+  后按「能用尽用」收编。
 
 ## 规则二：公共契约红线
 
