@@ -94,6 +94,17 @@ func TestGitCode_Contract(t *testing.T) {
 			StargazersResponse:   `[{"id":1,"login":"star"}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
+		// CI log fixtures: the mock serves one body on every route, so the
+		// failed-response fixture carries BOTH the runs list (workflow_runs)
+		// and the jobs list (jobs) — the backend parses the runs key first
+		// (FindActionRunByHeadSHA), then the jobs key (ListActionRunJobs),
+		// then treats the raw bytes as the job log (download-log). The job
+		// status "FAILED" follows the UPPERCASE vocabulary the SDK fixtures
+		// document (COMPLETED/RUNNING).
+		CILogs: &contracttest.CILogsHarnessConfig{
+			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
+			FailedResponse: `{"total_count":1,"workflow_runs":[{"workflow_run_id":"r1","workflow_name":"ci","head_sha":"abc123"}],"jobs":[{"id":"j1","name":"build","status":"FAILED"}]}`,
+		},
 	})
 }
 

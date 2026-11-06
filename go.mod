@@ -12,8 +12,8 @@ require (
 	github.com/oekit/logx v0.8.2
 	github.com/oekit/pkg v0.34.1
 	github.com/stretchr/testify v1.12.1
-	github.com/yi-nology/go-gitcode v0.14.0
-	github.com/yi-nology/go-gongfeng v0.2.1
+	github.com/yi-nology/go-gitcode v0.15.0
+	github.com/yi-nology/go-gongfeng v0.3.0
 	gitlab.com/gitlab-org/api/client-go/v3 v3.43.0
 	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2
 	golang.org/x/oauth2 v0.37.0

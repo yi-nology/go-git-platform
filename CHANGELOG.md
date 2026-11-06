@@ -4,13 +4,40 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.115.0] - 2026-11-06
 
-### Added
+### Added（CI 失败诊断第四家：GitCode 接入）
 
-### Changed
+- **`CILogManager` 扩到 GitCode**——go-gitcode v0.15.0 落地了下游反馈
+  （[go-gitcode#2](https://github.com/yi-nology/go-gitcode/issues/2)，
+  2026-11-05 关闭）：`FindActionRunByHeadSHA`（wire 无 head_sha 过滤，
+  SDK 按最新序客户端扫描）+ `ListActionRunJobs`/`DownloadActionJobLogs`
+  （日志线路）。GitCode 成为 CI 失败诊断第四家（GitHub/GitLab/Gitea/
+  GitCode）。mapping 分歧登记两条语义差异：
+  - SDK 只返回单条最新命中 run——同 SHA 其他 workflow 的 run 不归因
+    （GitHub/Gitea 是每 workflow 取最新）；
+  - job status 词表为大写（SDK 夹具实证 COMPLETED/RUNNING），失败判定
+    大小写不敏感并放宽到 failure/error/timeout 家族（词表未知时宁可多
+    归因），live 词表实证后收紧。
 
-### Fixed
+### Changed（deps）
+
+- **deps: go-gitcode v0.14.0 → v0.15.0**——issue#2 修复线（见上）。
+- **deps: go-gongfeng v0.2.1 → v0.3.0**——
+  [go-gongfeng#1](https://github.com/yi-nology/go-gongfeng/issues/1)
+  （2026-11-05 关闭）反馈闭环：
+  - **MR 多指派确认不可表达**（平台 wire 单 `assignee_id`，SDK 已在
+    字段注释标注与 GitLab `assignee_ids` 不同源）——下游 first-wins
+    mapping 分歧维持不变；
+  - **`GetReleaseByTag` 收编进 SDK**（Paginate 扫全量匹配，带
+    `ErrReleaseNotFound` 哨兵）。下游**刻意保留本地有界扫描**（50 页
+    预算；SDK 版无界）——预算保护是已登记行为，切换会丢；detour 本身
+    的分歧台账条目不变。
+
+### Docs
+
+- README 能力矩阵 CILogs 行 GitCode 列 ✅（脚注⁵）、中文要点、结构注释、
+  mcp README 工具集表与工具描述、iface_ci.go 文档——六处同步 GitCode。
 
 ## [0.114.0] - 2026-11-06
 ### Added

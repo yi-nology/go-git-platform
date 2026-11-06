@@ -93,6 +93,7 @@ This document is generated from the backends' registered divergence ledgers
 | NotificationManager | MarkNotificationRead |  | stub | The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented. |
 | NotificationManager | MarkNotificationsRead |  | stub | The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented. |
 | ChangeRequestManager | UpdateCR | opts.Assignees | ignore | GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped. |
+| CILogManager | ListFailedJobLogs |  | mapping | The v8 wire has no head_sha filter on the runs list; the SDK's FindActionRunByHeadSHA scans newest-first and returns only the single newest run matching the SHA, so failed jobs in other workflows' runs for the same commit are not attributed (GitHub/Gitea collect the latest run per workflow). Job status vocabulary is asserted case-insensitively (SDK fixtures show UPPERCASE COMPLETED/RUNNING; the failure word is inferred as FAILED); live validation of the vocabulary and the download-log route is pending. |
 
 ## tencent_code
 

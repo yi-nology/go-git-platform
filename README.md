@@ -105,7 +105,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Starred | ✅ | — | — | — | — | — | — | `StarredManager` |
 | Migrations | ✅ | — | — | — | — | — | — | `MigrationManager` |
 | ReleaseAssets | ✅ | — | — | — | — | — | — | `ReleaseAssetManager` |
-| CILogs | ✅ | ✅ | ✅ | — | — | — | — | `CILogManager` (`Capabilities().CILogs`) |
+| CILogs | ✅ | ✅ | ✅ | — | — | ✅⁵ | — | `CILogManager` (`Capabilities().CILogs`) |
 | Deployments | ✅ | — | — | — | — | — | — | `DeploymentManager` (`Capabilities().Deployments`) |
 | RepoTemplates | ✅ | — | ✅ | — | — | — | — | `TemplateRepoManager` (`Capabilities().RepoTemplates`) |
 | ForkSync | ✅ | — | — | — | — | — | — | `ForkSyncManager` (`Capabilities().ForkSync`) |
@@ -119,6 +119,8 @@ GitCode 脚注（2026-11-04 live 探针实证，证据链见
 ² 通知仅仓库域可用（全局 inbox 404，全局方法返回
 `ErrNotImplemented`）；仓库域方法与 `GetArchive`（同样 404，返回
 `ErrNotImplemented`）详见 divergence 台账。
+⁵ CI 失败日志走 v8 Actions 面（go-gitcode v0.15.0 起：head_sha 客户端
+扫描 + download-log）；单条最新 run 语义与 job 状态词表假设见分歧台账。
 
 ### Local git operations
 
@@ -299,7 +301,7 @@ if cl, ok := p.(provider.CILogManager); ok {
 
 完整的能力×平台矩阵见 [英文 Capability matrix](#capability-matrix)(与 `Capabilities()` 声明一一对应, `examples/capabilities` 是其可运行巡检版本)。要点:
 
-- **CILogManager 在 GitHub / GitLab / Gitea 实现**: GitLab 走原生 pipeline trace; GitHub/Gitea 映射到 Actions 面(runs-by-SHA → 失败 job → 日志尾部, 一个 SHA 多 workflow 时按 workflow 取最新 run, 见分歧台账); 无逐作业日志线路的平台以"不声明该能力"表达而非桩方法
+- **CILogManager 在 GitHub / GitLab / Gitea / GitCode 实现**: GitLab 走原生 pipeline trace; GitHub/Gitea 映射到 Actions 面(runs-by-SHA → 失败 job → 日志尾部, 一个 SHA 多 workflow 时按 workflow 取最新 run); GitCode 走 v8 Actions 面(SDK 客户端扫描, 单条最新 run 语义——与 GH/Gitea 不同, 见分歧台账); 无逐作业日志线路的平台以"不声明该能力"表达而非桩方法
 - **Gitee 不声明 Reviews / Reactions / Users**; **GitHub 不声明 Users**(走独立 REST 即可); **腾讯工蜂不声明 Search / Notifications / Reactions**(工蜂 API 无对应端点); **NoteManager 仅 GitLab / 腾讯工蜂实现**(GitLab 家族 MR 与 issue 注释分 iid 命名空间, GitHub 家族 issue 即 PR 由 IssueManager 覆盖)
 
 ### 自动化与 Agent 场景(等待/批量/投影/MCP)
@@ -552,7 +554,7 @@ go-git-platform/
 │   ├── wait.go / batch.go       # Agent 原语: CI 门禁等待 + 有界并发批量
 │   ├── commitstatus.go          # 提交状态工具
 │   ├── divergence.go            # 分歧台账类型 + 谓词
-│   ├── iface_ci.go              # CILogManager (可选, GitHub/GitLab/Gitea)
+│   ├── iface_ci.go              # CILogManager (可选, GitHub/GitLab/Gitea/GitCode)
 │   └── iface_*.go               # 其余 20+ 子接口 (按领域拆分)
 │
 ├── transport/                   # 统一 HTTP 传输层

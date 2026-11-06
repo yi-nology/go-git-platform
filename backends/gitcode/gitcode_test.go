@@ -156,3 +156,60 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	_ = err
 	_ = atomic.LoadInt32(&calls)
 }
+
+// TestListFailedJobLogs_SHAFilter locks the GitCode CI wiring: the run is
+// matched by head_sha client-side (the wire has no sha filter), only FAILED
+// jobs are attributed (UPPERCASE vocabulary), and the download-log bytes
+// land in the trace tail.
+func TestListFailedJobLogs_SHAFilter(t *testing.T) {
+	var mu sync.Mutex
+	jobsRoutesSeen := map[string]bool{}
+	logRequested := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/actions/runs") && !strings.Contains(r.URL.Path, "/jobs"):
+			// 最新序：命中 SHA 的 run 在第二条——扫描必须跳过不匹配的。
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 2,
+				"workflow_runs": []any{
+					map[string]any{"workflow_run_id": "rOld", "workflow_name": "ci", "head_sha": "other"},
+					map[string]any{"workflow_run_id": "r1", "workflow_name": "ci", "head_sha": "abc123"},
+				},
+			})
+		case strings.Contains(r.URL.Path, "/download-log"): // 先于 /jobs 判定——download-log 路径含 /jobs 子串
+			logRequested = true
+			_, _ = w.Write([]byte("setup ok\nerror: build failed\n"))
+		case strings.Contains(r.URL.Path, "/actions/runs/r1/jobs"):
+			jobsRoutesSeen["jobs"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 2,
+				"jobs": []any{
+					map[string]any{"id": "j1", "name": "build", "status": "FAILED"},
+					map[string]any{"id": "j2", "name": "lint", "status": "COMPLETED"},
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+	logs, err := p.ListFailedJobLogs(context.Background(), "owner", "repo", "abc123")
+	if err != nil {
+		t.Fatalf("ListFailedJobLogs: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(logs) != 1 {
+		t.Fatalf("want 1 failed job (COMPLETED excluded), got %d: %+v", len(logs), logs)
+	}
+	if logs[0].Name != "build" || logs[0].Stage != "ci" {
+		t.Fatalf("unexpected job mapping: %+v", logs[0])
+	}
+	if !logRequested || !strings.Contains(logs[0].Trace, "build failed") {
+		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
+	}
+	_ = jobsRoutesSeen
+}

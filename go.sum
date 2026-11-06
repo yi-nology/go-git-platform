@@ -145,10 +145,10 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/xanzy/ssh-agent v0.3.3 h1:+/15pJfg/RsTxqYcX6fHqOXZwwMP+2VyYWJeWM2qQFM=
 github.com/xanzy/ssh-agent v0.3.3/go.mod h1:6dzNDKs0J9rVPHPhaGCukekBHKqfl+L3KghI1Bc68Uw=
-github.com/yi-nology/go-gitcode v0.14.0 h1:oj+VdHZaRu1oZ/hkxAKlKCocYKJb250v/w3h7pYDsZU=
-github.com/yi-nology/go-gitcode v0.14.0/go.mod h1:YE9snaa9ChVY7FoPj/4huVDkVNJaI/gpxHcWgNNGYls=
-github.com/yi-nology/go-gongfeng v0.2.1 h1:XF8AW/WZb2IjCjnbPCsSgHzwUb3Bo9eR/aH+q8aKA6U=
-github.com/yi-nology/go-gongfeng v0.2.1/go.mod h1:fGYlacRAVzekACOAfHEREFEgdTXrwWs5zzKDfT7qpis=
+github.com/yi-nology/go-gitcode v0.15.0 h1:+6dXjO4LrYG/Lci9r2Mwx7VKI0DHI6yEqNciacrWgEI=
+github.com/yi-nology/go-gitcode v0.15.0/go.mod h1:YE9snaa9ChVY7FoPj/4huVDkVNJaI/gpxHcWgNNGYls=
+github.com/yi-nology/go-gongfeng v0.3.0 h1:izURatafy/IQAbr6OQkODYvFaX728vHgJ/sxO4Txa8o=
+github.com/yi-nology/go-gongfeng v0.3.0/go.mod h1:fGYlacRAVzekACOAfHEREFEgdTXrwWs5zzKDfT7qpis=
 gitlab.com/gitlab-org/api/client-go/v3 v3.43.0 h1:X7qHPPt6If/5f0bgBpeT8GYWx2zDnuUzRsfnzJa9/cc=
 gitlab.com/gitlab-org/api/client-go/v3 v3.43.0/go.mod h1:8cuzgeUJzkVvaRvw57iZ8foGmL5q8GZXi4lHTiF5edY=
 go.yaml.in/yaml/v3 v3.0.6 h1:zcDfvjXEqTQmpjniUBLc91xYJMB2c4QOFxEF/LCEckM=

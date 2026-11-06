@@ -15,9 +15,9 @@ type JobLog struct {
 // CILogManager fetches failure diagnostics from a platform's CI system.
 // It is an optional capability interface: consumers should check
 // Capabilities().CILogs (or type-assert) before use. GitLab reads its
-// native pipelines; GitHub and Gitea map onto their Actions surfaces
-// (runs-by-SHA → failed jobs → job log tails); platforms without a
-// job-log wire express absence by not declaring the capability.
+// native pipelines; GitHub, Gitea, and GitCode map onto their Actions
+// surfaces (runs-by-SHA → failed jobs → job log tails); platforms without
+// a job-log wire express absence by not declaring the capability.
 type CILogManager interface {
 	// ListFailedJobLogs returns the failed jobs of the most recent pipeline
 	// run for a commit, each with the tail of its execution log. A commit
