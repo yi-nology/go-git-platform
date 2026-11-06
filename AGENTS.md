@@ -138,10 +138,14 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   （JSON 字段级脱敏——暂无消费点，webhook 日志脱敏若长出需求再评估）；
   v0.35.1 全量 bugfix（mathx NaN 防护/stringx FirstN 口径/Union 保序/
   cron 方言/cache Key 契约警示/httpjson 204 空体对偶面）——经 ttlcache
-  委托与错误面被动受益。下游反馈回流三连：timex 多 layout 解析（#197）、
-  bufiox 行粒度尾部窗口（#198）、Slice.RemoveIf（#199）——均出自本仓
-  真实消费形态（due_on 解析/CILogManager 尾部截断/别名注销），上游采纳
-  后按「能用尽用」收编。
+  委托与错误面被动受益。下游反馈回流六连（均出自本仓真实消费形态，上游采纳后按「能用尽用」
+  收编）：#197 timex 多 layout 解析（due_on 双平台实证）、#198 bufiox
+  行粒度尾部窗口（CILogManager 四端共享截断）、#199 Slice.RemoveIf
+  （#178 删除侧对偶）、#210 MatchSimpleGlob 跨 `/` 语义 doc 缺口
+  （glob 家族三形态三样：filepath.Match 不跨/MatchGlob 跨/SimpleGlob
+  跨但 doc 零提及）、#211 pagination 客户端行走器（本仓 AllPages/
+  pageiter + gongfeng Paginate 三处独立实现为证）、#212 secretx
+  passphrase 派生形态（凭据加密 v1→v2 迁移事故为证）。
 
 ## 规则二：公共契约红线
 
