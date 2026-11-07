@@ -148,6 +148,12 @@ func buildFetchRefSpecs(opts FetchOptions) []config.RefSpec {
 		if isCommitSHA(branch) {
 			continue
 		}
+		// 含 ':' 的条目是调用方手写的完整 refspec，原样透传（与 native
+		// buildNativeFetchRefSpecs 同规则，两后端不分叉）。
+		if strings.Contains(branch, ":") {
+			specs = append(specs, config.RefSpec(branch))
+			continue
+		}
 		if strings.HasPrefix(branch, "refs/") {
 			branchName := strings.TrimPrefix(branch, "refs/heads/")
 			specs = append(specs, config.RefSpec(fmt.Sprintf("+%s:refs/remotes/%s/%s", branch, opts.Remote, branchName)))

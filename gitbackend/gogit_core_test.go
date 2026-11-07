@@ -316,3 +316,12 @@ func TestInsecureHostKeyCallbackAcceptsAnyHost(t *testing.T) {
 		t.Skip("this environment has ~/.ssh/known_hosts; nothing to assert")
 	}
 }
+
+func TestBuildFetchRefSpecs_RefSpecPassthrough(t *testing.T) {
+	// 与 native buildNativeFetchRefSpecs 同规则：含 ':' 的条目原样透传。
+	opts := FetchOptions{Remote: "origin", Branches: []string{"pull/1/head:refs/heads/pr-1"}}
+	specs := buildFetchRefSpecs(opts)
+	if len(specs) != 1 || string(specs[0]) != "pull/1/head:refs/heads/pr-1" {
+		t.Fatalf("refspec must pass through verbatim, got %v", specs)
+	}
+}

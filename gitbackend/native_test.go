@@ -543,3 +543,37 @@ func TestNative_FetchCheckedOutBranch(t *testing.T) {
 		t.Fatalf("FetchResult.UpdatedBranch = %v, want it to contain %s", res.UpdatedBranch, branch)
 	}
 }
+
+func TestBuildNativeFetchRefSpecs_RefSpecPassthrough(t *testing.T) {
+	// 含 ':' 的条目是调用方手写的完整 refspec：原样透传，不做分支名展开。
+	specs := buildNativeFetchRefSpecs("origin", []string{"pull/1/head:refs/heads/pr-1"})
+	if len(specs) != 1 || specs[0] != "pull/1/head:refs/heads/pr-1" {
+		t.Fatalf("refspec must pass through verbatim, got %v", specs)
+	}
+}
+
+// TestNative_FetchRefSpecIntoCheckedOutClone：PR head refspec 抓取在默认
+// 分支已检出的工作区 clone 上必须照常工作（code-review-service 的生产形态）。
+func TestNative_FetchRefSpecIntoCheckedOutClone(t *testing.T) {
+	b := newTestNativeBackend(t)
+	upstream := createTestRepo(t)
+	branch := gitOutput(t, upstream, "rev-parse", "--abbrev-ref", "HEAD")
+
+	cloneDir := filepath.Join(t.TempDir(), "clone")
+	if err := b.Clone(context.Background(), CloneOptions{URL: upstream, Path: cloneDir, Branch: branch}); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	// 用 refspec 把远端同名分支抓成本地 pr-1（模拟 PR head ref），
+	// 不触碰检出的分支
+	if _, err := b.Fetch(context.Background(), FetchOptions{
+		RepoPath: cloneDir,
+		Remote:   "origin",
+		Branches: []string{branch + ":refs/heads/pr-1"},
+	}); err != nil {
+		t.Fatalf("refspec fetch must pass through verbatim: %v", err)
+	}
+	if got := gitOutput(t, cloneDir, "rev-parse", "refs/heads/pr-1"); got == "" {
+		t.Fatal("pr-1 ref not created")
+	}
+}
