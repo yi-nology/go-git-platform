@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oekit/pkg/timex"
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -159,13 +160,10 @@ func milestoneAddress(m *gitcode.Milestone) int64 {
 // that echo back what was sent return RFC3339 timestamps. Empty or
 // unparseable values yield nil rather than failing the conversion.
 func parseGitCodeDueOn(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
-	for _, layout := range []string{time.RFC3339, "2006-01-02"} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return &t
-		}
+	// oekit timex.ParseFirst（pkg#197 落地）：多 layout first-match 原语，
+	// 替换手写循环。空/不可解析 → nil（转换不因 due_on 失败）。
+	if t, ok := timex.ParseFirst(s, time.RFC3339, "2006-01-02"); ok {
+		return &t
 	}
 	return nil
 }

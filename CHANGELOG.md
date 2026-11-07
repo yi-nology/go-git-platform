@@ -30,6 +30,35 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   SHA 过滤、`refs/` 前缀、全 SHA 回退通配），两后端行为不再分叉。
   调用方拿到的可见结果（refs/remotes 下的新值）恰是本该发生而此前没发生的。
 
+## [0.118.0] - 2026-11-08
+
+### Changed（oekit 全量拉齐 v0.37.1/v0.28.1/v0.8.6 + 下游收编第二轮）
+
+- **deps: oekit 三件套全量拉齐**——pkg v0.35.1 → **v0.37.1**、concurrency
+  v0.23.4 → **v0.28.1**、logx v0.8.2 → **v0.8.6**。上游 v0.36–v0.37 期间
+  本仓所提六 issue（#197/#198/#199/#210/#211/#212）全部落地，下游收编：
+  - **`timex.ParseFirst` 收编**（#197）：`parseGitCodeDueOn`/
+    `parseGiteeDueOn` 两处手写多 layout 循环删除，委托原语（语义逐字
+    同构：first-match + (time.Time, bool)）；
+  - **`bufiox.TailLines` 收编**（#198）：`backendutil.TailOfReader` 委托
+    原语（签名同形），删 30 行手写行扫描；交付版带 CRLF 归一（较手写
+    版改进）；四后端 CI 调用点零改动；
+  - **收编否决（语义依据）**：`pagination.WalkEach`（#211）停止规则为
+    长度单调递减+空页，缺 `EachBounded` 的**伪翻页检测**（Forgejo
+    15.0.1 现场实证：同页逐值重复 = 列表已尾，优雅返回已收集数据）——
+    AllPages 委托 WalkEach 会把现场硬化行为从优雅降级变报错丢数据，
+    `provider/pageiter` 保留；`secretx.NewPassphraseBox`（#212）KDF 为
+    PBKDF2，与本仓 v2 密文的 argon2id 派生不同线——存量密文 wire 兼容
+    优先，收编留给下一代密文版本位；`Slice.RemoveIf`（#199）暂无消费
+    点（本仓无注销 API）；`ctxscope`/`cache.SingleValue` 无消费点。
+- **refactor: janitor 轮次纪律迁 `loop.Run`**（concurrency v0.28 新原语
+  `IntervalAfterCompletion`，#140）——消灭「panic 后静默停摆」失败
+  形态：旧 GoSafeLabeled+ticker 下 cleanup panic 后循环死亡、清理永久
+  停摆直到手动 start；loop.Run 单轮 panic 收编、janitor 存活。间隔从
+  「本轮结束」起算（长清扫不重叠不双发）；FirstDelay=interval 保持旧
+  首扫时机；生命周期状态机（重启/双停/竞测）契约不变，全部既有测试
+  零改动通过。
+
 ## [0.115.0] - 2026-11-06
 
 ### Added（CI 失败诊断第四家：GitCode 接入）

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
+	"github.com/oekit/pkg/timex"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -493,19 +494,11 @@ func convertMilestone(m *gitee.Milestone) provider.Milestone {
 	return ms
 }
 
-// giteeDueOnLayouts are the timestamp layouts Gitee's milestone payload uses.
-var giteeDueOnLayouts = []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02"}
-
+// parseGiteeDueOn 经 oekit timex.ParseFirst（pkg#197 落地）多 layout
+// first-match：RFC3339 / "2006-01-02 15:04:05" / "2006-01-02"（文档形与
+// 真实 wire 形并存）。
 func parseGiteeDueOn(s string) (time.Time, bool) {
-	if s == "" {
-		return time.Time{}, false
-	}
-	for _, layout := range giteeDueOnLayouts {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t, true
-		}
-	}
-	return time.Time{}, false
+	return timex.ParseFirst(s, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02")
 }
 
 func formatGiteeDueOn(t time.Time) string { return t.Format(time.RFC3339) }
