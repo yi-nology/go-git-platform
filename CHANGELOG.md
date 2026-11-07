@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.117.0] - 2026-11-07
+
+### Fixed（gitbackend：Branches 含 refspec 条目的透传兼容）
+
+- **`Fetch` 的 `Branches` 条目含 `:` 时原样透传为 refspec**（native 与
+  gogit 同规则）：`:` 是 git refspec 的 src:dst 分隔符，调用方手写完整
+  refspec（如 `pull/1/head:refs/heads/pr-1`）的形态在 v0.116.0 收紧
+  Branches 语义时被误当分支名展开成 `refs/heads/<refspec>` 而炸掉旧调用方
+  （code-review-service 的 PR head 抓取实测命中）。现分支名展开只适用
+  纯分支名，refspec 透传恢复 v0.116 前行为，两后端不分叉。
+
 ## [0.116.0] - 2026-11-07
 
 ### Fixed（gitbackend：native Fetch 分支语义对齐 gogit）

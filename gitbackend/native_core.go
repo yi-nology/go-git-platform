@@ -71,6 +71,14 @@ func buildNativeFetchRefSpecs(remote string, branches []string) []string {
 		if isCommitSHA(branch) {
 			continue
 		}
+		// ':' 是 git refspec 的 src:dst 分隔符：含 ':' 的条目是调用方
+		// 手写的完整 refspec（如 pull/1/head:refs/heads/pr-1），原样透传
+		// ——分支名展开只适用于纯分支名。v0.116.0 收紧 Branches 语义时
+		// 曾把这类条目也展开成 refs/heads/<refspec> 而炸掉旧调用方。
+		if strings.Contains(branch, ":") {
+			specs = append(specs, branch)
+			continue
+		}
 		if strings.HasPrefix(branch, "refs/") {
 			branchName := strings.TrimPrefix(branch, "refs/heads/")
 			specs = append(specs, fmt.Sprintf("+%s:refs/remotes/%s/%s", branch, remote, branchName))
