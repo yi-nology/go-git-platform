@@ -138,14 +138,20 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   （JSON 字段级脱敏——暂无消费点，webhook 日志脱敏若长出需求再评估）；
   v0.35.1 全量 bugfix（mathx NaN 防护/stringx FirstN 口径/Union 保序/
   cron 方言/cache Key 契约警示/httpjson 204 空体对偶面）——经 ttlcache
-  委托与错误面被动受益。下游反馈回流六连（均出自本仓真实消费形态，上游采纳后按「能用尽用」
-  收编）：#197 timex 多 layout 解析（due_on 双平台实证）、#198 bufiox
-  行粒度尾部窗口（CILogManager 四端共享截断）、#199 Slice.RemoveIf
-  （#178 删除侧对偶）、#210 MatchSimpleGlob 跨 `/` 语义 doc 缺口
-  （glob 家族三形态三样：filepath.Match 不跨/MatchGlob 跨/SimpleGlob
-  跨但 doc 零提及）、#211 pagination 客户端行走器（本仓 AllPages/
-  pageiter + gongfeng Paginate 三处独立实现为证）、#212 secretx
-  passphrase 派生形态（凭据加密 v1→v2 迁移事故为证）。
+  委托与错误面被动受益。下游反馈回流已全部被上游采纳落地（v0.37.0，当日往返）：#197 timex
+  `ParseFirst`（已收编：gitcode/gitee due_on 手写循环删除）、#198
+  bufiox `TailLines`（已收编：TailOfReader 委托，CRLF 归一改进）、
+  #199 Slice.RemoveIf（无下游消费点，原语就位待用）、#210 MatchSimpleGlob
+  跨 `/` 语义 doc 补全、#211 pagination WalkEach（收编否决：缺伪翻页
+  检测——Forgejo 15.0.1 现场实证行为，pageiter 保留）、#212 secretx
+  `NewPassphraseBox`（收编否决：PBKDF2 与本仓 v2 密文 argon2id 派生
+  不同线，存量 wire 兼容优先）。第二轮新提六连：pkg#269 httpjson 条件
+  请求（ETag/304 重放——ETagCache 现场硬化两年为证）、#270 webhook
+  签名校验原语族（五验证器形态为证）、#271 `ParseFirstInLocation`
+  （无时区 layout 非 UTC 服务端——Gitee CST 实证）；concurrency#198
+  retry/httpx `ParseRetryAfter`（秒数+HTTP-date 双形态——transport
+  手写解析为证）、#200 跨宿主重定向敏感头剥离（StripSensitiveHeaders
+  为证）；pkg#272 SafeMap.Snapshot（Slice.Snapshot 对偶）。
 
 ## 规则二：公共契约红线
 
