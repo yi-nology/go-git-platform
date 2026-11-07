@@ -435,3 +435,111 @@ func TestBuildFetchRefSpecs_WithRefPrefix(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, string(specs[0]))
 	}
 }
+
+func TestBuildNativeFetchRefSpecs_Branches(t *testing.T) {
+	specs := buildNativeFetchRefSpecs("origin", []string{"main", "feature"})
+	if len(specs) != 2 {
+		t.Fatalf("expected 2 specs, got %d", len(specs))
+	}
+	expected := []string{
+		"+refs/heads/main:refs/remotes/origin/main",
+		"+refs/heads/feature:refs/remotes/origin/feature",
+	}
+	for i, want := range expected {
+		if specs[i] != want {
+			t.Fatalf("spec[%d]: expected %q, got %q", i, want, specs[i])
+		}
+	}
+}
+
+func TestBuildNativeFetchRefSpecs_SHA(t *testing.T) {
+	// SHA hashes can't be refspecs - should only include the branch
+	specs := buildNativeFetchRefSpecs("origin", []string{"main", "abc123def456789012345678901234567890abcd"})
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/main:refs/remotes/origin/main"
+	if specs[0] != expected {
+		t.Fatalf("expected %q, got %q", expected, specs[0])
+	}
+}
+
+func TestBuildNativeFetchRefSpecs_WithRefPrefix(t *testing.T) {
+	specs := buildNativeFetchRefSpecs("origin", []string{"refs/heads/main"})
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/main:refs/remotes/origin/main"
+	if specs[0] != expected {
+		t.Fatalf("expected %q, got %q", expected, specs[0])
+	}
+}
+
+func TestBuildNativeFetchRefSpecs_SHAOnlyFallsBackToWildcard(t *testing.T) {
+	// All-SHA input mirrors the gogit backend: fall back to the wildcard
+	// refspec so the fetch still updates remote-tracking refs.
+	specs := buildNativeFetchRefSpecs("origin", []string{"abc123def456789012345678901234567890abcd"})
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 spec, got %d", len(specs))
+	}
+	expected := "+refs/heads/*:refs/remotes/origin/*"
+	if specs[0] != expected {
+		t.Fatalf("expected %q, got %q", expected, specs[0])
+	}
+}
+
+// TestNative_FetchCheckedOutBranch reproduces the production failure behind
+// issue #37: fetching a branch that is checked out in the non-bare clone used
+// to die with "refusing to fetch into branch ... checked out", and even where
+// it didn't, a bare branch fetch only wrote FETCH_HEAD and left the
+// remote-tracking ref stale. Explicit refspecs must do both.
+func TestNative_FetchCheckedOutBranch(t *testing.T) {
+	b := newTestNativeBackend(t)
+	upstream := createTestRepo(t)
+	branch := gitOutput(t, upstream, "rev-parse", "--abbrev-ref", "HEAD")
+
+	cloneDir := filepath.Join(t.TempDir(), "clone")
+	if err := b.Clone(context.Background(), CloneOptions{
+		URL:    upstream,
+		Path:   cloneDir,
+		Branch: branch,
+	}); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+
+	// Advance the remote branch while the clone keeps the same branch checked
+	// out - the exact workspace shape the review service runs on.
+	if err := os.WriteFile(filepath.Join(upstream, "advance.txt"), []byte("advance"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitOutput(t, upstream, "add", ".")
+	gitOutput(t, upstream, "commit", "-m", "advance")
+	remoteSHA := gitOutput(t, upstream, "rev-parse", "HEAD")
+	localSHA := gitOutput(t, cloneDir, "rev-parse", "HEAD")
+
+	res, err := b.Fetch(context.Background(), FetchOptions{
+		RepoPath: cloneDir,
+		Remote:   "origin",
+		Branches: []string{branch},
+	})
+	if err != nil {
+		t.Fatalf("fetch must not refuse a checked-out branch: %v", err)
+	}
+	if got := gitOutput(t, cloneDir, "rev-parse", "refs/remotes/origin/"+branch); got != remoteSHA {
+		t.Fatalf("remote-tracking ref not updated: got %s, want %s", got, remoteSHA)
+	}
+	if got := gitOutput(t, cloneDir, "rev-parse", "refs/heads/"+branch); got != localSHA {
+		t.Fatalf("checked-out branch must stay untouched: got %s, want %s", got, localSHA)
+	}
+	// origin/HEAD (symbolic) rides along in the snapshot and reports itself
+	// as updated too, so assert membership rather than an exact list.
+	found := false
+	for _, b := range res.UpdatedBranch {
+		if b == branch {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("FetchResult.UpdatedBranch = %v, want it to contain %s", res.UpdatedBranch, branch)
+	}
+}

@@ -36,16 +36,14 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
 	}
 	if len(opts.Branches) > 0 {
-		// Filter out SHA hashes - they can't be used directly as refspecs
-		branchArgs := make([]string, 0, len(opts.Branches))
-		for _, branch := range opts.Branches {
-			if !isCommitSHA(branch) {
-				branchArgs = append(branchArgs, branch)
-			}
-		}
-		if len(branchArgs) > 0 {
-			args = append(args, branchArgs...)
-		}
+		// Expand branches into explicit refspecs instead of passing them as
+		// bare args. A bare "git fetch origin main" only writes FETCH_HEAD
+		// (remote-tracking refs stay stale, so the before/after diff here
+		// sees nothing) and is refused outright when the fetched branch is
+		// the one checked out in this non-bare clone. Explicit refspecs
+		// never touch the checked-out branch and update refs/remotes/, which
+		// restores parity with the gogit backend's buildFetchRefSpecs.
+		args = append(args, buildNativeFetchRefSpecs(remote, opts.Branches)...)
 	}
 
 	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)
@@ -59,6 +57,31 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 		return nil, newGitError("Fetch", opts.RepoPath, "", err)
 	}
 	return diffFetchRefs(remote, before, after), nil
+}
+
+// buildNativeFetchRefSpecs mirrors the gogit backend's buildFetchRefSpecs so
+// both backends fetch branches identically: branch names expand to
+// +refs/heads/<b>:refs/remotes/<remote>/<b>, SHA hashes are dropped (they
+// can't be used as refspecs), and refs/-prefixed names keep their path below
+// refs/heads/. If nothing usable remains, fall back to the full wildcard
+// refspec so the fetch still updates remote-tracking refs.
+func buildNativeFetchRefSpecs(remote string, branches []string) []string {
+	specs := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		if isCommitSHA(branch) {
+			continue
+		}
+		if strings.HasPrefix(branch, "refs/") {
+			branchName := strings.TrimPrefix(branch, "refs/heads/")
+			specs = append(specs, fmt.Sprintf("+%s:refs/remotes/%s/%s", branch, remote, branchName))
+		} else {
+			specs = append(specs, fmt.Sprintf("+refs/heads/%s:refs/remotes/%s/%s", branch, remote, branch))
+		}
+	}
+	if len(specs) == 0 {
+		return []string{fmt.Sprintf("+refs/heads/*:refs/remotes/%s/*", remote)}
+	}
+	return specs
 }
 
 // snapshotFetchRefs snapshots the refs a fetch can move — the remote's

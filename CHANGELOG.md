@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.116.0] - 2026-11-07
+
+### Fixed（gitbackend：native Fetch 分支语义对齐 gogit）
+
+- **native `Fetch` 传 `Branches` 时展开为显式 refspec**
+  （[go-git-platform#37](https://github.com/yi-nology/go-git-platform/issues/37)，
+  review-service 生产评审空跑根因）：此前裸 `git fetch origin <branch>` 有
+  两个叠加问题——工作区 clone 恰好检出同名分支时 git 直接拒绝
+  （`refusing to fetch into branch ... checked out`）；即便不撞检出冲突，
+  无 refspec 的分支 fetch 只写 FETCH_HEAD 不更新 remote-tracking ref，
+  after 快照与 `FetchResult` 分支更新检测全部失真。现镜像 gogit 后端
+  `buildFetchRefSpecs` 语义（`+refs/heads/<b>:refs/remotes/<remote>/<b>`，
+  SHA 过滤、`refs/` 前缀、全 SHA 回退通配），两后端行为不再分叉。
+  调用方拿到的可见结果（refs/remotes 下的新值）恰是本该发生而此前没发生的。
+
 ## [0.115.0] - 2026-11-06
 
 ### Added（CI 失败诊断第四家：GitCode 接入）
