@@ -124,6 +124,11 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 var tencentEnvelope = provider.WebhookEnvelope{
 	Platform: provider.PlatformTencentCode,
 	IDPrefix: "tc",
+	// 投递 ID 头（issue #48）：工蜂是 GitLab-v3 衍生，投递带 per-webhook
+	// UUID（X-Gitlab-Event-UUID 家族）；此前不声明 IDHeaders ⇒ 每次投递
+	// （含重投）都本地合成新 ID，按 NormalizedEvent.ID 去重的宿主对重投
+	// 事件重复处理。头缺席时回落合成 ID，行为不回退。
+	IDHeaders: []string{"X-Gitlab-Event-UUID", "X-Request-ID"},
 }
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {

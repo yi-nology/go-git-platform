@@ -30,7 +30,11 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 		totalDel += cf.Deletions
 		files = append(files, cf)
 	}
-	return &provider.MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel}, nil
+	// RawDiff 与其它后端对齐（issue #48）：DiffManager 的其它六家都经
+	// provider.BuildRawDiff 填充 unified diff，工蜂此前返回空串——读
+	// RawDiff 的消费方在工蜂上拿到静默缺省。
+	return &provider.MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel,
+		RawDiff: provider.BuildRawDiff(files)}, nil
 }
 
 // GetCRFiles implements provider.DiffManager.
