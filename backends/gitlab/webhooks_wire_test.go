@@ -3,8 +3,11 @@ package gitlab_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -136,5 +139,44 @@ func TestWebhooks_CreateWire_NoteFamily(t *testing.T) {
 	}
 	if bodies[1]["note_events"] != false {
 		t.Errorf("create without note must state the family explicitly off: got %v", bodies[1])
+	}
+}
+
+// TestParseWebhookEvent_PipelineNoiseIsSentinel（issue #45）：噪声过滤
+// 不得返回 (nil, nil)——只判 err 的调用方会空指针。success/running 态
+// 返回 (nil, ErrWebhookFiltered)，failed 态仍正常产出事件。
+func TestParseWebhookEvent_PipelineNoiseIsSentinel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	mk := func(status string) *http.Request {
+		body := fmt.Sprintf(`{"object_kind":"pipeline","object_attributes":{"status":%q,"sha":"abc123"},"merge_request":{"iid":3}}`, status)
+		r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+		r.Header.Set("X-Gitlab-Token", "corpus-secret")
+		r.Header.Set("X-Gitlab-Event", "pipeline")
+		r.Header.Set("Content-Type", "application/json")
+		return r
+	}
+
+	// 噪声态：nil 事件 + 可判的过滤哨兵
+	ne, err := p.ParseWebhookEvent(mk("success"), "corpus-secret")
+	if err == nil {
+		t.Fatal("噪声态必须带错误返回，不得 (nil, nil)")
+	}
+	if !errors.Is(err, provider.ErrWebhookFiltered) {
+		t.Fatalf("噪声态错误必须可经 ErrWebhookFiltered 判定, got %v", err)
+	}
+	if ne != nil {
+		t.Fatalf("噪声态事件必须为 nil, got %+v", ne)
+	}
+
+	// 关注态：failed 正常产出
+	ne, err = p.ParseWebhookEvent(mk("failed"), "corpus-secret")
+	if err != nil {
+		t.Fatalf("failed 态不得被过滤: %v", err)
+	}
+	if ne == nil || ne.Type != "pipeline.failed" {
+		t.Fatalf("failed 态事件异常: %+v", ne)
 	}
 }

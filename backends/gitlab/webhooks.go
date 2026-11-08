@@ -247,7 +247,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		// merge_request.iid 若有则带出，供评论回帖定位）。
 		status := pl.ObjectAttributes.Status
 		if status != "failed" && status != "canceled" {
-			return nil, nil
+			// 噪声过滤显式化（issue #45）：(nil, nil) 是契约陷阱——只判
+			// err 的调用方在 ev 上空指针。改返回哨兵错误，调用方
+			// errors.Is(err, provider.ErrWebhookFiltered) 显式忽略。
+			return nil, provider.Wrapf(provider.PlatformGitLab, "ParseWebhookEvent",
+				"%w: pipeline status %q is noise", provider.ErrWebhookFiltered, status)
 		}
 		event.Type = "pipeline." + status
 		event.Action = status

@@ -9,6 +9,14 @@ import (
 	"github.com/oekit/pkg/container"
 )
 
+// ErrWebhookFiltered 是 ParseWebhookEvent 的「噪声过滤」哨兵（issue #45）：
+// 后端按平台噪声策略丢弃事件（如 GitLab pipeline 的 success/running 态）
+// 时返回 (nil, ErrWebhookFiltered)，而不是 (nil, nil)——后者是契约陷阱，
+// 只判 err 的调用方会在 ev 上空指针。调用方以 errors.Is(err,
+// ErrWebhookFiltered) 识别并显式忽略；哨兵经 provider.Wrap 包装后链路
+// 保持可判。
+var ErrWebhookFiltered = errors.New("webhook event filtered out (noise policy)")
+
 // Sentinel errors classify transport and provider failures so callers can
 // branch on category without inspecting status codes or wrapped causes.
 var (
