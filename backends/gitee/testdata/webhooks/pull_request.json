@@ -1,6 +1,6 @@
 {
   "headers": {
-    "X-Gitee-Event": "pull_request"
+    "X-Gitee-Event": "Pull Request Hook"
   },
   "body": {
     "action": "open",

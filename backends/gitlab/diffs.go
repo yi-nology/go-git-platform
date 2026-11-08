@@ -17,7 +17,17 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	if err != nil {
 		return nil, err
 	}
-	diffs, _, err := p.client.MergeRequests.ListMergeRequestDiffs(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
+	// 全页行走（issue #44）：该端点是 offset 分页，per_page 服务端缺省
+	// 20——单页不翻页把 >20 个变更文件的 MR 静默截断，argus 的评审覆盖
+	// 面无声缩水。与同文件 ListNotes 走同一 AllPages 预算模式，perPage
+	// 显式拉满 API 上限（GitLab REST per_page max 100）。
+	diffs, err := backendutil.AllPages(func(page int) ([]*gitlab.MergeRequestDiff, error) {
+		batch, _, err := p.client.MergeRequests.ListMergeRequestDiffs(pidOf(owner, repo), n,
+			&gitlab.ListMergeRequestDiffsOptions{
+				ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: backendutil.GitlabDiffPageSize},
+			}, gitlab.WithContext(ctx))
+		return batch, err
+	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "GetCRDiff", err)
 	}

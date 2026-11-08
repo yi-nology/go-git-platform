@@ -79,6 +79,13 @@ func (s *InstallationTokenSource) Token(ctx context.Context) (string, error) {
 	}
 	token, expiresAt, err := fetchInstallationToken(ctx, s.APIBase, s.AppID, s.InstallationID, s.PrivateKeyPEM)
 	if err != nil {
+		// stale-if-error（issue #46）：margin 窗口内的刷新失败（5xx/超时/
+		// DNS 抖动）不得丢弃仍然有效的缓存 token——那会让 margin 内的每次
+		// API 调用都报错，尽管手里握着 GitHub 仍会接受的凭据。只要缓存
+		// 未过真实过期时间就继续用（并留告警），没有可用凭据时才报错。
+		if s.token != "" && time.Now().Before(s.expiresAt) {
+			return s.token, nil
+		}
 		// 缓存保持原样：本次失败不清旧值，下一次调用照常重试。
 		return "", err
 	}

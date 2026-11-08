@@ -139,11 +139,36 @@ var giteeEnvelope = provider.WebhookEnvelope{
 	IDHeaders: []string{"X-Gitee-Delivery"},
 }
 
+// normalizeGiteeEventType 把 X-Gitee-Event 的真实 wire 值归一到分发键
+// （issue #41：Gitee 投递头是 "Push Hook" 形态——带空格、首字母大写；
+// 此前 switch 只认小写无空格的键，push/PR/tag/note 四族真实投递全部
+// 落空返回 Type="" + nil err，事件静默丢进无路由黑洞）。大小写不敏感
+// + trim 兜底变体；历史小写键原样透传（真实平台从不下发，兼容既有
+// 语料与直接喂入的调用方）。
+func normalizeGiteeEventType(raw string) string {
+	t := strings.TrimSpace(raw)
+	switch {
+	case strings.EqualFold(t, "Push Hook"):
+		return "push"
+	case strings.EqualFold(t, "Pull Request Hook"):
+		return "pull_request"
+	case strings.EqualFold(t, "Tag Push Hook"):
+		return "tag_push"
+	case strings.EqualFold(t, "Note Hook"):
+		return "note"
+	case strings.EqualFold(t, "Issue Hook"):
+		return "issue"
+	default:
+		return t
+	}
+}
+
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
 	eventType, body, err := giteeEnvelope.Read(r, secret)
 	if err != nil {
 		return nil, err
 	}
+	eventType = normalizeGiteeEventType(eventType)
 
 	var pl struct {
 		Action       string `json:"action"`
@@ -164,6 +189,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			FullName string `json:"full_name"`
 		} `json:"repository"`
 		Ref       string    `json:"ref"`
+		Before    string    `json:"before"`
 		After     string    `json:"after"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
@@ -219,10 +245,18 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
 	case "tag_push":
-		event.Type = provider.EventTypeTag + "created"
-		event.Action = "created"
+		// 删除归一（issue #47，同 GitLab——Gitee 家族以全零 after 投递删除）
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = provider.EventTypeTag + "deleted"
+			event.Action = "deleted"
+		} else {
+			event.Type = provider.EventTypeTag + "created"
+			event.Action = "created"
+		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
-		event.CommitSHA = pl.After
+		if !provider.IsWebhookDeletionSHA(pl.After) {
+			event.CommitSHA = pl.After
+		}
 	case "note", "comment":
 		event.Type = provider.EventTypeComment + provider.CommentActionCreated
 		event.Action = provider.CommentActionCreated
@@ -237,7 +271,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 				WebURL: pl.Issue.HTMLURL, CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
 			}
 		}
-	case "Issue Hook":
+	case "issue":
 		action := provider.NormalizeIssueAction(pl.Action)
 		event.Type = provider.EventTypeIssue + action
 		event.Action = action

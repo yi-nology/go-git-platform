@@ -231,10 +231,18 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		ne.Type = provider.EventTypeTag + "created"
-		ne.Action = "created"
+		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
+		if provider.IsWebhookDeletionSHA(tagEvent.After) && !provider.IsWebhookDeletionSHA(tagEvent.Before) {
+			ne.Type = provider.EventTypeTag + "deleted"
+			ne.Action = "deleted"
+		} else {
+			ne.Type = provider.EventTypeTag + "created"
+			ne.Action = "created"
+		}
 		ne.Tag = strings.TrimPrefix(tagEvent.Ref, "refs/tags/")
-		ne.CommitSHA = tagEvent.After
+		if !provider.IsWebhookDeletionSHA(tagEvent.After) {
+			ne.CommitSHA = tagEvent.After
+		}
 		if tagEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(tagEvent.Sender.ID)
 			ne.Actor = &provider.CRUser{

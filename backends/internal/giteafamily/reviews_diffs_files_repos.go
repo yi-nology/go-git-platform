@@ -291,8 +291,13 @@ func GetCRFiles(ctx context.Context, f Family, c DiffPort, owner, repo, number s
 	if err != nil {
 		return nil, err
 	}
-	changedFiles, err := c.ListPullRequestFiles(ctx, owner, repo, n, ListPullRequestFilesOptions{
-		ListOptions: ListOptions{Page: 1, PageSize: f.PageSize},
+	// 全页行走（issue #44）：DiffManager 承诺完整文件集，单页 page=1
+	// 只取 f.PageSize（50）个——>50 个变更文件的 PR 静默截断。与家族内
+	// 其它列表同走 backendutil.AllPages 预算模式。
+	changedFiles, err := backendutil.AllPages(func(page int) ([]*FamilyChangedFile, error) {
+		return c.ListPullRequestFiles(ctx, owner, repo, n, ListPullRequestFilesOptions{
+			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
+		})
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "GetCRFiles", err)
