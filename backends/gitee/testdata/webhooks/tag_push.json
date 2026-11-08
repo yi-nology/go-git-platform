@@ -1,6 +1,6 @@
 {
   "headers": {
-    "X-Gitee-Event": "tag_push"
+    "X-Gitee-Event": "Tag Push Hook"
   },
   "body": {
     "ref": "refs/tags/v1.0.0",

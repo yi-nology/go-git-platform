@@ -1,6 +1,6 @@
 {
   "headers": {
-    "X-Gitee-Event": "push"
+    "X-Gitee-Event": "Push Hook"
   },
   "body": {
     "ref": "refs/heads/main",

@@ -1,6 +1,6 @@
 {
   "headers": {
-    "X-Gitee-Event": "note"
+    "X-Gitee-Event": "Note Hook"
   },
   "body": {
     "noteable_type": "PullRequest",
