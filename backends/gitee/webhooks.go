@@ -189,6 +189,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			FullName string `json:"full_name"`
 		} `json:"repository"`
 		Ref       string    `json:"ref"`
+		Before    string    `json:"before"`
 		After     string    `json:"after"`
 		CreatedAt time.Time `json:"created_at"`
 		UpdatedAt time.Time `json:"updated_at"`
@@ -244,10 +245,18 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
 	case "tag_push":
-		event.Type = provider.EventTypeTag + "created"
-		event.Action = "created"
+		// 删除归一（issue #47，同 GitLab——Gitee 家族以全零 after 投递删除）
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = provider.EventTypeTag + "deleted"
+			event.Action = "deleted"
+		} else {
+			event.Type = provider.EventTypeTag + "created"
+			event.Action = "created"
+		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
-		event.CommitSHA = pl.After
+		if !provider.IsWebhookDeletionSHA(pl.After) {
+			event.CommitSHA = pl.After
+		}
 	case "note", "comment":
 		event.Type = provider.EventTypeComment + provider.CommentActionCreated
 		event.Action = provider.CommentActionCreated

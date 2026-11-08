@@ -16,5 +16,6 @@
     "name": "repo"
   },
   "tag": "v1.0.0",
+  "action": "created",
   "raw_payload": null
 }

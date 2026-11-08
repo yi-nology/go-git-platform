@@ -243,7 +243,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
 	case "tag_push":
-		event.Type = "tag.created"
+		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = "tag.deleted"
+			event.Action = "deleted"
+		} else {
+			event.Type = "tag.created"
+			event.Action = "created"
+		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 	case "issue":
 		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)

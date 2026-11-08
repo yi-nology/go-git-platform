@@ -185,8 +185,9 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			CreatedAt   time.Time `json:"created_at"`
 			UpdatedAt   time.Time `json:"updated_at"`
 		} `json:"issue"`
-		Ref   string `json:"ref"`
-		After string `json:"after"`
+		Ref    string `json:"ref"`
+		Before string `json:"before"`
+		After  string `json:"after"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ParseWebhookEvent", err)
@@ -238,7 +239,17 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 		event.CommitSHA = pl.After
 	case "tag_push":
-		event.Type = "tag.created"
+		// 删除归一（issue #47）：GitLab 家族没有独立 delete 事件，tag 删除
+		// 以 tag_push + 全零 after 投递——此前一律归一成 tag.created，删除
+		// 事件与 GitHub/Gitea 的 tag.deleted 分叉。before 非零确认真删除
+		// （全零 before+after 的异常形态不硬归）。
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = "tag.deleted"
+			event.Action = "deleted"
+		} else {
+			event.Type = "tag.created"
+			event.Action = "created"
+		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 	case "pipeline":
 		// Pipeline Hook（v0.67.0）：只把失败终态送进事件流——成功/运行中对

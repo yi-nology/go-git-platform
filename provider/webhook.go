@@ -604,6 +604,16 @@ func NormalizeCRAction(action string, merged bool) string {
 	}
 }
 
+// WebhookDeletionSHA 是 push/tag_push 类投递的「删除标记」：平台在删除
+// tag/分支时把 after 置成全零 SHA（issue #47）。GitLab 家族（GitLab/Gitee/
+// GitCode/TencentCode）没有独立的 delete 事件，删除只能靠这个标记识别。
+const WebhookDeletionSHA = "0000000000000000000000000000000000000000"
+
+// IsWebhookDeletionSHA 报告 after 值是否为平台的删除标记。
+func IsWebhookDeletionSHA(after string) bool {
+	return strings.TrimRight(strings.ToLower(after), "0") == ""
+}
+
 // NormalizeTagAction maps platform-specific tag event actions to the
 // canonical vocabulary. The canonical full event type is "tag.created":
 // GitLab/Gitea/Tencent signal a tag with a tag_push hook (a tag being
