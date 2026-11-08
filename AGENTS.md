@@ -179,7 +179,20 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   耗尽丢全部数据）、#286 WalkEach fetch 缺 ctx 贯穿（同包 Walk 已是
   ctx 完整形态，包内不一致；pageiter PageFetch 签名为证）。上游落地
   后收编路径：pageiter 保留（ctx+无进展双安全网已自建），仅复核语义
-  对齐。
+  对齐。第四轮 ETag 域三连（同日）：#288 WithETag 无视
+  Cache-Control: no-store（RFC 9111 §5.2.2.5 MUST NOT store 被违反
+  ——2xx+ETag 无条件 Put 实证；提案只 gate no-store，no-cache 与条件
+  请求天然兼容、private 不约束 private cache）、#289 NewMemETagStore
+  无淘汰无上限（条目数+条目体积双无界，长驻轮询内存泄漏面；提案组合
+  同模块 cache.LocalCache）、#290 WithETag doc 示例键漏 Authorization/
+  Accept 分区（照文档写即跨凭据缓存串味；提案 CanonicalETagKey 构造器
+  把纪律变构造期保证）——三条正是 #269 从本仓 ETagCache「逐条搬」时
+  漏掉的硬化纪律（no-store/有界/键分区），上游落地后 transport/etag.go
+  评估整体委托或只收键构造器；#291 URL path 低基数模板原语（ID 段折叠
+  控制 metrics 标签基数——transport/metrics.ClassifyPath 为证，uuid
+  盲区与保留清单可配两处诚实披露）。同期存档：oagentkit runtime#25/
+  #26 已闭（procx ChildEnv 两缺口上游修复落地，gitbackend 收编评估
+  待下一轮随 deps 升级一起做）。
 
 ## 规则二：公共契约红线
 
