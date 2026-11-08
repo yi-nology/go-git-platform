@@ -139,6 +139,10 @@ func DefaultBaseURL(base, def string) string {
 // fetches across all backends.
 const IssueCommentPageSize = 100
 
+// GitlabDiffPageSize 是 GitLab diff 列表端点的 per_page 取值（issue #44）：
+// REST 上限 100，显式拉满——服务端缺省 20 会把大 MR 静默截到 20 个文件。
+const GitlabDiffPageSize = 100
+
 // LabelPageSize is the per-page value for paginated label-list fetches
 // across all backends.
 const LabelPageSize = 100
