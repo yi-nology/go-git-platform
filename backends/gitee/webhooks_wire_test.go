@@ -74,7 +74,7 @@ func TestParseWebhookEvent_RealHeaderVocabulary(t *testing.T) {
 		{"Push Hook", `{"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"o/r"}}`, "push"},
 		{"Pull Request Hook", `{"action":"open","number":1,"state":"open","repository":{"full_name":"o/r"}}`, "cr.opened"},
 		{"Tag Push Hook", `{"ref":"refs/tags/v1.0","after":"abc123","repository":{"full_name":"o/r"}}`, "tag.created"},
-		{"Note Hook", `{"note":"hi","noteable_type":"PullRequest","number":2,"repository":{"full_name":"o/r"}}`, "comment.created"},
+		{"Note Hook", `{"note":"hi","noteable_type":"PullRequest","number":2,"repository":{"full_name":"o/r"}}`, "comment.created"}, //nolint:misspell // 平台 webhook 原始字段名
 		{"Issue Hook", `{"action":"open","issue":{"number":"I-1","state":"open"},"repository":{"full_name":"o/r"}}`, "issue.opened"},
 		// 大小写/空白变体兜底（防御未来平台改形态时静默回归）
 		{"push hook", `{"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"o/r"}}`, "push"},

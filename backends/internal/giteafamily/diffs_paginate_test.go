@@ -11,9 +11,8 @@ import (
 // fakeDiffPort 记录 ListPullRequestFiles 的每次调用（page/size），按
 // page→预置批次回放（issue #44：>PageSize 的 PR 必须翻页取全）。
 type fakeDiffPort struct {
-	pages    map[int][]*FamilyChangedFile
-	got      []ListOptions
-	pageSize int
+	pages map[int][]*FamilyChangedFile
+	got   []ListOptions
 }
 
 func (f *fakeDiffPort) GetPullRequestDiff(context.Context, string, string, int64) ([]byte, error) {

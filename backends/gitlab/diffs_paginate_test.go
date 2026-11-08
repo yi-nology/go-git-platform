@@ -28,9 +28,10 @@ func TestGetCRDiffWalksAllPages(t *testing.T) {
 		mu.Unlock()
 		page := r.URL.Query().Get("page")
 		n := 0
-		if page == "1" {
+		switch page {
+		case "1":
 			n = perPage
-		} else if page == "2" {
+		case "2":
 			n = 5
 		}
 		out := make([]map[string]any, 0, n)
