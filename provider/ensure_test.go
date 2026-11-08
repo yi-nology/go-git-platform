@@ -374,3 +374,50 @@ func TestEnsureDeployKeyLifecycle(t *testing.T) {
 		t.Fatalf("keys = %+v", f.keys)
 	}
 }
+
+// TestEnsureWebhook_VocabularyMismatchConverges 复刻 issue #40 的生产形态：
+// GitLab/TencentCode 家族写侧接受 pull_request、读侧 convertHook 读回
+// merge_request——归一缺失时 EnsureWebhook 永不收敛（每次 delete+recreate）。
+// 归一后：读侧家族名 → 输入名，同族 ⇒ unchanged，钩子 ID 不翻动。
+func TestEnsureWebhook_VocabularyMismatchConverges(t *testing.T) {
+	f := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"push", "pull_request"}}); err != nil {
+		t.Fatal(err)
+	}
+	id := f.hooks[0].ID
+	// 模拟 GitLab 列表输出：同一布尔位读回家族名（pull_request → merge_request）。
+	f.hooks[0].Events = []string{"push", "merge_request"}
+	action, hook, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"push", "pull_request"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != EnsureUnchanged || hook.ID != id {
+		t.Fatalf("action = %q id = %d, want unchanged/%d（词表归一缺失即永不收敛）", action, hook.ID, id)
+	}
+
+	// TencentCode 形态：读侧 merge_request + tag_push + issues + note vs
+	// 输入 push + cr + tag + comment + issue——全部族归一后等价。
+	f2 := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f2, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"push", "cr", "tag", "comment", "issue"}}); err != nil {
+		t.Fatal(err)
+	}
+	id2 := f2.hooks[0].ID
+	f2.hooks[0].Events = []string{"push", "merge_request", "tag_push", "note", "issues"}
+	action2, hook2, err := EnsureWebhook(t.Context(), f2, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"push", "cr", "tag", "comment", "issue"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action2 != EnsureUnchanged || hook2.ID != id2 {
+		t.Fatalf("action = %q id = %d, want unchanged/%d", action2, hook2.ID, id2)
+	}
+
+	// 真漂移仍然报漂移：读侧多出一个未请求的族。
+	f.hooks[0].Events = []string{"push", "merge_request", "note"}
+	action3, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"push", "pull_request"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action3 != EnsureUpdated {
+		t.Fatalf("extra family must be drift, action = %q", action3)
+	}
+}

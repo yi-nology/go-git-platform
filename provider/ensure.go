@@ -71,8 +71,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
-	desired := slices.Clone(events)
-	slices.Sort(desired)
+	desired := canonicalWebhookEvents(events)
 
 	existing, err := p.ListWebhooks(ctx, opts.Owner, opts.Repo)
 	if err != nil {
@@ -86,7 +85,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		}
 	}
 
-	if len(matches) == 1 && equalEvents(matches[0].Events, desired) {
+	if len(matches) == 1 && equalEvents(canonicalWebhookEvents(matches[0].Events), desired) {
 		// Secret write-only: the match says nothing about the stored
 		// secret. always-update converges a rotated secret in place
 		// instead of trusting the match.
@@ -113,6 +112,42 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		return EnsureCreated, hook, nil
 	}
 	return EnsureUpdated, hook, nil
+}
+
+// webhookEventCanonical 把各后端 webhook 事件名归一到比对用的 canonical
+// 族（issue #40）。写侧与读侧词表不同源是 GitLab 家族的结构：Create/Update
+// 接受 pull_request/cr 等输入名并落到 merge_requests_events 布尔位，而
+// List/Get 的 convertHook 把同一布尔位读回 merge_request——归一不做，
+// EnsureWebhook 的「同 URL 同事件集 ⇒ unchanged」永不成立，每次调用都走
+// delete+recreate（钩子 ID 翻动、删除与重建之间丢投递、重建失败即裸奔）。
+// 比对两侧（desired 与 list 输出）都过这一张表；未登记名原样透传
+// （平台特定事件不误判漂移）。
+var webhookEventCanonical = map[string]string{
+	"push":           "push",
+	"merge_request":  "pull_request",
+	"merge_requests": "pull_request",
+	"pull_request":   "pull_request",
+	"cr":             "pull_request",
+	"tag_push":       "tag_push",
+	"tag":            "tag_push",
+	"note":           "note",
+	"comment":        "note",
+	"issue_comment":  "note",
+	"issues":         "issue",
+	"issue":          "issue",
+}
+
+func canonicalWebhookEvents(names []string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if c, ok := webhookEventCanonical[n]; ok {
+			out = append(out, c)
+		} else {
+			out = append(out, n)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 func equalEvents(a, sortedB []string) bool {
