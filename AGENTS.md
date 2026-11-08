@@ -173,7 +173,13 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   循环已 loop.Run）、`httpjson.NormalizeBaseURL`（与自有
   DefaultBaseURL 不同域：上游管 scheme/空白规范化，自有管空值回退 +
   `/api/v1` 裁剪，链式引入反而给无 scheme 配置强补 `http://` 改变
-  行为面，不收编）。
+  行为面，不收编）。第三轮新提两连（2026-11-08，均在 pagination）：#285
+  伪翻页（无进展）检测原语——Forgejo 15.0.1 现场实证（pageiter v0.99.10
+  为参考实现，上游长度判定识别不了「忽略 page 参数」形态，空转到预算
+  耗尽丢全部数据）、#286 WalkEach fetch 缺 ctx 贯穿（同包 Walk 已是
+  ctx 完整形态，包内不一致；pageiter PageFetch 签名为证）。上游落地
+  后收编路径：pageiter 保留（ctx+无进展双安全网已自建），仅复核语义
+  对齐。
 
 ## 规则二：公共契约红线
 
