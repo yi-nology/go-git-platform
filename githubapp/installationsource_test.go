@@ -158,3 +158,40 @@ func TestInstallationTokenSource_FailureKeepsCacheRetriable(t *testing.T) {
 		t.Fatalf("token = %q, want ghs_2 from the retry", tok)
 	}
 }
+
+// TestInstallationTokenSource_StaleIfError 复刻 issue #46：margin 窗口内
+// 刷新失败（502）不得丢弃仍有效的缓存 token——那会让窗口内每次 API 调用
+// 都报错，尽管手里的凭据 GitHub 仍会接受。真实过期后无 stale 可用才报错。
+func TestInstallationTokenSource_StaleIfError(t *testing.T) {
+	ts := newTokenServer(t, 3*time.Second)
+	src := NewInstallationTokenSource(ts.srv.URL, 42, 7, testKeyPEM(t, false))
+	src.RefreshMargin = time.Minute // 3s 有效期 < 1m margin ⇒ 第二次调用必进刷新分支
+
+	if _, err := src.Token(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	// 上游此后恒 502（连旧连接一起断掉，确保刷新路径真走到网络）
+	handler := ts.srv.Config.Handler
+	ts.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = handler
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	ts.srv.CloseClientConnections()
+
+	tok, err := src.Token(t.Context())
+	if err != nil {
+		t.Fatalf("margin 内刷新失败必须回落缓存 token: %v", err)
+	}
+	if tok == "" {
+		t.Fatal("回落 token 为空")
+	}
+
+	// 真实过期之后：无 stale 可用，报错
+	src.mu.Lock()
+	src.expiresAt = time.Now().Add(-time.Second)
+	src.mu.Unlock()
+	if _, err := src.Token(t.Context()); err == nil {
+		t.Fatal("缓存过期后刷新失败必须报错")
+	}
+}
