@@ -1,6 +1,8 @@
 package github
 
 import (
+	"io"
+
 	"context"
 	"net/http"
 	"strings"
@@ -121,7 +123,17 @@ var githubEnvelope = provider.WebhookEnvelope{
 }
 
 func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
-	payload, err := github.ValidatePayload(r, []byte(secret))
+	// 签名校验走平台注册表单源（issue #43）：go-github 的 ValidatePayload
+	// 对空 secret 不设防——HMAC(key="") 可被攻击者自行计算，fail-open 于
+	// 可预测载荷；且它还会在缺 X-Hub-Signature-256 时回落接受 SHA-1
+	// X-Hub-Signature（注册表从不接受）。本 SDK 的注册表验证器明确拒绝
+	// 空 secret（可伪造），ValidateWebhookSignature 已经走它——同平台的
+	// parse 路径此前却保留内联 go-github 调用，一个 SDK 对一个平台暴露
+	// 两种空 secret 策略。先经注册表校验（读体并回填），再解码载荷。
+	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitHub, r, secret); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
+	}
+	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
 	}

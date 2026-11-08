@@ -3,6 +3,9 @@ package github_test
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -184,13 +187,27 @@ func TestGetCRDiff_Pagination(t *testing.T) {
 	}
 }
 
+// hookSecret 用例统一的 webhook secret（非空——issue #43 收口后 parse
+// 路径拒绝空 secret，与注册表验证器同一策略）。
+const hookSecret = "corpus-hook-secret"
+
+// signHook 用 sha256=hex(HMAC-SHA256(body, secret)) 签名 webhook 请求
+// （issue #43 收口后 parse 路径拒绝空 secret，用例必须带真签名）。
+func signHook(t *testing.T, r *http.Request, body string, secret string) {
+	t.Helper()
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	r.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+}
+
 func TestParseWebhookEvent_PullRequest(t *testing.T) {
 	p := newTestProvider(t, "http://example.test/api/v3")
 	body := `{"action":"opened","number":1,"pull_request":{"number":1,"state":"open","title":"t","draft":true,"head":{"ref":"f","sha":"headSHA"},"base":{"ref":"main","sha":"baseSHA"}},"repository":{"id":42,"full_name":"owner/repo"},"sender":{"login":"dev"}}`
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-GitHub-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +241,8 @@ func TestParseWebhookEvent_Merged(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-GitHub-Event", "pull_request")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,7 +257,8 @@ func TestParseWebhookEvent_Push(t *testing.T) {
 	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
 	r.Header.Set("X-GitHub-Event", "push")
 	r.Header.Set("Content-Type", "application/json")
-	ne, err := p.ParseWebhookEvent(r, "")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -898,5 +917,40 @@ func TestListDeployments_WireTest(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "environment=prod") {
 		t.Errorf("environment filter not sent: %s", gotQuery)
+	}
+}
+
+// TestParseWebhookEvent_EmptySecretRejected 钉住 issue #43：空 secret 在
+// parse 路径与注册表验证器同策略拒绝（可伪造 HMAC 不再 fail-open）；
+// 错误签名同样拒绝。
+func TestParseWebhookEvent_EmptySecretRejected(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	body := `{"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+
+	mk := func(sig string) *http.Request {
+		r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+		r.Header.Set("X-GitHub-Event", "push")
+		r.Header.Set("Content-Type", "application/json")
+		if sig != "" {
+			r.Header.Set("X-Hub-Signature-256", sig)
+		}
+		return r
+	}
+
+	if _, err := p.ParseWebhookEvent(mk(""), ""); err == nil {
+		t.Fatal("空 secret 必须在 parse 路径被拒（与 ValidateWebhookSignature 同策略）")
+	}
+
+	// 用空串自签的 HMAC（攻击者形态）同样拒绝
+	mac := hmac.New(sha256.New, []byte(""))
+	mac.Write([]byte(body))
+	evil := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	if _, err := p.ParseWebhookEvent(mk(evil), ""); err == nil {
+		t.Fatal("HMAC(key=\"\") 的可伪造签名必须被拒")
+	}
+
+	// 非空 secret + 错误签名拒绝
+	if _, err := p.ParseWebhookEvent(mk("sha256=deadbeef"), hookSecret); err == nil {
+		t.Fatal("错误签名必须被拒")
 	}
 }
