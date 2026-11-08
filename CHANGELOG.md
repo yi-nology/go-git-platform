@@ -4,8 +4,40 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.119.0] - 2026-11-08
+## [0.120.0] - 2026-11-08
 
+### Changed（oekit 三件套拉齐 v0.38.0/v0.29.0/v0.8.11 + 验签面全面下沉 oekit/webhook）
+
+- **refactor: `provider/webhook.go` 验签核心迁 `oekit/webhook` 子包**
+  （pkg#270 落地收编）——HMAC 计算/hex 解码/常量时间比较/多模消歧
+  全部下沉上游维护；本文件保留平台 header 约定、secret 逐调用的
+  多租户形态（oekit 验签器为构造期绑密钥，适配层按调用构造）与
+  `ErrWebhookValidation` 哨兵链（wrapValidation 统一收编，下游
+  errors.Is 契约不变）。五验证器逐字映射：
+  - HMACSHA256/StaticToken/HmacValidator（任意算法+前缀）→ oekit
+    同名原语（空密钥构造期 panic 由适配层先行守卫，保持本仓错误形态）；
+  - Forgejo 双 header 回退 → oekit 构造器内置 + **双形态容忍补
+    `WithSignaturePrefix`**（契约夹具签前缀形、真 wire 发裸 hex，
+    两者都收——旧验证器的既有语义超集）；
+  - GitCode 三模/Gitee 签名+密码双模消歧 → oekit 构造器内置
+    （Fallback「签名在场即裁决、错签硬失败」与旧实现同哲学）；
+    Gitee 无时间戳分支保留本仓的 body 签名探测优先消歧；容忍窗
+    映射：0=本仓缺省 10min（显式传，oekit 缺省 1h 不同）、负值=
+    饱和关闭。**294 行既有验签测试零改动通过**（行为等价实证）。
+- **`httpx.ParseRetryAfter` 收编**（concurrency#198 落地）：
+  transport `parseRetryAfter` 手写双形态解析删除，委托原语（签名
+  同形；交付版带 OWS 修剪改进）。HTTP-date 形态回归测试零改动通过。
+- **`httpx.StripSensitiveHeadersWith` 收编**（concurrency#200 落地）：
+  头部剥离委托原语（宿主判定一并下沉，prev/current 同判据）；
+  词表经 With 变体保留本仓多出的 X-Access-Token/X-Gitlab-Token
+  平台形态。
+- **`timex.ParseFirstInLocation` 收编**（pkg#271 落地）：Gitee
+  due_on 无时区 layout 按 Gitee 服务端时区（CST/UTC+8）解析——
+  关闭按 UTC 解析偏 8 小时的误报窗口（pkg#271 的下游实证场景）。
+- deps: pkg v0.37.1 → **v0.38.0**、concurrency v0.28.1 → **v0.29.0**、
+  logx v0.8.6 → **v0.8.11**。
+
+## [0.119.0] - 2026-11-08
 ### Fixed（webhook/鉴权/分页九连——审计 issue #40-#48 清零）
 
 - **[P0] Gitee 分发键对齐真实 wire 值（#41）**：`X-Gitee-Event` 实际是
@@ -46,32 +78,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   IDHeaders（X-Gitlab-Event-UUID/X-Request-ID，重投不再合成新 ID）；
   GetCRDiff 补 RawDiff（其余六家都有，工蜂此前静默空串）。
 
-## [0.117.0] - 2026-11-07
-
-### Fixed（gitbackend：Branches 含 refspec 条目的透传兼容）
-
-- **`Fetch` 的 `Branches` 条目含 `:` 时原样透传为 refspec**（native 与
-  gogit 同规则）：`:` 是 git refspec 的 src:dst 分隔符，调用方手写完整
-  refspec（如 `pull/1/head:refs/heads/pr-1`）的形态在 v0.116.0 收紧
-  Branches 语义时被误当分支名展开成 `refs/heads/<refspec>` 而炸掉旧调用方
-  （code-review-service 的 PR head 抓取实测命中）。现分支名展开只适用
-  纯分支名，refspec 透传恢复 v0.116 前行为，两后端不分叉。
-
-## [0.116.0] - 2026-11-07
-
-### Fixed（gitbackend：native Fetch 分支语义对齐 gogit）
-
-- **native `Fetch` 传 `Branches` 时展开为显式 refspec**
-  （[go-git-platform#37](https://github.com/yi-nology/go-git-platform/issues/37)，
-  review-service 生产评审空跑根因）：此前裸 `git fetch origin <branch>` 有
-  两个叠加问题——工作区 clone 恰好检出同名分支时 git 直接拒绝
-  （`refusing to fetch into branch ... checked out`）；即便不撞检出冲突，
-  无 refspec 的分支 fetch 只写 FETCH_HEAD 不更新 remote-tracking ref，
-  after 快照与 `FetchResult` 分支更新检测全部失真。现镜像 gogit 后端
-  `buildFetchRefSpecs` 语义（`+refs/heads/<b>:refs/remotes/<remote>/<b>`，
-  SHA 过滤、`refs/` 前缀、全 SHA 回退通配），两后端行为不再分叉。
-  调用方拿到的可见结果（refs/remotes 下的新值）恰是本该发生而此前没发生的。
-
 ## [0.118.0] - 2026-11-08
 
 ### Changed（oekit 全量拉齐 v0.37.1/v0.28.1/v0.8.6 + 下游收编第二轮）
@@ -100,6 +106,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   「本轮结束」起算（长清扫不重叠不双发）；FirstDelay=interval 保持旧
   首扫时机；生命周期状态机（重启/双停/竞测）契约不变，全部既有测试
   零改动通过。
+
+## [0.117.0] - 2026-11-07
+
+### Fixed（gitbackend：Branches 含 refspec 条目的透传兼容）
+
+- **`Fetch` 的 `Branches` 条目含 `:` 时原样透传为 refspec**（native 与
+  gogit 同规则）：`:` 是 git refspec 的 src:dst 分隔符，调用方手写完整
+  refspec（如 `pull/1/head:refs/heads/pr-1`）的形态在 v0.116.0 收紧
+  Branches 语义时被误当分支名展开成 `refs/heads/<refspec>` 而炸掉旧调用方
+  （code-review-service 的 PR head 抓取实测命中）。现分支名展开只适用
+  纯分支名，refspec 透传恢复 v0.116 前行为，两后端不分叉。
+
+## [0.116.0] - 2026-11-07
+
+### Fixed（gitbackend：native Fetch 分支语义对齐 gogit）
+
+- **native `Fetch` 传 `Branches` 时展开为显式 refspec**
+  （[go-git-platform#37](https://github.com/yi-nology/go-git-platform/issues/37)，
+  review-service 生产评审空跑根因）：此前裸 `git fetch origin <branch>` 有
+  两个叠加问题——工作区 clone 恰好检出同名分支时 git 直接拒绝
+  （`refusing to fetch into branch ... checked out`）；即便不撞检出冲突，
+  无 refspec 的分支 fetch 只写 FETCH_HEAD 不更新 remote-tracking ref，
+  after 快照与 `FetchResult` 分支更新检测全部失真。现镜像 gogit 后端
+  `buildFetchRefSpecs` 语义（`+refs/heads/<b>:refs/remotes/<remote>/<b>`，
+  SHA 过滤、`refs/` 前缀、全 SHA 回退通配），两后端行为不再分叉。
+  调用方拿到的可见结果（refs/remotes 下的新值）恰是本该发生而此前没发生的。
 
 ## [0.115.0] - 2026-11-06
 

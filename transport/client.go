@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oekit/concurrency/retry/httpx"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -465,9 +466,18 @@ func StripSensitiveHeaders(req *http.Request) {
 	if req == nil {
 		return
 	}
-	for _, h := range sensitiveHeaders {
-		req.Header.Del(h)
+	// oekit httpx.StripSensitiveHeadersWith（concurrency#200 落地）：宿主
+	// 判定一并委托（prev vs current 宿主，与 CrossHostRedirect 同判据）；
+	// 词表经 With 变体传入——本仓词表多 X-Access-Token/X-Gitlab-Token 两
+	// 个平台形态（保留自旧实现，非 oekit 缺省词表成员）。
+	var from, to string
+	if req.Response != nil && req.Response.Request != nil && req.Response.Request.URL != nil {
+		from = req.Response.Request.URL.Host
 	}
+	if req.URL != nil {
+		to = req.URL.Host
+	}
+	httpx.StripSensitiveHeadersWith(req.Header, from, to, sensitiveHeaders)
 }
 
 // sensitiveQueryParams 可能随跨 host 重定向外泄的**凭据 query 参数**。

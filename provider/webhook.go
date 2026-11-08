@@ -2,24 +2,18 @@ package provider
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
-	"crypto/subtle"
-	"encoding/base64"
-	"encoding/hex"
+	"crypto"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"io"
+	"math"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/webhook"
 )
 
 // WebhookValidator verifies the authenticity of an incoming webhook request.
@@ -125,6 +119,10 @@ func DefaultWebhookRegistry() *WebhookValidatorRegistry { return defaultWebhookR
 // using HMAC-SHA256 over the request body. The expected header is configurable
 // so it works for GitHub (X-Hub-Signature-256), Gitea (X-Gitea-Signature),
 // Gitee (X-Gitee-Token) and others.
+//
+// 验签核心委托 oekit/webhook（pkg#270 收编）：HMAC 计算/hex 解码/常量时间
+// 比较全部下沉，本类型保留平台 header 约定与 secret 逐调用的多租户形态
+// （适配层按调用构造验证器——单个结构体的开销远小于 HMAC 计算本身）。
 type HMACSHA256Validator struct {
 	Header string
 }
@@ -142,41 +140,47 @@ func (h HMACSHA256Validator) Validate(r *http.Request, body []byte, secret strin
 	if header == "" {
 		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", h.Header)
 	}
+	// 空密钥在 oekit 是构造期 panic——适配层先行守卫（保持本仓错误形态
+	// 而非 panic 泄漏到调用方）。
 	if secret == "" {
-		// An empty key makes HMAC verification trivially forgeable for
-		// predictable payloads (e.g. push events on public repos), so refuse
-		// it up front, mirroring StaticTokenValidator.
 		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
-	expected, err := decodeSignature(header, "sha256")
-	if err != nil {
-		return oekiterrors.Wrap(ErrWebhookValidation, "decode signature", "err", err)
-	}
-	actual := signBodyHash(secret, body, "sha256")
-	if subtle.ConstantTimeCompare(actual, expected) != 1 {
-		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
+	v := webhook.NewHMACValidator([]byte(secret), crypto.SHA256, h.Header,
+		webhook.WithSignaturePrefix("sha256="))
+	if err := v.Validate(r, body); err != nil {
+		return wrapValidation(err)
 	}
 	return nil
 }
 
-// ForgejoWebhookValidator validates Forgejo's HMAC-SHA256 webhook
-// signature. Current Forgejo sends X-Forgejo-Signature; releases forked
-// from older Gitea send X-Gitea-Signature, so both are accepted —
-// whichever header is present is used (the signature format itself is
-// identical raw-hex HMAC-SHA256).
+// ForgejoWebhookValidator verifies Forgejo webhooks. Current Forgejo sends
+// X-Forgejo-Signature; releases forked from older Gitea send X-Gitea-Signature,
+// so both are accepted — whichever header is present is used (the signature
+// format itself is identical raw-hex HMAC-SHA256).
 type ForgejoWebhookValidator struct{}
 
 // Name implements WebhookValidator.
 func (ForgejoWebhookValidator) Name() string { return "forgejo-hmac-sha256" }
 
-// Validate implements WebhookValidator.
+// Validate implements WebhookValidator. 双 header 回退由 oekit 构造器内置
+// （WithFallbackHeaders），缺席/错签的错误分类经 wrapValidation 保持哨兵链。
 func (ForgejoWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
-	for _, hdr := range []string{"X-Forgejo-Signature", "X-Gitea-Signature"} {
-		if r.Header.Get(hdr) != "" {
-			return HMACSHA256Validator{Header: hdr}.Validate(r, body, secret)
-		}
+	if secret == "" {
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
-	return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", "X-Forgejo-Signature")
+	if r.Header.Get("X-Forgejo-Signature") == "" && r.Header.Get("X-Gitea-Signature") == "" {
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", "X-Forgejo-Signature")
+	}
+	// 双形态容忍（"sha256=<hex>" 前缀 + 裸 hex）是旧验证器的既有语义——
+	// 契约夹具签的是前缀形，真 wire（Forgejo/Gitea）发裸 hex，两者都要
+	// 收：WithSignaturePrefix 只在有前缀时剥离，裸值照走裸解码。
+	v := webhook.NewHMACValidator([]byte(secret), crypto.SHA256, "X-Forgejo-Signature",
+		webhook.WithFallbackHeaders("X-Gitea-Signature"),
+		webhook.WithSignaturePrefix("sha256="))
+	if err := v.Validate(r, body); err != nil {
+		return wrapValidation(err)
+	}
+	return nil
 }
 
 // GitCodeWebhookValidator accepts GitCode's two webhook verification
@@ -188,17 +192,20 @@ type GitCodeWebhookValidator struct{}
 // Name implements WebhookValidator.
 func (GitCodeWebhookValidator) Name() string { return "gitcode" }
 
-// Validate implements WebhookValidator.
+// Validate implements WebhookValidator. 三模消歧（签名 → gitea 形 →
+// 静态令牌）由 oekit 构造器内置的 Fallback 组合子裁决：签名 header 在场
+// 即裁决、错签硬失败不降级（防同 secret 交叉认证），仅 header 缺席让位
+// 下一候选。
 func (GitCodeWebhookValidator) Validate(r *http.Request, body []byte, secret string) error {
-	for _, hdr := range []string{"X-GitCode-Signature", "X-Gitea-Signature"} {
-		if r.Header.Get(hdr) != "" {
-			return HMACSHA256Validator{Header: hdr}.Validate(r, body, secret)
-		}
+	if secret == "" {
+		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
-	if r.Header.Get("X-GitCode-Token") != "" {
-		return StaticTokenValidator{Header: "X-GitCode-Token"}.Validate(r, body, secret)
+	// 签名与静态令牌绑定同一 secret（与旧实现一致：令牌头对 secret 比对）。
+	v := webhook.NewGitCodeValidator([]byte(secret), []byte(secret))
+	if err := v.Validate(r, body); err != nil {
+		return wrapValidation(err)
 	}
-	return oekiterrors.Wrap(ErrWebhookValidation, "missing GitCode signature or token header")
+	return nil
 }
 
 // StaticTokenValidator compares a static token header against the configured
@@ -222,8 +229,9 @@ func (s StaticTokenValidator) Validate(r *http.Request, body []byte, secret stri
 	if secret == "" {
 		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
-	if subtle.ConstantTimeCompare([]byte(got), []byte(secret)) != 1 {
-		return oekiterrors.Wrap(ErrWebhookValidation, "token mismatch")
+	v := webhook.NewStaticTokenValidator(s.Header, []byte(secret))
+	if err := v.Validate(r, body); err != nil {
+		return wrapValidation(err)
 	}
 	return nil
 }
@@ -238,25 +246,21 @@ const DefaultGiteeSignMaxAge = 10 * time.Minute
 //   - 签名密钥 (sign) mode: X-Gitee-Timestamp carries the send time in
 //     unix millis and X-Gitee-Token carries
 //     Base64(HMAC-SHA256(key=secret, msg=timestamp+"\n"+secret)).
-//     This is the default mode this validator checks, including a
-//     timestamp freshness bound (replay protection).
-//   - 密码 (password) mode: X-Gitee-Token carries the configured password
-//     verbatim, X-Gitee-Timestamp is absent, and the signature cannot be
-//     computed. Opt in with AllowPasswordMode; the token is then compared
-//     against the secret in constant time.
+//   - 密码 (password) mode: the plain password in X-Gitee-Token.
 //
-// The webhook body plays no part in either scheme (Gitee signs the
-// timestamp, not the payload) — transport-level integrity is delegated to
-// TLS.
+// 验签核心委托 oekit/webhook 的 TimestampHMACValidator（时间戳防重放：
+// 秒/毫秒自动识别、容忍窗、官方 message 形态）+ StaticTokenValidator
+// （密码常量时间比对）。
 type GiteeWebhookValidator struct {
-	// MaxAge bounds |now - X-Gitee-Timestamp| in sign mode. Zero means
-	// DefaultGiteeSignMaxAge; a negative value disables the freshness
-	// check (not recommended — it enables indefinite replay).
-	MaxAge time.Duration
-	// AllowPasswordMode also accepts the plain-password form when
-	// X-Gitee-Timestamp is absent. Enable only when the webhook is known
-	// to be configured in password mode.
+	// AllowPasswordMode opts in to the password mode. It is disabled by
+	// default: the password only proves "knowledge of the secret" and does
+	// not bind request integrity, so sign mode is always preferred when its
+	// headers are present.
 	AllowPasswordMode bool
+	// MaxAge bounds the accepted timestamp drift. Zero selects
+	// DefaultGiteeSignMaxAge; a negative value disables the freshness
+	// check entirely.
+	MaxAge time.Duration
 }
 
 // Name implements WebhookValidator.
@@ -272,43 +276,38 @@ func (v GiteeWebhookValidator) Validate(r *http.Request, body []byte, secret str
 		return oekiterrors.Wrap(ErrWebhookValidation, "missing signature header", "header", "X-Gitee-Token")
 	}
 	ts := strings.TrimSpace(r.Header.Get("X-Gitee-Timestamp"))
-	if ts == "" {
-		// No timestamp: two body-independent modes remain. Password mode
-		// sends the plain secret (opt-in), and the Gitee backend's own
-		// scheme signs the request body with HMAC-SHA256 hex in
-		// X-Gitee-Token. The body-signature check runs first so a secret
-		// equal to another mode's token cannot cross-authenticate.
-		if err := (HMACSHA256Validator{Header: "X-Gitee-Token"}).Validate(r, body, secret); err == nil {
-			return nil
+	if ts != "" {
+		// 签名模式：委托 oekit TimestampHMACValidator（时间戳防重放 +
+		// 官方 message 形态 timestamp+"\n"+secret）。容忍窗映射：0 = 本仓
+		// 缺省 10min（oekit 缺省是 1h，必须显式传）；负值 = 关闭校验
+		// （映射为饱和上限，旧语义保留）。
+		maxAge := v.MaxAge
+		switch {
+		case maxAge == 0:
+			maxAge = DefaultGiteeSignMaxAge
+		case maxAge < 0:
+			maxAge = math.MaxInt64
 		}
-		if !v.AllowPasswordMode {
-			return oekiterrors.Wrap(ErrWebhookValidation, "missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)")
-		}
-		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
-			return oekiterrors.Wrap(ErrWebhookValidation, "password mismatch")
+		sig := webhook.NewTimestampHMACValidator([]byte(secret), crypto.SHA256,
+			"X-Gitee-Timestamp", "X-Gitee-Token", webhook.WithMaxDrift(maxAge))
+		if err := sig.Validate(r, body); err != nil {
+			return wrapValidation(err)
 		}
 		return nil
 	}
-
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(ts + "\n" + secret))
-	want := base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	if subtle.ConstantTimeCompare([]byte(token), []byte(want)) != 1 {
-		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
+	// 无时间戳：双模消歧——body 签名探测优先（签名与密码模式同用
+	// X-Gitee-Token，签名探测先行防同 secret 交叉认证），失败让位密码
+	// 模式（AllowPasswordMode 显式 opt-in）。
+	probe := webhook.NewHMACValidator([]byte(secret), crypto.SHA256, "X-Gitee-Token")
+	if err := probe.Validate(r, body); err == nil {
+		return nil
 	}
-
-	maxAge := v.MaxAge
-	if maxAge == 0 {
-		maxAge = DefaultGiteeSignMaxAge
+	if !v.AllowPasswordMode {
+		return oekiterrors.Wrap(ErrWebhookValidation, "missing X-Gitee-Timestamp header (password mode requires AllowPasswordMode)")
 	}
-	if maxAge > 0 {
-		ms, err := strconv.ParseInt(ts, 10, 64)
-		if err != nil {
-			return oekiterrors.Wrap(ErrWebhookValidation, "bad X-Gitee-Timestamp", "value", ts)
-		}
-		if drift := time.Since(time.UnixMilli(ms)); drift > maxAge || -drift > maxAge {
-			return oekiterrors.Wrap(ErrWebhookValidation, "timestamp drift exceeds max age", "drift", drift.String(), "max_age", maxAge.String())
-		}
+	pw := webhook.NewStaticTokenValidator("X-Gitee-Token", []byte(secret))
+	if err := pw.Validate(r, body); err != nil {
+		return wrapValidation(err)
 	}
 	return nil
 }
@@ -325,7 +324,9 @@ type HmacValidator struct {
 // Name implements WebhookValidator.
 func (h *HmacValidator) Name() string { return "hmac-" + h.Algorithm }
 
-// Validate implements WebhookValidator.
+// Validate implements WebhookValidator. 算法白名单映射到 oekit 构造器
+// （未知算法保持旧缺省 sha256）；前缀剥离由 oekit 的
+// WithSignaturePrefix 处理（错前缀不剥离交裸解码拒绝）。
 func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) error {
 	header := r.Header.Get(h.Header)
 	if header == "" {
@@ -334,54 +335,34 @@ func (h *HmacValidator) Validate(r *http.Request, body []byte, secret string) er
 	if secret == "" {
 		return oekiterrors.Wrap(ErrWebhookValidation, "empty secret")
 	}
-	algo := h.Algorithm
+	algo := strings.ToLower(h.Algorithm)
 	if algo == "" {
 		algo = "sha256"
 	}
-	expected, err := decodeSignature(header, h.Prefix)
-	if err != nil {
-		return oekiterrors.Wrap(ErrWebhookValidation, "decode signature", "err", err)
+	var hash crypto.Hash
+	switch algo {
+	case "sha1":
+		hash = crypto.SHA1
+	case "sha512":
+		hash = crypto.SHA512
+	default:
+		hash = crypto.SHA256
 	}
-	actual := signBodyHash(secret, body, algo)
-	if subtle.ConstantTimeCompare(actual, expected) != 1 {
-		return oekiterrors.Wrap(ErrWebhookValidation, "signature mismatch")
+	opts := []webhook.HMACOption{}
+	if h.Prefix != "" {
+		opts = append(opts, webhook.WithSignaturePrefix(h.Prefix))
+	}
+	v := webhook.NewHMACValidator([]byte(secret), hash, h.Header, opts...)
+	if err := v.Validate(r, body); err != nil {
+		return wrapValidation(err)
 	}
 	return nil
 }
 
-// signBodyHash is the generic HMAC digest. It returns the raw digest so
-// callers can
-// compare with decoded signatures in constant time.
-func signBodyHash(secret string, body []byte, algo string) []byte {
-	var h hash.Hash
-	switch strings.ToLower(algo) {
-	case "sha1":
-		h = hmac.New(sha1.New, []byte(secret))
-	case "sha256":
-		h = hmac.New(sha256.New, []byte(secret))
-	case "sha512":
-		h = hmac.New(sha512.New, []byte(secret))
-	default:
-		h = hmac.New(sha256.New, []byte(secret))
-	}
-	h.Write(body)
-	return h.Sum(nil)
-}
-
-// decodeSignature strips an optional "<algo>=" prefix and returns the raw
-// signature bytes. Both standard hex encoding and the GitHub-style prefixed
-// form are supported.
-func decodeSignature(header, expectedPrefix string) ([]byte, error) {
-	header = strings.TrimSpace(header)
-	if expectedPrefix != "" && strings.HasPrefix(header, expectedPrefix+"=") {
-		header = strings.TrimPrefix(header, expectedPrefix+"=")
-	}
-	if i := strings.IndexByte(header, '='); i >= 0 {
-		// Allow the header to carry a "algo=hex" prefix; ignore the algo
-		// portion and decode the hex part.
-		header = header[i+1:]
-	}
-	return hex.DecodeString(header)
+// wrapValidation 统一收编 oekit/webhook 的错误到 ErrWebhookValidation
+// 哨兵链（下游 errors.Is 契约不变；错误文本为 oekit 原生原因）。
+func wrapValidation(err error) error {
+	return oekiterrors.Wrap(ErrWebhookValidation, err.Error())
 }
 
 // ReadAndRestoreBody reads the full body of r and replaces it with a fresh

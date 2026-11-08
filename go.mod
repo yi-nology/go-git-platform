@@ -8,9 +8,9 @@ require (
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/google/go-github/v93 v93.0.0
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
-	github.com/oekit/concurrency v0.28.1
-	github.com/oekit/logx v0.8.6
-	github.com/oekit/pkg v0.37.1
+	github.com/oekit/concurrency v0.29.0
+	github.com/oekit/logx v0.8.11
+	github.com/oekit/pkg v0.38.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.15.0
 	github.com/yi-nology/go-gongfeng v0.3.0

@@ -9,7 +9,6 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -177,20 +176,10 @@ func (rc *RetryConfig) resolvedMaxDelay() time.Duration {
 // either a non-negative integer number of seconds or an HTTP-date. It returns
 // the delay measured from now and whether the value was parseable.
 func parseRetryAfter(v string, now time.Time) (time.Duration, bool) {
-	if secs, err := strconv.Atoi(v); err == nil {
-		if secs < 0 {
-			return 0, false
-		}
-		return time.Duration(secs) * time.Second, true
-	}
-	if t, err := http.ParseTime(v); err == nil {
-		d := t.Sub(now)
-		if d < 0 {
-			d = 0
-		}
-		return d, true
-	}
-	return 0, false
+	// 委托 oekit httpx.ParseRetryAfter（concurrency#198 落地）：RFC 7231
+	// 双形态（delay-seconds + HTTP-date 三格式序），负秒数不可解析、过去
+	// 时刻钳 0、OWS 修剪（较手写版改进）。
+	return httpx.ParseRetryAfter(v, now)
 }
 
 // Backoff returns the delay to wait before the given attempt (1-indexed, so

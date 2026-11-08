@@ -494,11 +494,16 @@ func convertMilestone(m *gitee.Milestone) provider.Milestone {
 	return ms
 }
 
-// parseGiteeDueOn 经 oekit timex.ParseFirst（pkg#197 落地）多 layout
-// first-match：RFC3339 / "2006-01-02 15:04:05" / "2006-01-02"（文档形与
-// 真实 wire 形并存）。
+// giteeServerTZ 是 Gitee 服务端产出无时区字段（"2006-01-02 15:04:05"）
+// 的时区（CST/UTC+8）：按 UTC 解析会把 due_on 偏 8 小时（pkg#271 的
+// 下游实证场景）。
+var giteeServerTZ = time.FixedZone("CST", 8*3600)
+
+// parseGiteeDueOn 经 oekit timex.ParseFirstInLocation（pkg#271 落地）多
+// layout first-match：RFC3339 自带时区（loc 不生效）/ "2006-01-02
+// 15:04:05" 按 CST / "2006-01-02" 午夜按 CST。
 func parseGiteeDueOn(s string) (time.Time, bool) {
-	return timex.ParseFirst(s, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02")
+	return timex.ParseFirstInLocation(s, giteeServerTZ, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02")
 }
 
 func formatGiteeDueOn(t time.Time) string { return t.Format(time.RFC3339) }
