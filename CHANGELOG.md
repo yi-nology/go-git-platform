@@ -4,6 +4,48 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.118.0] - 2026-11-08
+
+### Fixed（webhook/鉴权/分页九连——审计 issue #40-#48 清零）
+
+- **[P0] Gitee 分发键对齐真实 wire 值（#41）**：`X-Gitee-Event` 实际是
+  "Push Hook" 形态（带空格、首字母大写），此前 switch 只认小写无空格键
+  （测试语料自造形态——语料驱动漂移的样本），push/PR/tag/note 四族真实
+  投递全部落空返回 `Type=""` + nil err。分发前归一（大小写不敏感 + trim
+  兜底变体），历史小写键保留兼容；语料五文件改真实 wire 值 + 真实词表
+  contracttest 钉住。
+- **EnsureWebhook 词表归一收敛（#40）**：GitLab/TencentCode 写侧接受
+  pull_request/cr，读侧 convertHook 读回 merge_request——归一缺失时
+  同族判漂移，每次 ensure 都 delete+recreate（钩子 ID 翻动、删建窗口丢
+  投递、重建失败即无钩子裸奔）。比对两侧统一过
+  `canonicalWebhookEvents` 归一表（未登记名透传）。
+- **GitHub parse 路径空 secret 收口（#43）**：go-github ValidatePayload
+  对空 secret 不设防（`HMAC(key="")` 可自算）且缺 SHA-256 头回落接受
+  SHA-1；parse 路径改走平台注册表单源（与 ValidateWebhookSignature 同
+  策略），空 secret/空串自签/错签三例拒绝测试钉住。
+- **403 节流优先归类 ErrRateLimited（#42）**：GitHub/Gitea 把最常见节流
+  信号发成 403 + X-RateLimit-Remaining:0，transport 已判限流但 provider.Wrap
+  只按裸状态码分类丢掉该判定。新增 `rateLimitedMarker` 接口探针，裸 403
+  仍保持 ErrForbidden（授权失败不放大负载）。
+- **GetCRDiff/GetCRFiles 全页行走（#44）**：GitLab diffs 端点 per_page
+  服务端缺省 20（nil options 只取一页）、Gitea/Forgejo 固定 Page:1
+  PageSize:50——>20/>50 个变更文件的 CR 评审覆盖面无声缩水。两处走
+  backendutil.AllPages 预算模式（GitLab 显式 per_page=100 上限），两页
+  夹具回归测试钉住。
+- **pipeline 噪声过滤显式化（#45）**：GitLab success/running 态此前
+  `return nil, nil`——只判 err 的调用方在 ev 上空指针。新增
+  `provider.ErrWebhookFiltered` 哨兵，噪声态 (nil, 哨兵) 可 errors.Is 判定。
+- **InstallationTokenSource stale-if-error（#46）**：margin 窗口内刷新
+  失败不再丢弃仍有效的缓存 token（此前窗口内每次 API 调用都报错）；
+  真实过期后无 stale 可用才报错。
+- **tag_push 全零 after 归一 tag.deleted（#47）**：GitLab 家族删除事件
+  与 GitHub/Gitea 对齐（after 全零 + before 非零；全零+全零异常形态不硬
+  归；删除事件不携带删除前 SHA）；新增 `WebhookDeletionSHA` 常量单点
+  判定，corpus golden 重生成（仅 +action 一行）。
+- **TencentCode 投递 ID 头 + RawDiff（#48）**：envelope 补
+  IDHeaders（X-Gitlab-Event-UUID/X-Request-ID，重投不再合成新 ID）；
+  GetCRDiff 补 RawDiff（其余六家都有，工蜂此前静默空串）。
+
 ## [0.117.0] - 2026-11-07
 
 ### Fixed（gitbackend：Branches 含 refspec 条目的透传兼容）
