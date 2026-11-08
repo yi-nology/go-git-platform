@@ -110,7 +110,7 @@ func Wrap(platform Platform, op string, err error) error {
 		// *StatusError in this package and transport.Error.
 		if sc, ok := cur.(statusCoder); ok {
 			pe.StatusCode = sc.StatusCode()
-			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(pe.StatusCode), err)
+			pe.Cause = fmt.Errorf("%w: %w", classifyProviderStatus(pe.StatusCode, cur), err)
 			copyRateLimitHints(pe, cur)
 			break
 		}
@@ -120,13 +120,36 @@ func Wrap(platform Platform, op string, err error) error {
 		// — see RegisterStatusExtractor).
 		if code, ok := statusExtractorFor(platform, cur); ok {
 			pe.StatusCode = code
-			pe.Cause = fmt.Errorf("%w: %w", classifyStatusCode(code), err)
+			pe.Cause = fmt.Errorf("%w: %w", classifyProviderStatus(code, cur), err)
 			copyRateLimitHints(pe, cur)
 			break
 		}
 		cur = errors.Unwrap(cur)
 	}
 	return pe
+}
+
+// rateLimitedMarker is the interface through which lower-layer errors carry
+// an authoritative "this failure is throttling" verdict up to the provider
+// layer (issue #42): the transport already classifies 403 + throttle headers
+// (X-RateLimit-Remaining: 0 / Retry-After) as rate limiting — GitHub/Gitea
+// 把最常见的节流信号发成 403 是平台现实。classifyStatusCode 只看状态码
+// （403 → ErrForbidden），Wrap 走到这两个分支时会丢掉下层已经做对的判定；
+// 有此标记的 cause 优先归 ErrRateLimited，IsRateLimited 才能接到平台最常见
+// 的节流形态。
+type rateLimitedMarker interface {
+	IsRateLimited() bool
+}
+
+// classifyProviderStatus 在裸状态码分类之上叠加下层的限流判定（见
+// rateLimitedMarker）。其余状态码与 classifyStatusCode 完全同型。
+func classifyProviderStatus(status int, cause error) error {
+	if status == http.StatusForbidden {
+		if m, ok := cause.(rateLimitedMarker); ok && m.IsRateLimited() {
+			return ErrRateLimited
+		}
+	}
+	return classifyStatusCode(status)
 }
 
 // rateLimitInfo is the interface shape through which transport errors
