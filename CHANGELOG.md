@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.121.0] - 2026-11-08
+
+### Changed（pkg/projection + githubapp 小收编轮：SecureString 驻留混淆 + UseNumber 委托）
+
+- **feat(security): `githubapp.InstallationTokenSource` 驻留 token 迁
+  `secretx.SecureString`**（pkg v0.35 引入的内存态敏感凭证持有原语，
+  上游文档点名「git provider token」即此消费形态）——XOR 混淆驻留 +
+  替换零化，防堆扫描拿到连续明文；明文仍在每次请求物化进
+  Authorization 头（HTTP 协议必需），硬化的对象是最长 1 小时的驻留
+  副本。nil 守卫保持导出字段直填的零值形态可用；`PrivateKeyPEM` 为
+  配置传入的公有字段不动（改类型即 breaking）。新增行为级测试：
+  Get 独立副本往返、过期刷新替换生效、零值字面量可用。
+- **refactor: `pkg/projection` 手写 decoder+UseNumber 委托
+  `encoding.UnmarshalUseNumber`**——防 >2^53 精度丢失语义不变
+  （json.Number 保留原文字面量）；上游「尾残报错」严于手写
+  Decode，但 raw 来自 json.Marshal 无尾残形态，零行为差异。
+- docs(AGENTS.md): pkg v0.36–v0.38 增量审计存档——pack/encoding/
+  jsonrepair 定性无消费点；ctxscope/cache.SingleValue/poll.RunCursor/
+  async.Spawn/Handle/httpjson.NormalizeBaseURL 逐项复核结论（含
+  NormalizeBaseURL 与自有 DefaultBaseURL 不同域的收编否决理由）。
+
 ## [0.120.0] - 2026-11-08
 
 ### Changed（oekit 三件套拉齐 v0.38.0/v0.29.0/v0.8.11 + 验签面全面下沉 oekit/webhook）

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/oekit/pkg/secretx"
+
 	"github.com/yi-nology/go-git-platform/transport"
 )
 
@@ -26,6 +28,12 @@ const DefaultRefreshMargin = time.Minute
 // single fetch (the first one wins, the rest reuse its result), so wiring
 // this straight into provider.Config.TokenSource costs one JWT signature
 // plus one POST per hour — not per request.
+//
+// The cached token rests in a secretx.SecureString (XOR-obfuscated at rest,
+// zeroed before every replace): a memory-scan mitigation, sized to what an
+// installation token needs — the plaintext still materializes per request to
+// ride in the Authorization header, but the long-lived at-rest copy is no
+// longer a contiguous heap string.
 //
 //	src := githubapp.NewInstallationTokenSource("", appID, installationID, pem)
 //	p, err := provider.NewProvider(provider.Config{
@@ -49,7 +57,7 @@ type InstallationTokenSource struct {
 	FallbackTTL time.Duration
 
 	mu        sync.Mutex
-	token     string
+	token     *secretx.SecureString
 	expiresAt time.Time
 }
 
@@ -74,8 +82,8 @@ func NewInstallationTokenSource(apiBase string, appID, installationID int64, pri
 func (s *InstallationTokenSource) Token(ctx context.Context) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.token != "" && time.Now().Add(s.margin()).Before(s.expiresAt) {
-		return s.token, nil
+	if cur := s.cachedToken(); cur != "" && time.Now().Add(s.margin()).Before(s.expiresAt) {
+		return cur, nil
 	}
 	token, expiresAt, err := fetchInstallationToken(ctx, s.APIBase, s.AppID, s.InstallationID, s.PrivateKeyPEM)
 	if err != nil {
@@ -83,8 +91,8 @@ func (s *InstallationTokenSource) Token(ctx context.Context) (string, error) {
 		// DNS 抖动）不得丢弃仍然有效的缓存 token——那会让 margin 内的每次
 		// API 调用都报错，尽管手里握着 GitHub 仍会接受的凭据。只要缓存
 		// 未过真实过期时间就继续用（并留告警），没有可用凭据时才报错。
-		if s.token != "" && time.Now().Before(s.expiresAt) {
-			return s.token, nil
+		if cur := s.cachedToken(); cur != "" && time.Now().Before(s.expiresAt) {
+			return cur, nil
 		}
 		// 缓存保持原样：本次失败不清旧值，下一次调用照常重试。
 		return "", err
@@ -92,8 +100,29 @@ func (s *InstallationTokenSource) Token(ctx context.Context) (string, error) {
 	if expiresAt.IsZero() {
 		expiresAt = time.Now().Add(s.fallbackTTL())
 	}
-	s.token, s.expiresAt = token, expiresAt
+	s.setToken(token)
+	s.expiresAt = expiresAt
 	return token, nil
+}
+
+// cachedToken is the nil-safe reader for the obfuscated-at-rest token holder.
+// The struct's exported fields make zero-value usage plausible, so a nil
+// *SecureString means "nothing cached" instead of a panic.
+func (s *InstallationTokenSource) cachedToken() string {
+	if s.token == nil {
+		return ""
+	}
+	return s.token.Get()
+}
+
+// setToken stores a freshly fetched token; Set zeroes the previous value's
+// obfuscated storage before overwriting. Nil-safe for zero-value usage.
+func (s *InstallationTokenSource) setToken(tok string) {
+	if s.token == nil {
+		s.token = secretx.NewSecureString(tok)
+		return
+	}
+	s.token.Set(tok)
 }
 
 // ExpiresAt reports when the cached token expires (zero value when nothing

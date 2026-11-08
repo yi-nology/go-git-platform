@@ -152,6 +152,28 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   retry/httpx `ParseRetryAfter`（秒数+HTTP-date 双形态——transport
   手写解析为证）、#200 跨宿主重定向敏感头剥离（StripSensitiveHeaders
   为证）；pkg#272 SafeMap.Snapshot（Slice.Snapshot 对偶）。
+- **pkg v0.36–v0.38 增量审计（2026-11-08，随深读补记；收编两处+定性三包，
+  无新增依赖——pkg 已在白名单）**。收编：① `secretx.SecureString`——
+  githubapp `InstallationTokenSource` 驻留 token 从明文 string 迁
+  SecureString（XOR 混淆驻留+替换零化，内存扫描缓解；上游文档点名
+  「git provider token」即此消费形态。混淆性质由上游自测保证、下游不窥
+  `obfuscated` 未导出内部，只钉行为面：Get 独立副本往返/过期替换生效/
+  导出字段直填零值经 nil 守卫可用；PrivateKeyPEM 是配置传入的公有字段
+  不动——改类型即 breaking）；② `encoding.UnmarshalUseNumber`——
+  `pkg/projection` 手写 decoder+UseNumber 删除（防 >2^53 精度丢失语义
+  不变；上游「尾残报错」严于手写 Decode，但 raw 来自 json.Marshal 无
+  尾残形态，零行为差异）。定性（无消费点，勿再评估）：`pack`（跨宿主
+  迁移资产包——本仓无迁移资产导出/导入面）；`encoding` 其余面
+  （Fnv1a64/Sha256/Base64 变体——HMAC 验签已下沉 oekit/webhook，仓内
+  无独立哈希/编码消费点）；`jsonrepair`（LLM 宽容修复——本仓无 LLM
+  输出解析面；#268/#275 修复被动受益）。其余 v0.36–v0.38 原语复核
+  （无消费点）：`ctxscope`（仓内零 context.WithValue）、
+  `cache.SingleValue`（无单值缓存需求）、`poll.RunCursor`（无 cursor
+  长轮询形态）、`async.Spawn/Handle`（无旁路限时收结果形态——驻留
+  循环已 loop.Run）、`httpjson.NormalizeBaseURL`（与自有
+  DefaultBaseURL 不同域：上游管 scheme/空白规范化，自有管空值回退 +
+  `/api/v1` 裁剪，链式引入反而给无 scheme 配置强补 `http://` 改变
+  行为面，不收编）。
 
 ## 规则二：公共契约红线
 

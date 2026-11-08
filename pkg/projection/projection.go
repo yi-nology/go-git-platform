@@ -10,10 +10,10 @@
 package projection
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 
+	"github.com/oekit/pkg/encoding"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -37,10 +37,10 @@ func Project(v any, fields ...string) (map[string]any, error) {
 	if err != nil {
 		return nil, oekiterrors.Wrap(err, "projection: marshal")
 	}
+	// UseNumber 委托 oekit encoding.UnmarshalUseNumber：雪花 ID 等大整数经
+	// float64 中转会静默丢精度，json.Number 保留原文字面量。
 	var doc map[string]any
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber()
-	if err := dec.Decode(&doc); err != nil {
+	if err := encoding.UnmarshalUseNumber(raw, &doc); err != nil {
 		return nil, oekiterrors.Wrap(err, "projection: document is not a JSON object")
 	}
 	if len(fields) == 0 {

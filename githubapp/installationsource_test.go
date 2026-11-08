@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -193,5 +194,59 @@ func TestInstallationTokenSource_StaleIfError(t *testing.T) {
 	src.mu.Unlock()
 	if _, err := src.Token(t.Context()); err == nil {
 		t.Fatal("缓存过期后刷新失败必须报错")
+	}
+}
+
+// TestInstallationTokenSource_TokenRestsObfuscated 钉住 secretx.SecureString
+// 收编语义：驻留副本不再是以明文形态连续躺在堆上的 string；替换时旧值被
+// 零化重存；导出字段直填的零值形态经 nil 守卫保持可用。
+func TestInstallationTokenSource_TokenRestsObfuscated(t *testing.T) {
+	// 专用长 token 夹具（按请求计数变值，刷新必须拿到不同 token）。
+	var fetches atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := fetches.Add(1)
+		fmt.Fprintf(w, `{"token":"%s","expires_at":"%s"}`, strings.Repeat("A", 63)+fmt.Sprint(n), time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	}))
+	t.Cleanup(srv.Close)
+	src := NewInstallationTokenSource(srv.URL, 42, 7, testKeyPEM(t, false))
+
+	tok, err := src.Token(t.Context())
+	if err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	if src.token == nil {
+		t.Fatal("expected SecureString holder after first fetch")
+	}
+	if got := src.token.Get(); got != tok {
+		t.Fatalf("at-rest round-trip broken: got %q want %q", got, tok)
+	}
+	// 混淆驻留的性质本身由上游 secretx 自测保证（obfuscated 为未导出字段，
+	// 下游不窥内部）；这里钉行为面：Get 独立副本往返、替换后新值生效。
+
+	// 替换路径：过期后刷新，旧值零化重存，新值照常驻留混淆。
+	src.mu.Lock()
+	src.expiresAt = time.Now().Add(-time.Second)
+	src.mu.Unlock()
+	tok2, err := src.Token(t.Context())
+	if err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	if tok2 == tok {
+		t.Fatal("expected a fresh token after expiry refresh")
+	}
+	if got := src.token.Get(); got != tok2 {
+		t.Fatalf("at-rest round-trip broken after refresh: got %q want %q", got, tok2)
+	}
+
+	// 零值形态（导出字段直填）经 nil 守卫必须保持可用。
+	literal := &InstallationTokenSource{
+		APIBase:        srv.URL,
+		AppID:          42,
+		InstallationID: 7,
+		PrivateKeyPEM:  testKeyPEM(t, false),
+	}
+	tokL, err := literal.Token(t.Context())
+	if err != nil || tokL == "" {
+		t.Fatalf("zero-value literal must stay usable: tok=%q err=%v", tokL, err)
 	}
 }
