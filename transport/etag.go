@@ -10,6 +10,7 @@ import (
 
 	"github.com/oekit/pkg/cache"
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/httpjson"
 )
 
 // DefaultETagEntries is the default maximum number of responses kept in an
@@ -85,14 +86,15 @@ func NewETagCache(maxEntries int) *ETagCache {
 func (c *ETagCache) Len() int { return c.entries.Size() }
 
 // etagKey scopes a cache entry to the exact request shape: method+URL plus
-// the Accept and Authorization headers. Authorization participates so a
-// refreshed token (different access scopes or identity) never serves
-// another principal's cached payload.
+// the Accept, Authorization and PRIVATE-TOKEN (GitLab) headers. Authorization
+// participates so a refreshed token (different access scopes or identity)
+// never serves another principal's cached payload. 键构造委托 pkg#290 落地的
+// httpjson.CanonicalETagKey（\n 分段无歧义；vary 集合按本仓平台面固定）。
 func etagKey(req *http.Request) string {
-	return req.Method + " " + req.URL.String() + "\n" +
-		req.Header.Get("Accept") + "\n" +
-		req.Header.Get("Authorization") + "\n" +
-		req.Header.Get("PRIVATE-TOKEN")
+	return httpjson.CanonicalETagKey(req.Method, req.URL.String(),
+		req.Header.Get("Accept"),
+		req.Header.Get("Authorization"),
+		req.Header.Get("PRIVATE-TOKEN"))
 }
 
 // applyConditional adds If-None-Match to req when a cached validator

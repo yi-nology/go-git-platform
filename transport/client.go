@@ -506,22 +506,16 @@ var sensitiveQueryParams = []string{
 //
 // 只在**跨 host** 的重定向跳上调用:同 host 的正常重定向(改路径、http→https)
 // 必须继续带凭据,否则打断正常 API。
+//
+// 剥离机制委托 concurrency#208 落地的 httpx.StripSensitiveQueryParamsWith
+// (raw-query 外科手术:不动无关参数的字节,免 re-encode 翻转转义形态);
+// 词表保留本仓 11 项(上游缺省 3 项,本仓是超集——api_key/jwt/session 等
+// 平台特化项)。
 func StripSensitiveQueryParams(req *http.Request) {
 	if req == nil || req.URL == nil {
 		return
 	}
-	q := req.URL.Query()
-	changed := false
-	for _, p := range sensitiveQueryParams {
-		if q.Has(p) {
-			q.Del(p)
-			changed = true
-		}
-	}
-	if !changed {
-		return
-	}
-	req.URL.RawQuery = q.Encode()
+	httpx.StripSensitiveQueryParamsWith(req.URL, sensitiveQueryParams)
 }
 
 // StripSensitiveCredentials 剥掉可能随跨 host 重定向外泄的凭据:

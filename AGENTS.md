@@ -193,6 +193,33 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   盲区与保留清单可配两处诚实披露）。同期存档：oagentkit runtime#25/
   #26 已闭（procx ChildEnv 两缺口上游修复落地，gitbackend 收编评估
   待下一轮随 deps 升级一起做）。
+- **pkg v0.39–v0.41 / concurrency v0.30–31 / logx v0.8.12 增量审计与七连
+  回流收编（2026-11-10，先行审计再动工）**。提案八连全部闭（gitee#5
+  仍 open）：#285/#286 → pkg v0.38.1（WalkEach/Walk 无进展检测 `page>1
+  && DeepEqual(prev)` + fetch ctx 贯穿——与 pageiter 逐字同形）；
+  #288/#289/#290 → v0.39.0（WithETag no-store 门禁/memETagStore LRU+
+  体积双上限/CanonicalETagKey）；#291 → `pathx.ClassifyPath`（数字段 +
+  hex≥7 + 词段保留，uuid 缺省不折叠、带符号数字不折叠——哨兵值取舍
+  已收进缺省面）；concurrency#208 → `httpx.StripSensitiveQueryParamsWith`
+  （raw-query 外科手术，不动无关参数字节免 re-encode 翻转转义）。
+  **收编三处**：① `transport/client.go` StripSensitiveQueryParams 委托
+  `StripSensitiveQueryParamsWith`（词表保留本仓 11 项——上游缺省 3 项
+  的超集，api_key/jwt/session 等平台特化项不可丢）；②
+  `transport/etag.go` etagKey 委托 `CanonicalETagKey`（\n 分段无歧义，
+  vary 集合按本仓平台面固定：Accept/Authorization/PRIVATE-TOKEN——键
+  字节形态变化零行为影响，内存缓存进程内私有）；③
+  `transport/metrics.ClassifyPath` 委托 `pathx.ClassifyPath`（本仓手写
+  启发式删除；上游「带符号数字不折叠」哨兵值取舍优于本仓 Atoi 形态，
+  仓内无测试钉负数段、零行为回归）。**pageiter 保留不迁移**：上游
+  WalkEach 现已带无进展+ctx 双安全网（语义逐字对齐复核完毕），但
+  pageiter 的 ErrStopIteration 哨兵、budget 错误形态与 ctx PageFetch
+  签名是自有公共面，迁移即 breaking——维持「同形不迁移，上游 bugfix
+  被动受益」路线。**procx 维持不引入**：runtime#25/#26 修复消解了
+  2026-10-18 的环境白名单顾虑，但依赖白名单硬规则（只许 pkg/
+  concurrency/logx）未变，且 gitbackend 现行 GIT_CONFIG_COUNT 注入是
+  git 原生机制（credhelper 文档明示令牌不进 argv/environ），procx 无
+  消费痛感。logx v0.8.12 经 transport/provider NewLogxLogger 桥被动
+  受益（bugfix 线）。
 
 ## 规则二：公共契约红线
 

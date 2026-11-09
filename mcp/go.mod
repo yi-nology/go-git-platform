@@ -4,9 +4,9 @@ go 1.27.3
 
 require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/oekit/concurrency v0.29.0
-	github.com/oekit/logx v0.8.11
-	github.com/oekit/pkg v0.38.0
+	github.com/oekit/concurrency v0.31.0
+	github.com/oekit/logx v0.8.12
+	github.com/oekit/pkg v0.41.0
 	github.com/yi-nology/go-git-platform v0.61.0
 )
 

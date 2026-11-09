@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.122.0] - 2026-11-10
+
+### Changed（上游提案八连全量回流：三件套拉齐 v0.41.0/v0.31.0/v0.8.12 + 三处收编）
+
+上游提案飞轮完整闭环——本仓提报的 pkg#285/#286/#288/#289/#290/#291 与
+concurrency#208 全部当日/隔日修复落地，本版随依赖升级全量收编：
+
+- **deps: oekit 三件套拉齐**——pkg v0.38.0→**v0.41.0**、concurrency
+  v0.29.0→**v0.31.0**、logx v0.8.11→**v0.8.12**（根 go.mod 与 mcp
+  go.mod 双升，mcp replace ../ 需人工跟随已做）。
+- **feat(concurrency#208 收编): `transport.StripSensitiveQueryParams`
+  剥离机制委托 `httpx.StripSensitiveQueryParamsWith`**——raw-query
+  外科手术（不动无关参数的字节，免 re-encode 翻转转义形态）；词表保留
+  本仓 11 项（上游缺省 3 项的超集：api_key/jwt/session 等平台特化项），
+  跨 host 重定向 token-in-query 泄漏面的既有行为零变化。
+- **feat(pkg#290 收编): `transport/etag.go` 缓存键构造委托
+  `httpjson.CanonicalETagKey`**——\n 分段无歧义键；vary 集合按本仓
+  平台面固定（Accept/Authorization/PRIVATE-TOKEN），跨凭据缓存串味
+  防线从手写纪律变为上游构造期保证；键字节形态变化零行为影响
+  （内存缓存进程内私有）。
+- **feat(pkg#291 收编): `transport/metrics.ClassifyPath` 委托
+  `pathx.ClassifyPath`**——手写 ID 段折叠启发式删除（同一发源：数字
+  段+hex≥7+词段保留）；上游把「带符号数字不折叠」的哨兵值取舍一并
+  收进缺省面（优于本仓 Atoi 形态，无测试钉负数段、零行为回归）；
+  uuid 扩展需求走 `pathx.PathClassifier` 可配置面。
+- **pkg#285/#286 收编路径裁定（pageiter 保留不迁移）**：上游
+  WalkEach/Walk 现已带伪翻页无进展检测（`page>1 && DeepEqual(prev)`
+  与 pageiter 逐字同形）+ fetch ctx 贯穿——语义对齐复核完毕；pageiter
+  的 ErrStopIteration 哨兵、budget 错误形态与 ctx PageFetch 签名是
+  自有公共面，迁移即 breaking，维持「同形不迁移，上游 bugfix 被动
+  受益」。
+- **procx 维持不引入**（runtime#25/#26 已闭，环境白名单顾虑消解，
+  但依赖白名单硬规则未变且 gitbackend 的 GIT_CONFIG_COUNT 注入是
+  git 原生机制，无消费痛感）——评估结论存档 AGENTS.md。
+- docs(AGENTS.md): pkg v0.39–v0.41 / concurrency v0.30–31 / logx
+  v0.8.12 增量审计存档。
+
 ## [0.121.0] - 2026-11-08
 
 ### Changed（pkg/projection + githubapp 小收编轮：SecureString 驻留混淆 + UseNumber 委托）

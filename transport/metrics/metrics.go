@@ -21,9 +21,9 @@ package metrics
 import (
 	"context"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/oekit/pkg/pathx"
 
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -62,43 +62,17 @@ func ResponseHook(r Recorder, classify func(*http.Request) string) transport.Res
 }
 
 // ClassifyPath reduces an API path to a low-cardinality template by
-// replacing path segments that look like identifiers with "{id}":
-// pure numbers (issue/PR/project IDs) and hex-ish strings of 7+ characters
-// (commit SHAs, GitHub node IDs). Repo names are deliberately kept — they
-// are bounded per deployment and usually exactly what operators want to
-// slice by. Multi-tenant hosts can wrap this with their own collapsing.
+// replacing path segments that look like identifiers with "{id}".
+// Repo names are deliberately kept — they are bounded per deployment and
+// usually exactly what operators want to slice by. Multi-tenant hosts can
+// wrap this with their own collapsing.
 //
 //	/api/v4/projects/1234/repository/commits → /api/v4/projects/{id}/repository/commits
 //	/repos/octocat/hello/pulls/42/files      → /repos/octocat/hello/pulls/{id}/files
+//
+// 实现委托 pkg#291 落地的 pathx.ClassifyPath（同一启发式发源：数字段 +
+// hex≥7 折叠、词段保留、空串归一 "/"；上游把「带符号数字不折叠」的哨兵
+// 值取舍一并收进缺省面，uuid 形态缺省不折叠——需扩展用 pathx.PathClassifier）。
 func ClassifyPath(path string) string {
-	if path == "" {
-		return "/"
-	}
-	segs := strings.Split(strings.Trim(path, "/"), "/")
-	for i, s := range segs {
-		if looksLikeID(s) {
-			segs[i] = "{id}"
-		}
-	}
-	return "/" + strings.Join(segs, "/")
-}
-
-func looksLikeID(s string) bool {
-	if s == "" {
-		return false
-	}
-	if _, err := strconv.Atoi(s); err == nil {
-		return true
-	}
-	if len(s) < 7 {
-		return false
-	}
-	for _, c := range s {
-		switch {
-		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
-		default:
-			return false
-		}
-	}
-	return true
+	return pathx.ClassifyPath(path)
 }
