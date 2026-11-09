@@ -219,7 +219,14 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   concurrency/logx）未变，且 gitbackend 现行 GIT_CONFIG_COUNT 注入是
   git 原生机制（credhelper 文档明示令牌不进 argv/environ），procx 无
   消费痛感。logx v0.8.12 经 transport/provider NewLogxLogger 桥被动
-  受益（bugfix 线）。
+  受益（bugfix 线）。第五轮建设性需求两连（2026-11-10，提报待回流）：
+  #325 webhook 发端签名 helper 族（验签族 #270 的对称面——发端服务/
+  测试夹具都在手算 HMAC，下游 contracttest signRequest 五处手写块为证
+  ；签名器与验证器共享同一 HMACOption 语义面=单一真源不漂移）；
+  #327 stringx rune 安全截断原语（字节切把 CJK 响应体切出非法 UTF-8
+  ——transport truncateForLog/truncate 两处现场，httpjson 内部已有
+  未导出先例）。上游落地后收编路径：contracttest signRequest 五处
+  手写块删成调用；transport 两处截断委托（顺带修字节切缺陷）。
 
 ## 规则二：公共契约红线
 
