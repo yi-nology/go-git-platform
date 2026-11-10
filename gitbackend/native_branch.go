@@ -9,6 +9,9 @@ import (
 // --- Branch operations ---
 
 func (b *NativeGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote string) ([]string, error) {
+	if err := checkNameArg("ListRemoteBranches", remote); err != nil {
+		return nil, err
+	}
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-r", "--list", remote + "/*"}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("ListRemoteBranches", repoPath, stderr, err)
@@ -30,7 +33,12 @@ func (b *NativeGitBackend) ListRemoteBranches(ctx context.Context, repoPath, rem
 }
 
 func (b *NativeGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", branch, ref}, AuthConfig{})
+	if err := checkNameArgs("CreateBranch", branch, ref); err != nil {
+		return err
+	}
+	// `--` 让 branch/ref 按位置解析：CreateBranch("-D", victim) 旧实现会
+	// 把 -D 当删除 flag 真删掉 victim 分支并报成功（issue #109）
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "--", branch, ref}, AuthConfig{})
 	if err != nil {
 		if strings.Contains(stderr, "already exists") {
 			return newGitError("CreateBranch", repoPath, stderr, ErrBranchExists)
@@ -41,7 +49,10 @@ func (b *NativeGitBackend) CreateBranch(ctx context.Context, repoPath, branch, r
 }
 
 func (b *NativeGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-D", branch}, AuthConfig{})
+	if err := checkNameArg("DeleteBranch", branch); err != nil {
+		return err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-D", "--", branch}, AuthConfig{})
 	if err != nil {
 		if strings.Contains(stderr, "not found") || strings.Contains(stderr, "branch") {
 			return newGitError("DeleteBranch", repoPath, stderr, ErrBranchNotFound)
@@ -52,7 +63,10 @@ func (b *NativeGitBackend) DeleteBranch(ctx context.Context, repoPath, branch st
 }
 
 func (b *NativeGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-m", oldName, newName}, AuthConfig{})
+	if err := checkNameArgs("RenameBranch", oldName, newName); err != nil {
+		return err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-m", "--", oldName, newName}, AuthConfig{})
 	if err != nil {
 		return newGitError("RenameBranch", repoPath, stderr, err)
 	}
@@ -60,6 +74,11 @@ func (b *NativeGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, 
 }
 
 func (b *NativeGitBackend) Checkout(ctx context.Context, repoPath, branch string) error {
+	// checkout 不支持 `--` 分隔（`git checkout -- x` 是 path 语义），靠
+	// 名字校验挡语义反转：branch="-b evil" 旧实现会变成建分支
+	if err := checkNameArg("Checkout", branch); err != nil {
+		return err
+	}
 	_, stderr, err := b.runGit(ctx, repoPath, []string{"checkout", branch}, AuthConfig{})
 	if err != nil {
 		return newGitError("Checkout", repoPath, stderr, err)

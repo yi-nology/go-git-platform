@@ -171,7 +171,9 @@ type MergeOptions struct {
 // DiffOptions contains options for getting a diff.
 type DiffOptions struct {
 	// From is the starting commit SHA. When both From and To are empty the
-	// diff is computed between the working tree and HEAD.
+	// diff is computed between the working tree and HEAD — staged as well as
+	// unstaged changes are visible (`git diff HEAD` semantics, on both
+	// backends). Giving only one of the two is an error.
 	From string
 	// To is the ending commit SHA.
 	To string
@@ -245,7 +247,9 @@ type FetchResult struct {
 
 // PushResult contains the result of a push operation.
 type PushResult struct {
-	// PushedRefs are the refs that were pushed.
+	// PushedRefs are the destination refs the remote accepted, in the short
+	// form git prints in its push report (e.g. "main", "v1") — on both
+	// backends. Refs that were rejected or merely up to date are not listed.
 	PushedRefs []string
 	// Errors collects per-ref errors reported by the remote (if any).
 	Errors []string
@@ -255,11 +259,13 @@ type PushResult struct {
 type CommitInfo struct {
 	// Hash is the full 40-character commit SHA.
 	Hash string
-	// Message is the commit message.
+	// Message is the FULL commit message (subject and body), trailing
+	// newlines trimmed — identical on both backends.
 	Message string
 	// Author is the commit author's name.
 	Author string
-	// Date is the author date formatted as RFC3339.
+	// Date is the author date formatted as RFC3339 (parseable with
+	// time.Parse(time.RFC3339, ...) on both backends).
 	Date string
 }
 
@@ -268,7 +274,10 @@ type TagInfo struct {
 	Name string
 	// Hash is the SHA the tag points at (the tag object for annotated tags,
 	// or the commit for lightweight tags).
-	Hash    string
+	Hash string
+	// Message is the FULL tag message (annotated tags) or the FULL commit
+	// message (lightweight tags), trailing newlines trimmed — identical on
+	// both backends.
 	Message string
 	Author  string
 }

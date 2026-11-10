@@ -6,6 +6,70 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### gitbackend/gogit/credhelper 底座层
+
+- fix(gitbackend): native `IsAncestor` 按退出码分流——`git merge-base
+  --is-ancestor` 退出码 1 = 非祖先（正常结论）、≥2 = 致命错误；旧实现把
+  一切错误吞成 `(false, nil)`，无效 ref/非仓库目录与「确实不是祖先」不可
+  区分（调用方拿 false 当「未合入」继续执行——跳过 cherry-pick、误判漂移、
+  放行合并）；argv 补 `--` 分隔与位置参数校验（issue #101）。
+- fix(gitbackend): gogit `GetStatus` 补齐 Ahead/Behind——复用
+  GetBranchSyncInfo 抽出的 `aheadBehindOf` 计数（merge-base 双侧统计，含
+  无关历史回退），上游缺失保持 0/0 宽松口径（与 native 忽略 getAheadBehind
+  错误一致）；旧实现零处赋值恒 0/0，漂移检测永远显示「已同步」；契约测试
+  钉两后端同仓同数（issue #102）。
+- fix(gitbackend): CommitInfo/TagInfo 两后端口径统一——native 格式串
+  `%s`（仅主题行）→ `%B`（完整消息）、`%ai`（空格分隔偏移，RFC3339 解析
+  必败）→ `%aI`；解析改 NUL 记录制（前导 NUL 开记录、消息置末位吸收分隔
+  符），多行消息不再破坏解析；GetTagList 同步从 `%(subject)` 换
+  `%(contents)`（for-each-ref 的 `%00` 十六进制转义可用，旧注释「不支持
+  NUL」系语法混用），gogit 侧消息 TrimRight 归一；契约与 godoc 写明
+  「完整消息 + RFC3339 author date」（issue #103）。
+- fix(gitbackend): native `GetStatus` 改 `--porcelain=v1 -z` 解析——NUL
+  分隔路径字节原样输出（中文/引号文件名不再被 core.quotePath 转义成
+  `"\"\\346\\226\\207\""` 形态）、路径首尾空格不再被 TrimSpace 吃掉、
+  rename 条目按「`XY <dst>` + `<orig>`」双记录拆分（旧实现 Path 是
+  `old -> new` 整串）（issue #104）。
+- fix(gitbackend): credhelper 脚本模板 `echo password=$(cat …)` 改
+  `printf 'password=%s\n' "$(cat …)"`——命令替换进双引号后不做 IFS 分词/
+  glob 展开、printf %s 不解释反斜杠（dash 的 echo 会把 `\t`/`\n`/`\c` 当
+  转义），含空格/`*`/`$`/反斜杠/引号的密码按字节原样到达 git；askpass
+  的 username 回答同步换 printf（issue #105）。
+- fix(gitbackend): credhelper/askpass 加目标主机白名单——helper 读 stdin
+  的 credential 协议取 `host=` 匹配（大小写归一）后才应答；askpass 从提示
+  文本（`… for 'https://host':`）提取主机同样校验，未知提示一律静默（旧
+  实现对任意提示回退输出 username，同属跨域泄漏面）；期望主机由
+  `credentialHostsFor` 推导（argv URL + remote 名经仓库 config 解析，
+  gitfile/worktree 布局兼容），推导不出时空白名单 fail-closed 拒绝一切；
+  `FetchAll` 从单条 `git fetch --all` 改逐 remote 调用，多 remote 混合
+  信任域时每个会话只对当前 remote 主机应答——为 A 准备的令牌不再发给 B；
+  真实 `git credential fill` 集成测试钉「声明主机拿到令牌、异主机空应答」
+  （issue #106）。
+- fix(gitbackend): native `parsePushRefs` 重写——PushedRefs 是 push 报告的
+  dst ref 名（`old..new  src -> dst` 取 dst、`- [deleted]` 行取末字段、
+  `! [rejected]` 排除）；旧实现把 `To <url>`（内嵌凭据会进结果/日志）与
+  old..new 区间当 ref 收集、`* [new branch]`/`- [deleted]` 行完全丢失；
+  gogit Push 同步把请求 refspecs 归一成 dst 短名（去 `+`/`refs/heads|tags/`
+  前缀）对齐口径，native 解析失败时按同一归一回填 RefSpecs（issue #107）。
+- fix(gitbackend): gogit `GetFileAtRevision` 走 resolveRev——分支/标签/
+  短 hash/rev 表达式统一解析（旧实现 `plumbing.NewHash` 对任意串盲 hex
+  解码，非 hash 输入全失败）；空 ref 语义两后端统一为 HEAD（native 旧
+  裸 `":path"` 读 index，index≠HEAD 时静默返回暂存内容而非提交内容；
+  GetBlob 空 ref 同口径），契约 godoc 写明（issue #108）。
+- fix(gitbackend): 位置参数统一防语义反转——branch/tag/remote 名与 rev
+  类参数一律 `checkNameArg` 拒绝首字符 `-`（`ErrInvalidGitArg`），
+  CreateBranch/DeleteBranch/RenameBranch/CreateTag/DeleteTag/AddRemote/
+  GetRemoteURL/RemoveRemote/merge-base/cherry-pick/rebase/add 并加 `--`
+  分隔（checkout/diff 系不吃 `--`，靠校验挡）；回归测试钉
+  `CreateBranch("-D", victim)` 不再删分支、log/diff/show 的
+  `--output=…` rev 不再落任意文件（issue #109）。
+- fix(gitbackend): Diff 空 From/To 三方统一为「工作区 vs HEAD」unified
+  patch（`git diff HEAD` 语义，staged+unstaged 均可见，untracked 不出现）
+  ——旧 native 裸 `git diff` 只看 index 侧（staged-only 不可见）、旧 gogit
+  返回 go-git 状态清单文本而非 patch；单边 From/To 两后端一致显式报错；
+  gogit 侧经 go-git UnifiedEncoder 渲染（object.Patch 同管线），按
+  index∪HEAD 选路径、index 跟踪性判定删除（rm --cached 同 git 呈现）
+  （issue #110）。
 ### Fixed（第二批 14 连修：安全面凭据回灌 / 错误分类断链 / 读回反转 / 契约兑现）
 
 - fix(transport): 跨 host 重定向剥凭据判据改对齐**重定向链起点**——旧判据只比紧邻

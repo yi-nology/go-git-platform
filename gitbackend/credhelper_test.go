@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -16,7 +18,7 @@ import (
 )
 
 func TestNewCredSession_WritesSecureTokenFile(t *testing.T) {
-	s, err := newCredSession("user", "s3cret-token")
+	s, err := newCredSession("user", "s3cret-token", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +38,7 @@ func TestNewCredSession_WritesSecureTokenFile(t *testing.T) {
 	}
 	// helper 可执行且包含 username
 	helper, _ := os.ReadFile(s.helperPath) //nolint:gosec // test
-	if !strings.Contains(string(helper), "echo username=") || !strings.Contains(string(helper), "user") {
+	if !strings.Contains(string(helper), "printf 'username=") || !strings.Contains(string(helper), "user") {
 		t.Fatalf("helper missing username: %s", helper)
 	}
 	if !strings.Contains(string(helper), "cat") {
@@ -45,13 +47,13 @@ func TestNewCredSession_WritesSecureTokenFile(t *testing.T) {
 }
 
 func TestNewCredSession_EmptySecret(t *testing.T) {
-	if _, err := newCredSession("u", ""); err == nil {
+	if _, err := newCredSession("u", "", nil); err == nil {
 		t.Fatal("want error for empty secret")
 	}
 }
 
 func TestCredSession_EnvHasNoSecret(t *testing.T) {
-	s, err := newCredSession("token", "super-secret-value")
+	s, err := newCredSession("token", "super-secret-value", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +72,7 @@ func TestConfigureAuth_TokenNotInArgvOrEnv(t *testing.T) {
 	b := &NativeGitBackend{gitPath: "git"}
 	cmd := exec.Command("git", "ls-remote", "https://example.com/o/r.git")
 	secret := "ghp_do_not_leak_this_token_xyz"
-	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: secret})
+	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: secret}, []string{"example.com"})
 	require.NoError(t, cerr)
 	defer cleanup()
 
@@ -95,7 +97,7 @@ func TestConfigureAuth_TokenNotInArgvOrEnv(t *testing.T) {
 		t.Fatal("want GIT_ASKPASS env")
 	}
 	// cleanup 后目录消失
-	if b2, err := newCredSession("t", secret); err == nil {
+	if b2, err := newCredSession("t", secret, []string{"example.com"}); err == nil {
 		dir := b2.dir
 		b2.close()
 		if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -113,13 +115,13 @@ func TestCredHelperScriptPassesUsernameAsOneArg(t *testing.T) {
 		t.Skip("Windows 无 sh：helper 脚本由 msys 执行，不在本测试的断言范围内")
 	}
 	const user = "user name'with-quote"
-	s, err := newCredSession(user, "s3cret-token")
+	s, err := newCredSession(user, "s3cret-token", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.close()
 
-	out, err := exec.Command("sh", s.helperPath, "get").Output()
+	out, err := shHelperGet(t, s.helperPath, "example.com").Output()
 	if err != nil {
 		t.Fatalf("执行 helper 脚本失败: %v", err)
 	}
@@ -133,7 +135,7 @@ func TestConfigureAuth_TokenFallbackOnCredSessionError(t *testing.T) {
 	// 空 token 不建会话，也不注入 extraheader
 	b := &NativeGitBackend{gitPath: "git"}
 	cmd := exec.Command("git", "status")
-	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: ""})
+	cleanup, cerr := b.configureAuth(cmd, AuthConfig{Type: AuthHTTPToken, Token: ""}, nil)
 	require.NoError(t, cerr)
 	defer cleanup()
 	joined := strings.Join(cmd.Env, "\n")
@@ -143,7 +145,7 @@ func TestConfigureAuth_TokenFallbackOnCredSessionError(t *testing.T) {
 }
 
 func TestCredSession_EnvResetsHostCredentialHelpers(t *testing.T) {
-	s, err := newCredSession("user", "s3cret-token")
+	s, err := newCredSession("user", "s3cret-token", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,13 +174,13 @@ func TestCredSession_HelperScriptsExecute(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("helper scripts require a POSIX sh")
 	}
-	s, err := newCredSession("alice", "topsecret")
+	s, err := newCredSession("alice", "topsecret", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.close()
 
-	out, err := exec.Command("sh", s.helperPath, "get").CombinedOutput()
+	out, err := shHelperGet(t, s.helperPath, "example.com").CombinedOutput()
 	if err != nil {
 		t.Fatalf("helper get: %v\n%s", err, out)
 	}
@@ -199,6 +201,15 @@ func TestCredSession_HelperScriptsExecute(t *testing.T) {
 	if err != nil || strings.TrimSpace(string(out)) != "alice" {
 		t.Fatalf("askpass username prompt: %v %q", err, out)
 	}
+}
+
+// shHelperGet 用 sh 执行 helper 的 get 动作，并把 host= 喂进 stdin
+// （credential 协议的 get 请求体）。
+func shHelperGet(t *testing.T, script, host string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("sh", script, "get")
+	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
+	return cmd
 }
 
 // TestCredSession_GitIntegration_HostHelperNotConsulted 用真实 git 钉死两个回归：
@@ -228,7 +239,7 @@ func TestCredSession_GitIntegration_HostHelperNotConsulted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err := newCredSession("me", "mytoken")
+	s, err := newCredSession("me", "mytoken", []string{"example.com"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,5 +278,291 @@ func TestCredSession_GitIntegration_HostHelperNotConsulted(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(hostLog); strings.Contains(string(data), "store") {
 		t.Fatalf("host helper received store — token would persist to the user's credential store: %q", data)
+	}
+}
+
+// TestCredSession_PasswordSurvivesShellExpansion 回归（issue #105）：
+// 旧的 helper 模板 `echo password=$(cat %q)` 未加引号——$(…) 的输出会经历
+// IFS 分词 + glob 展开，dash 的 echo 还会把 \t/\n/\c 当转义处理，含特殊
+// 字符的密码被静默改写（`*` 甚至会把 token 目录的文件名拼进密码）。改
+// printf '%s\n' "$(cat …)" 后，密码按字节原样输出。
+func TestCredSession_PasswordSurvivesShellExpansion(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper scripts require a POSIX sh")
+	}
+	cases := []struct {
+		name string
+		pw   string
+	}{
+		{"space", "a b c"},
+		{"glob star", "a*b"},
+		{"glob question", "a?b"},
+		{"dollar", "pa$$word"},
+		{"backslash", `a\b\c`},
+		{"backslash-t like escape", `a\tb`},
+		{"single quote", "it's"},
+		{"double quote", `say "hi"`},
+		{"percent", "100%s%d"},
+		{"leading/trailing spaces", "  padded  "},
+		{"tab char", "a\tb"},
+		{"tilde", "~user"},
+		{"braces", "${HOME}"},
+		{"combined hostile", `a b*c$d\e'f"g%h${i}~j`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, err := newCredSession("tok", tc.pw, []string{"example.com"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.close()
+			out, err := shHelperGet(t, s.helperPath, "example.com").Output()
+			if err != nil {
+				t.Fatalf("helper get: %v\n%s", err, out)
+			}
+			want := "password=" + tc.pw
+			found := false
+			for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+				if line == want {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("password 被改写：want line %q，实际输出 %q", want, string(out))
+			}
+		})
+	}
+}
+
+// TestCredSession_HelperRefusesForeignHost 回归（issue #106）：helper 只对
+// 声明过的目标主机应答——为 A 主机准备的令牌不再发给 B 主机。
+func TestCredSession_HelperRefusesForeignHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper scripts require a POSIX sh")
+	}
+	s, err := newCredSession("tok", "s3cret", []string{"internal.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+
+	t.Run("matching host answers", func(t *testing.T) {
+		out, err := shHelperGet(t, s.helperPath, "internal.example.com").Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if !strings.Contains(string(out), "password=s3cret") {
+			t.Fatalf("declared host must receive the credential, got %q", out)
+		}
+	})
+	t.Run("foreign host gets empty response", func(t *testing.T) {
+		out, err := shHelperGet(t, s.helperPath, "evil.example.com").Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			t.Fatalf("foreign host must get an empty response, got %q", out)
+		}
+	})
+	t.Run("case-insensitive host match", func(t *testing.T) {
+		out, err := shHelperGet(t, s.helperPath, "INTERNAL.Example.COM").Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if !strings.Contains(string(out), "password=s3cret") {
+			t.Fatalf("host match should be case-insensitive, got %q", out)
+		}
+	})
+	t.Run("no host line gets empty response", func(t *testing.T) {
+		cmd := exec.Command("sh", s.helperPath, "get")
+		cmd.Stdin = strings.NewReader("protocol=https\n\n")
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			t.Fatalf("request without host must get an empty response, got %q", out)
+		}
+	})
+	t.Run("no declared hosts refuses everything", func(t *testing.T) {
+		s2, err := newCredSession("tok", "s3cret", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s2.close()
+		out, err := shHelperGet(t, s2.helperPath, "internal.example.com").Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			t.Fatalf("session without declared hosts must answer nothing, got %q", out)
+		}
+	})
+}
+
+// TestCredSession_GitCredentialFill_HostGated 用真实 git 钉 issue #106 的
+// 端到端回归：`git credential fill` 对声明主机拿到令牌、对异主机拿不到。
+func TestCredSession_GitCredentialFill_HostGated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper scripts require a POSIX sh")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not in PATH")
+	}
+
+	s, err := newCredSession("me", "mytoken", []string{"example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+
+	fill := func(host string) string {
+		cmd := exec.Command("git", "credential", "fill")
+		cmd.Env = append(os.Environ(),
+			"GIT_CONFIG_NOSYSTEM=1",
+			"GIT_TERMINAL_PROMPT=0",
+		)
+		cmd.Env = append(cmd.Env, s.env()...)
+		cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n")
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("credential fill(%s): %v\n%s", host, err, out.String())
+		}
+		return out.String()
+	}
+
+	if got := fill("example.com"); !strings.Contains(got, "password=mytoken") {
+		t.Fatalf("declared host must receive the token, got %q", got)
+	}
+	if got := fill("evil.com"); strings.Contains(got, "mytoken") {
+		t.Fatalf("token leaked to a foreign host: %q", got)
+	}
+}
+
+// TestCredSession_AskpassRefusesForeignHost 回归（issue #106 的 askpass 面）：
+// 提示文本里的主机不在白名单时一律静默——旧实现对任意提示回退输出
+// username，也是跨域泄漏面。
+func TestCredSession_AskpassRefusesForeignHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper scripts require a POSIX sh")
+	}
+	s, err := newCredSession("tok", "s3cret", []string{"example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+
+	out, err := exec.Command("sh", s.askPath, "Password for 'https://evil.com':").Output()
+	if err != nil {
+		t.Fatalf("askpass: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("askpass must stay silent for foreign hosts, got %q", out)
+	}
+	out, err = exec.Command("sh", s.askPath, "Enter passphrase for key '/tmp/key'").Output()
+	if err != nil {
+		t.Fatalf("askpass: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("askpass must stay silent for non-credential prompts, got %q", out)
+	}
+	out, err = exec.Command("sh", s.askPath, "Password for 'git@example.com':").Output()
+	if err != nil {
+		t.Fatalf("askpass: %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "s3cret" {
+		t.Fatalf("askpass must answer declared scp-style host, got %q", out)
+	}
+}
+
+// TestCredentialHostsFor 钉主机推导的三个来源：argv URL、remote 名解析
+// （.git/config）、以及无位置参数时的全部 remote 回退。
+func TestCredentialHostsFor(t *testing.T) {
+	repo := t.TempDir()
+	cfgDir := filepath.Join(repo, ".git")
+	if err := os.MkdirAll(cfgDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[core]\n\trepositoryformatversion = 0\n" +
+		"[remote \"origin\"]\n\turl = https://Origin@GitHub.com/foo/bar.git\n" +
+		"[remote \"upstream\"]\n\turl = git@internal:host/path.git\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "config"), []byte(cfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"argv url wins", []string{"ls-remote", "https://target.example.com/x.git"}, []string{"target.example.com"}},
+		{"remote name resolved from config", []string{"fetch", "--prune", "--tags", "origin"}, []string{"github.com"}},
+		{"ssh url host", []string{"ls-remote", "ssh://git@sshhost:2222/x.git"}, []string{"sshhost:2222"}},
+		{"scp-like url", []string{"ls-remote", "git@scphost:x/y.git"}, []string{"scphost"}},
+		{"no positional falls back to all remotes", []string{"push"}, []string{"github.com", "internal"}},
+		{"flag-only clone", []string{"clone", "https://c1.example.com/a.git", "/tmp/dst"}, []string{"c1.example.com"}},
+		{"unknown remote name: no hosts from argv", []string{"fetch", "missing"}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := credentialHostsFor(tc.args, repo)
+			// 「全部 remote 回退」走 map 遍历，顺序不定，按集合比较
+			gotSet := append([]string(nil), got...)
+			wantSet := append([]string(nil), tc.want...)
+			sort.Strings(gotSet)
+			sort.Strings(wantSet)
+			if !slices.Equal(gotSet, wantSet) {
+				t.Fatalf("credentialHostsFor = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("no repo: empty set", func(t *testing.T) {
+		if got := credentialHostsFor([]string{"fetch", "origin"}, t.TempDir()); len(got) != 0 {
+			t.Fatalf("credentialHostsFor = %v, want empty", got)
+		}
+	})
+}
+
+// TestParseRemoteURLs：config 文本解析的最小形状（节头/引号/url+pushurl）。
+func TestParseRemoteURLs(t *testing.T) {
+	cfg := `# comment
+[core]
+	bare = false
+[remote "origin"]
+	url = https://github.com/foo/bar.git
+	pushurl = git@push.example.com:foo/bar.git
+[branch "main"]
+	remote = origin
+[remote "second"]
+	url = "https://quoted.example.com/x.git"
+`
+	got := parseRemoteURLs(cfg)
+	if len(got["origin"]) != 2 || got["origin"][0] != "https://github.com/foo/bar.git" ||
+		got["origin"][1] != "git@push.example.com:foo/bar.git" {
+		t.Fatalf("origin urls misparsed: %v", got["origin"])
+	}
+	if len(got["second"]) != 1 || got["second"][0] != "https://quoted.example.com/x.git" {
+		t.Fatalf("second urls misparsed: %v", got["second"])
+	}
+}
+
+// TestGitConfigPath_Gitfile：worktree（.git 为文件）也要能定位 config。
+func TestGitConfigPath_Gitfile(t *testing.T) {
+	repo := t.TempDir()
+	realGitDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(realGitDir, "config"), []byte("[remote \"o\"]\n\turl = https://wt.example.com/x.git\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitfile := filepath.Join(repo, ".git")
+	if err := os.WriteFile(gitfile, []byte("gitdir: "+realGitDir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := gitConfigPath(repo)
+	if !ok || got != filepath.Join(realGitDir, "config") {
+		t.Fatalf("gitConfigPath = %q (%v), want %q", got, ok, filepath.Join(realGitDir, "config"))
 	}
 }
