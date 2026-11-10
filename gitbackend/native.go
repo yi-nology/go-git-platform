@@ -485,8 +485,8 @@ func gitConfigPath(repoPath string) (string, bool) {
 		}
 	}
 	//nolint:gosec // G703: 路径由仓库自身布局推导（.git / gitfile gitdir / commondir），非调用方输入
-	cfg := filepath.Join(gitDir, "config")
-	if _, err := os.Stat(cfg); err != nil {
+	cfg := filepath.Join(gitDir, "config")  //nolint:gosec // G703: 同上
+	if _, err := os.Stat(cfg); err != nil { //nolint:gosec // G703: 同上
 		return "", false
 	}
 	return cfg, true
