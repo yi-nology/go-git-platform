@@ -54,6 +54,7 @@ func TestGitCode_Contract(t *testing.T) {
 		// the documented date form.
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"id":1,"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}]`,
+			GetResponse:    `{"id":1,"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
 			MutateResponse: `{"id":1,"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
 		},
 		// GitCode search payloads are GitHub-shaped bare arrays; issue
@@ -66,8 +67,9 @@ func TestGitCode_Contract(t *testing.T) {
 		// GitCode release payloads are GitHub-shaped (id/tag_name/name/body/
 		// draft/prerelease/html_url).
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
-			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			TagsListResponse: `[{"name":"v1","commit":{"sha":"abc123def456"}}]`,
 		},
 		// Commit status fixtures: gitcode's commit-status shape is
 		// GitHub-like (GET /repos/{o}/{r}/statuses/{sha}), a bare array with

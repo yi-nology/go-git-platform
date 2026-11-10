@@ -25,6 +25,7 @@ func TestTencentCode_Contract(t *testing.T) {
 		// "active", date-only due_date.
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}]`,
+			GetResponse:    `{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
 			MutateResponse: `{"id":1,"iid":1,"project_id":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
 		},
 		// Gongfeng label shape (GitLab-shaped): name-addressed, colors carry
@@ -77,6 +78,7 @@ func TestTencentCode_Contract(t *testing.T) {
 			ByTagResponse:              `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse:             `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateSendsDescriptionOnly: true,
+			TagsListResponse:           `[{"name":"v1","message":"tag msg","commit":{"id":"abc123def456","short_id":"abc123"}}]`,
 		},
 		// Project members double as collaborators: the list serves the
 		// member shape, add/remove resolve the username through the users
@@ -103,6 +105,7 @@ func TestTencentCode_Contract(t *testing.T) {
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
 			ListResponse:   `[{"name":"main","protected":true,"commit":{"id":"abc"}}]`,
 			MutateResponse: `{"protected":true,"name":"main","approver_rule":1}`,
+			GetResponse:    `{"protected":true,"name":"main","approver_rule":1}`,
 		},
 		// Commit status fixtures: gongfeng's commit-status shape is
 		// GitLab-like (GET /projects/:id/commits/:sha/statuses — the

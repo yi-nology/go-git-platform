@@ -57,6 +57,7 @@ func TestGitea_Contract(t *testing.T) {
 		// github-like state/due_on keys.
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 		},
 		// Gitea release shape: github-like keys (tag_name/name/body/draft/
@@ -69,8 +70,9 @@ func TestGitea_Contract(t *testing.T) {
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"path":".gitea/workflows/ci.yml","head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
-			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			TagsListResponse: `[{"name":"v1","message":"tag msg","commit":{"sha":"abc123def456","url":"https://x/commits/abc"}}]`,
 		},
 		// Gitea search: repo and user results wrap items in {"data":[..]}
 		// (the /repos/search and /users/search envelopes); issue search
@@ -96,6 +98,7 @@ func TestGitea_Contract(t *testing.T) {
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
 			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
 			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+			GetResponse:    `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
 		},
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,

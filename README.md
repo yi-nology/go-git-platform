@@ -19,8 +19,8 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 **Highlights**
 
 - **Unified transport layer** — one auth/retry/hooks/rate-limit/logging pipeline for every platform; third-party SDKs (go-github, gitlab client-go, …) plug in via `http.RoundTripper`
-- **Capability-gated optional APIs** — 17 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
-- **CI failure diagnostics** — `CILogManager` (GitHub / GitLab / Gitea) returns failed jobs with the tail of their execution logs, sized for LLM consumption; declared via `Capabilities().CILogs`
+- **Capability-gated optional APIs** — 22 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
+- **CI failure diagnostics** — `CILogManager` (GitHub / GitLab / Gitea / GitCode) returns failed jobs with the tail of their execution logs, sized for LLM consumption; declared via `Capabilities().CILogs`
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
 - **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
 - **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget

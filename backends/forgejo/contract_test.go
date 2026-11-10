@@ -52,12 +52,14 @@ func TestForgejo_Contract(t *testing.T) {
 		// github-like state/due_on keys.
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 		},
 		// Forgejo release shape mirrors gitea: github-like keys with url.
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://forgejo.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
-			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://forgejo.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://forgejo.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://forgejo.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			TagsListResponse: `[{"name":"v1","message":"tag msg","commit":{"sha":"abc123def456","url":"https://x/commits/abc"}}]`,
 		},
 		// Forgejo search mirrors gitea: repo/user results wrapped in
 		// {"data":[..]}, issue search a bare array keyed by number.
@@ -82,6 +84,7 @@ func TestForgejo_Contract(t *testing.T) {
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
 			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
 			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+			GetResponse:    `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
 		},
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,

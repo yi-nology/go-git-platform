@@ -6,6 +6,10 @@ import "github.com/yi-nology/go-git-platform/provider"
 // this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
+	{Capability: "BranchProtectionManager", Method: "ListBranchProtections", Kind: provider.DivergenceStub,
+		Reason: "Gitee exposes no list endpoint for branch protections."},
+	{Capability: "BranchProtectionManager", Method: "GetBranchProtection", Kind: provider.DivergenceStub,
+		Reason: "Gitee exposes no per-branch protection GET; only create (POST branches/{branch}/protection) and delete are available."},
 	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.TargetBranch", Kind: provider.DivergenceIgnore,
 		Reason: "Gitee's pull-update endpoint has no base field; retargeting a pull request is not possible."},
 	{Capability: "LabelManager", Method: "CreateLabel", Field: "opts.Description", Kind: provider.DivergenceIgnore,

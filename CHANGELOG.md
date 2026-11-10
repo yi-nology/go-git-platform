@@ -4,6 +4,42 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.124.0] - 2026-11-10
+
+### Added（契约套件三扩展：milestone Get / release List+Tags / BP Get+Update 全矩阵接线）
+
+**spec 论证**（契约测试是 spec）：本版只**新增**断言、不修改任何既有 wire
+shape 断言；唯一行为变更是三处历史违规实现的修正（见下），依据是
+DivergenceSuite 的既有强制规则「登记为 DivergenceStub 的方法必须返回
+ErrNotImplemented」——github/gitee 的 BP list/get 桩一直 `return nil,
+nil` 违反该规则且未登记台账，本次补登记并修正返回形态。新发现的
+gitee BP GetResponse 键形修正同理（gitlab wire 用 `name` 键，原夹具
+`branch_name` 永远解出空名——旧套件只断言非 nil 故漏检，新 Get 步骤
+断言 BranchName 后如实暴露）。
+
+- feat(contracttest): MilestonesSuite 增 `Get_ParsesAndNormalizes`
+  步骤（`GetResponse` 夹具字段，缺省跳过）；ReleaseSuite 增
+  `List_Parses`（列表路由复用 ByTagResponse 形）与
+  `ListTags_Parses`（`TagsListResponse` 夹具——六平台 tags wire 形
+  状逐一对 SDK 源码核实：gitea 族/ github/gitee 用 `commit.sha`、
+  gitlab/gongfeng 用 `commit.id`）；BranchProtectionsSuite 增
+  `GetBranchProtection_Shape`（断言 BranchName 往返）与
+  `UpdateBranchProtection_AcceptsMutation`。
+- feat(contracttest): BP 套件增 `ListUnsupported`/`GetUnsupported`
+  豁免旗标（机器可读的「平台无此端点」声明，镜像
+  UpdateSendsDescriptionOnly 先例）——github 设 List、gitee 设
+  List+Get。
+- fix(backends): github `ListBranchProtections`、gitee
+  `ListBranchProtections`/`GetBranchProtection` 从 `return nil, nil`
+  修正为 `provider.Wrap(Platform, op, provider.ErrNotImplemented)`
+  ——对齐 DivergenceSuite 既有强制与台账 DivergenceStub 语义
+  （`errors.Is` 判定形态不变：原本就不承诺成功，现在如实报错）。
+- chore(divergence): 三处 stub 登记进 github/gitee 台账并再生成
+  `docs/divergence-ledger.md`（规则二：平台偏离机器可读登记）。
+- 效果：giteafamily 共享实现零覆盖函数 41→36，GetMilestone/
+  ListReleases/ListTags/GetBranchProtection/UpdateBranchProtection
+  脱离零覆盖（71–87%）；全仓覆盖率 50.1%→50.8%。
+
 ## [0.123.0] - 2026-11-10
 
 ### Changed（oekit 三件套 patch/minor 线拉齐：pkg v0.41.1 / concurrency v0.31.2 / logx v0.9.1）

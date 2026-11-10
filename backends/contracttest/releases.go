@@ -31,6 +31,11 @@ type ReleasesHarnessConfig struct {
 	// only accepts a description): the update wire subtest then asserts the
 	// "description" key instead of "name".
 	UpdateSendsDescriptionOnly bool
+	// TagsListResponse is the JSON array for the tags-list GET
+	// (provider.ReleaseManager.ListTags). Empty = the harness has not wired
+	// the tags endpoint yet: the ListTags subtest skips, the rest of the
+	// suite is unaffected.
+	TagsListResponse string
 }
 
 // ReleaseHarness is the full harness RunReleaseSuite consumes; auto-mounting
@@ -86,6 +91,17 @@ func RunReleaseSuite(t *testing.T, h ReleaseHarness) {
 	t.Run("GetByTag_Parses", func(t *testing.T) {
 		rm, _ := newRM(t)
 		assertReleaseGetByTag(t, rm)
+	})
+	t.Run("List_Parses", func(t *testing.T) {
+		rm, _ := newRM(t)
+		assertReleaseList(t, rm)
+	})
+	t.Run("ListTags_Parses", func(t *testing.T) {
+		if h.TagsListResponse == "" {
+			t.Skipf("%s harness wires no TagsListResponse fixture", h.Name)
+		}
+		rm, _ := newRM(t)
+		assertReleaseListTags(t, rm)
 	})
 	t.Run("Update_Mutates", func(t *testing.T) {
 		rm, requests := newRM(t)
@@ -176,6 +192,8 @@ func releaseStubServer(h ReleaseHarness) (*httptest.Server, *[]recordedRequest) 
 			_, _ = w.Write([]byte(h.ByTagResponse))
 		case r.Method == http.MethodPatch || r.Method == http.MethodPut:
 			_, _ = w.Write([]byte(h.UpdateResponse))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/tags"):
+			_, _ = w.Write([]byte(h.TagsListResponse))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/releases"):
 			_, _ = w.Write([]byte("[" + h.ByTagResponse + "]"))
 		default:
@@ -183,4 +201,39 @@ func releaseStubServer(h ReleaseHarness) (*httptest.Server, *[]recordedRequest) 
 		}
 	}))
 	return srv, &requests
+}
+
+// assertReleaseList checks that ListReleases parses the fixture release
+// array and surfaces TagName on the provider shape.
+func assertReleaseList(t *testing.T, rm provider.ReleaseManager) {
+	t.Helper()
+	rels, err := rm.ListReleases(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatalf("ListReleases: %v", err)
+	}
+	if len(rels) != 1 {
+		t.Fatalf("expected 1 release, got %d", len(rels))
+	}
+	if rels[0].TagName != "v1.0.0" {
+		t.Errorf("expected TagName %q, got %q", "v1.0.0", rels[0].TagName)
+	}
+}
+
+// assertReleaseListTags checks that ListTags parses the tags fixture into
+// TagInfo{Name, Commit} on the provider shape.
+func assertReleaseListTags(t *testing.T, rm provider.ReleaseManager) {
+	t.Helper()
+	tags, err := rm.ListTags(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(tags) != 1 {
+		t.Fatalf("expected 1 tag, got %d", len(tags))
+	}
+	if tags[0].Name != "v1" {
+		t.Errorf("expected tag name %q, got %q", "v1", tags[0].Name)
+	}
+	if tags[0].Commit != "abc123def456" {
+		t.Errorf("expected commit sha %q, got %q", "abc123def456", tags[0].Commit)
+	}
 }

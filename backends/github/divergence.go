@@ -6,6 +6,8 @@ import "github.com/yi-nology/go-git-platform/provider"
 // this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
+	{Capability: "BranchProtectionManager", Method: "ListBranchProtections", Kind: provider.DivergenceStub,
+		Reason: "GitHub exposes no list-all-protections endpoint; per-branch protection reads are served by GetBranchProtection."},
 	{Capability: "ChangeRequestManager", Method: "GetCR", Field: "BaseSHA", Kind: provider.DivergenceMapping,
 		Reason: "GitHub payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request."},
 	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,

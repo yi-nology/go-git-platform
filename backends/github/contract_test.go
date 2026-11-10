@@ -51,6 +51,7 @@ func TestGitHub_Contract(t *testing.T) {
 		// milestones are number-addressed.
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
 		},
 		RepoTemplates: &contracttest.RepoTemplatesHarnessConfig{
@@ -61,8 +62,9 @@ func TestGitHub_Contract(t *testing.T) {
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
-			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			TagsListResponse: `[{"name":"v1","commit":{"sha":"abc123def456","url":"https://api.github.com/repos/owner/repo/commits/abc123def456"}}]`,
 		},
 		// GitHub search payloads wrap items in {"total_count":..,"items":[..]}.
 		Search: &contracttest.SearchHarnessConfig{
@@ -87,8 +89,11 @@ func TestGitHub_Contract(t *testing.T) {
 			CreateResponse: `{"id":1,"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
-			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
-			MutateResponse: `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+			ListResponse:    `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
+			MutateResponse:  `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+			GetResponse:     `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+			ListUnsupported: true,
+			GetUnsupported:  false,
 		},
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,

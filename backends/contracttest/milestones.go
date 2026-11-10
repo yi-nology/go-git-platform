@@ -20,6 +20,11 @@ type MilestonesHarnessConfig struct {
 	// as the string "1", title "v1", state "open" (GitLab's wire state
 	// "active" is also accepted — the backend normalizes it).
 	ListResponse string
+	// GetResponse is the JSON object for a single-milestone GET (same shape
+	// as the first list item). Empty = the harness has not wired the single-
+	// get endpoint yet: the Get subtest skips, the rest of the suite is
+	// unaffected.
+	GetResponse string
 	// MutateResponse is the JSON object for POST/PATCH/PUT (same shape as
 	// the first list item).
 	MutateResponse string
@@ -81,6 +86,22 @@ func RunMilestonesSuite(t *testing.T, h MilestonesHarness) {
 	t.Run("List_ParsesAndNormalizes", func(t *testing.T) {
 		mm, _ := newMM(t)
 		assertMilestoneListNormalized(t, mm)
+	})
+	t.Run("Get_ParsesAndNormalizes", func(t *testing.T) {
+		if h.GetResponse == "" {
+			t.Skipf("%s harness wires no GetResponse fixture", h.Name)
+		}
+		mm, _ := newMM(t)
+		m, err := mm.GetMilestone(context.Background(), "owner", "repo", "1")
+		if err != nil {
+			t.Fatalf("GetMilestone: %v", err)
+		}
+		if m.Number != "1" {
+			t.Errorf("expected number %q, got %q", "1", m.Number)
+		}
+		if m.Title != "v1" {
+			t.Errorf("expected title %q, got %q", "v1", m.Title)
+		}
 	})
 	t.Run("Create_PostsTitle", func(t *testing.T) {
 		mm, requests := newMM(t)
@@ -188,6 +209,13 @@ func milestoneStubServer(h MilestonesHarness) (*httptest.Server, *[]recordedRequ
 		case http.MethodPatch, http.MethodPut:
 			_, _ = w.Write([]byte(h.MutateResponse))
 		default:
+			// GET：路径以 /milestones/<id> 段结尾的是单件取（fixture 缺省
+			// 时返回空体跳过语义不成立——Get 步骤自会跳过，这里仍给列表
+			// 以免其它 GET 误伤）。
+			if h.GetResponse != "" && strings.HasSuffix(r.URL.Path, "/1") && strings.Contains(r.URL.Path, "milestones") {
+				_, _ = w.Write([]byte(h.GetResponse))
+				return
+			}
 			_, _ = w.Write([]byte(h.ListResponse))
 		}
 	}))

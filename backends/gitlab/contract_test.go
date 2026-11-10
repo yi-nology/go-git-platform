@@ -66,6 +66,7 @@ func TestGitLab_Contract(t *testing.T) {
 		// active→open and open→activate on writes).
 		Milestones: &contracttest.MilestonesHarnessConfig{
 			ListResponse:   `[{"id":1,"iid":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}]`,
+			GetResponse:    `{"id":1,"iid":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
 			MutateResponse: `{"id":1,"iid":1,"title":"v1","state":"active","description":"first","due_date":"2026-01-01"}`,
 		},
 		// GitLab release shape: name/description/_links.self (released_at is
@@ -73,8 +74,9 @@ func TestGitLab_Contract(t *testing.T) {
 		// name/description; Draft/Prerelease have no GitLab counterpart
 		// (registered ignore in the backend).
 		Releases: &contracttest.ReleasesHarnessConfig{
-			ByTagResponse:  `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
-			UpdateResponse: `{"tag_name":"v1.0.0","name":"v1.0.0-renamed","description":"updated notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
+			ByTagResponse:    `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
+			UpdateResponse:   `{"tag_name":"v1.0.0","name":"v1.0.0-renamed","description":"updated notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
+			TagsListResponse: `[{"name":"v1","target":"abc123def456","commit":{"id":"abc123def456","created_at":"2026-01-01T00:00:00Z"}}]`,
 		},
 		// GitLab search payloads are bare arrays keyed by iid/path_with_
 		// namespace/username; the scope rides the query string, not the path.
@@ -122,6 +124,7 @@ func TestGitLab_Contract(t *testing.T) {
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
 			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
 			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+			GetResponse:    `{"name":"main","allow_force_push":false}`,
 		},
 		DeployKeys: &contracttest.DeployKeysHarnessConfig{
 			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,

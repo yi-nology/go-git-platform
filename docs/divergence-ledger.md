@@ -43,6 +43,7 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
+| BranchProtectionManager | ListBranchProtections |  | stub | GitHub exposes no list-all-protections endpoint; per-branch protection reads are served by GetBranchProtection. |
 | ChangeRequestManager | GetCR | BaseSHA | mapping | GitHub payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | ReleaseManager | GetArchive |  | detour | Archive downloads stream through the raw transport client rather than go-github. |
@@ -53,6 +54,8 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
+| BranchProtectionManager | ListBranchProtections |  | stub | Gitee exposes no list endpoint for branch protections. |
+| BranchProtectionManager | GetBranchProtection |  | stub | Gitee exposes no per-branch protection GET; only create (POST branches/{branch}/protection) and delete are available. |
 | ChangeRequestManager | UpdateCR | opts.TargetBranch | ignore | Gitee's pull-update endpoint has no base field; retargeting a pull request is not possible. |
 | LabelManager | CreateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | Gitee's label wire has no description field. |

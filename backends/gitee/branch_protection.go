@@ -11,13 +11,13 @@ import (
 // ListBranchProtections implements provider.BranchProtectionManager. Gitee has
 // no list endpoint for branch protections; this returns nil.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	return nil, nil
+	return nil, provider.Wrap(provider.PlatformGitee, "ListBranchProtections", provider.ErrNotImplemented)
 }
 
 // GetBranchProtection implements provider.BranchProtectionManager. Gitee has no
 // get endpoint for branch protections; this returns nil.
 func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
-	return nil, nil
+	return nil, provider.Wrap(provider.PlatformGitee, "GetBranchProtection", provider.ErrNotImplemented)
 }
 
 // CreateBranchProtection implements provider.BranchProtectionManager.

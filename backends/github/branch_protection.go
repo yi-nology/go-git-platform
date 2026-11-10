@@ -11,7 +11,7 @@ import (
 // ListBranchProtections implements provider.BranchProtectionManager. GitHub has
 // no list endpoint for branch protections; this returns nil.
 func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	return nil, nil
+	return nil, provider.Wrap(provider.PlatformGitHub, "ListBranchProtections", provider.ErrNotImplemented)
 }
 
 // GetBranchProtection implements provider.BranchProtectionManager.
