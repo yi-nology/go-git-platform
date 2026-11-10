@@ -488,6 +488,7 @@ func gitConfigPath(repoPath string) (string, bool) {
 	if _, err := os.Stat(cfg); err != nil {
 		return "", false
 	}
+	//nolint:gosec // G703: 路径由仓库自身布局推导（.git / gitfile gitdir / commondir），非调用方输入
 	return cfg, true
 }
 

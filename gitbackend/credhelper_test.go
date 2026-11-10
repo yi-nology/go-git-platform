@@ -121,7 +121,7 @@ func TestCredHelperScriptPassesUsernameAsOneArg(t *testing.T) {
 	}
 	defer s.close()
 
-	out, err := shCommand(t, s.helperPath, "get", "example.com").Output()
+	out, err := shHelperGet(t, s.helperPath, "example.com").Output()
 	if err != nil {
 		t.Fatalf("执行 helper 脚本失败: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestCredSession_HelperScriptsExecute(t *testing.T) {
 	}
 	defer s.close()
 
-	out, err := shCommand(t, s.helperPath, "get", "example.com").CombinedOutput()
+	out, err := shHelperGet(t, s.helperPath, "example.com").CombinedOutput()
 	if err != nil {
 		t.Fatalf("helper get: %v\n%s", err, out)
 	}
@@ -203,11 +203,11 @@ func TestCredSession_HelperScriptsExecute(t *testing.T) {
 	}
 }
 
-// shCommand 用 sh 执行 helper/askpass，并把 host= 喂进 stdin（credential
-// 协议的 get 请求体）。
-func shCommand(t *testing.T, script, action, host string) *exec.Cmd {
+// shHelperGet 用 sh 执行 helper 的 get 动作，并把 host= 喂进 stdin
+// （credential 协议的 get 请求体）。
+func shHelperGet(t *testing.T, script, host string) *exec.Cmd {
 	t.Helper()
-	cmd := exec.Command("sh", script, action)
+	cmd := exec.Command("sh", script, "get")
 	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
 	return cmd
 }
@@ -316,7 +316,7 @@ func TestCredSession_PasswordSurvivesShellExpansion(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer s.close()
-			out, err := shCommand(t, s.helperPath, "get", "example.com").Output()
+			out, err := shHelperGet(t, s.helperPath, "example.com").Output()
 			if err != nil {
 				t.Fatalf("helper get: %v\n%s", err, out)
 			}
@@ -348,7 +348,7 @@ func TestCredSession_HelperRefusesForeignHost(t *testing.T) {
 	defer s.close()
 
 	t.Run("matching host answers", func(t *testing.T) {
-		out, err := shCommand(t, s.helperPath, "get", "internal.example.com").Output()
+		out, err := shHelperGet(t, s.helperPath, "internal.example.com").Output()
 		if err != nil {
 			t.Fatalf("helper get: %v", err)
 		}
@@ -357,7 +357,7 @@ func TestCredSession_HelperRefusesForeignHost(t *testing.T) {
 		}
 	})
 	t.Run("foreign host gets empty response", func(t *testing.T) {
-		out, err := shCommand(t, s.helperPath, "get", "evil.example.com").Output()
+		out, err := shHelperGet(t, s.helperPath, "evil.example.com").Output()
 		if err != nil {
 			t.Fatalf("helper get: %v", err)
 		}
@@ -366,7 +366,7 @@ func TestCredSession_HelperRefusesForeignHost(t *testing.T) {
 		}
 	})
 	t.Run("case-insensitive host match", func(t *testing.T) {
-		out, err := shCommand(t, s.helperPath, "get", "INTERNAL.Example.COM").Output()
+		out, err := shHelperGet(t, s.helperPath, "INTERNAL.Example.COM").Output()
 		if err != nil {
 			t.Fatalf("helper get: %v", err)
 		}
@@ -391,7 +391,7 @@ func TestCredSession_HelperRefusesForeignHost(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer s2.close()
-		out, err := shCommand(t, s2.helperPath, "get", "internal.example.com").Output()
+		out, err := shHelperGet(t, s2.helperPath, "internal.example.com").Output()
 		if err != nil {
 			t.Fatalf("helper get: %v", err)
 		}

@@ -152,6 +152,7 @@ func (s *credSession) writeAskpassScript(tokenPath string) (string, error) {
 	b.WriteString("# 只应答白名单主机的 Username/Password 提示，其余静默退出。\n")
 	if len(s.hosts) == 0 {
 		b.WriteString("exit 0\n")
+		//nolint:gosec // G306: git 需要以 0700 可执行方式调用 askpass
 		if err := os.WriteFile(askPath, []byte(b.String()), 0o700); err != nil {
 			return "", err
 		}

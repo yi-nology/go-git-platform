@@ -24,6 +24,7 @@ func TestNative_IsAncestor_InvalidRefIsError(t *testing.T) {
 	commitFile(t, repo, "a.txt", "v2", "second")
 	tip := headHash(t, repo)
 
+	cur := currentBranch(t, repo) // CI 的 git init 默认分支可能是 master
 	cases := []struct {
 		name       string
 		ancestor   string
@@ -36,7 +37,7 @@ func TestNative_IsAncestor_InvalidRefIsError(t *testing.T) {
 		{"invalid ancestor ref", "no-such-ref", tip, false, true},
 		{"invalid descendant ref", base, "no-such-ref", false, true},
 		{"both invalid", "no-a", "no-b", false, true},
-		{"branch names instead of hashes", "main", "HEAD", true, false},
+		{"branch names instead of hashes", cur, "HEAD", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -244,8 +245,9 @@ func TestNative_Push_PushedRefsAreRefNames(t *testing.T) {
 	ctx := context.Background()
 	origin := bareOrigin(t)
 	repo := createTestRepo(t)
+	cur := currentBranch(t, repo) // CI 的 git init 默认分支可能是 master
 	gitOutput(t, repo, "remote", "add", "origin", origin)
-	gitOutput(t, repo, "push", "-q", "origin", "main")
+	gitOutput(t, repo, "push", "-q", "origin", cur)
 
 	// 新分支：旧行为 PushedRefs 为空
 	gitOutput(t, repo, "branch", "feature")
@@ -264,12 +266,12 @@ func TestNative_Push_PushedRefsAreRefNames(t *testing.T) {
 
 	// 更新已有分支
 	commitFile(t, repo, "b.txt", "two", "second")
-	res, err = b.Push(ctx, PushOptions{RepoPath: repo, Remote: "origin", RefSpecs: []string{"main"}})
+	res, err = b.Push(ctx, PushOptions{RepoPath: repo, Remote: "origin", RefSpecs: []string{cur}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.PushedRefs) != 1 || res.PushedRefs[0] != "main" {
-		t.Fatalf("PushedRefs = %+v, want [main]", res.PushedRefs)
+	if len(res.PushedRefs) != 1 || res.PushedRefs[0] != cur {
+		t.Fatalf("PushedRefs = %+v, want [%s]", res.PushedRefs, cur)
 	}
 
 	// 删除远端分支（refspec 无箭头行形态）
@@ -426,9 +428,10 @@ func TestNative_FetchAll_PerRemoteSessions(t *testing.T) {
 	origin := bareOrigin(t)
 	second := bareOrigin(t)
 	repo := createTestRepo(t)
+	cur := currentBranch(t, repo) // CI 的 git init 默认分支可能是 master
 	gitOutput(t, repo, "remote", "add", "origin", origin)
 	gitOutput(t, repo, "remote", "add", "second", second)
-	gitOutput(t, repo, "push", "-q", "origin", "main")
+	gitOutput(t, repo, "push", "-q", "origin", cur)
 	gitOutput(t, repo, "branch", "onsecond")
 	gitOutput(t, repo, "push", "-q", "second", "onsecond")
 
@@ -438,7 +441,7 @@ func TestNative_FetchAll_PerRemoteSessions(t *testing.T) {
 		t.Fatalf("FetchAll: %v", err)
 	}
 	remotes := gitOutput(t, repo, "branch", "-r", "--format=%(refname:short)")
-	if !strings.Contains(remotes, "origin/main") || !strings.Contains(remotes, "second/onsecond") {
+	if !strings.Contains(remotes, "origin/"+cur) || !strings.Contains(remotes, "second/onsecond") {
 		t.Fatalf("FetchAll must reach every remote, tracking refs:\n%s", remotes)
 	}
 }
