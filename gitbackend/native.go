@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -81,6 +83,33 @@ func checkGitArg(arg string) error {
 	return nil
 }
 
+// checkNameArg rejects a caller-supplied name or rev that begins with "-".
+// Git's option parser is interspersed, so a positional starting with "-" is
+// read as a flag and can flip the command's semantics: CreateBranch("-D", x)
+// deletes a branch, a tag "-d v1" deletes a tag, and a rev like
+// --output=file in the log/diff/show family writes files. Dash-prefixed refs
+// are legal per check-ref-format but ambiguous in argv, so they are refused
+// explicitly (ErrInvalidGitArg) instead of being silently reinterpreted;
+// where the subcommand supports it, argv also carries a `--` separator as a
+// second line of defense. Empty args are allowed (empty ref = HEAD on the
+// Create* APIs).
+func checkNameArg(op, arg string) error {
+	if strings.HasPrefix(arg, "-") {
+		return oekiterrors.Wrap(ErrInvalidGitArg, "positional argument would be parsed as a git flag; names/revs must not begin with '-'", "op", op, "arg", arg)
+	}
+	return nil
+}
+
+// checkNameArgs runs checkNameArg over a list of caller-supplied positionals.
+func checkNameArgs(op string, args ...string) error {
+	for _, arg := range args {
+		if err := checkNameArg(op, arg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // sanitizeGitArgs enforces the exec boundary of runGit:
 //
 //  1. any leading `-c` flags are accepted only as pairs whose value
@@ -147,8 +176,11 @@ func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args 
 		return "", "", pinErr
 	}
 	// configureAuth creates an ephemeral credential helper session for tokens;
-	// cleanup removes the temp token/script dir.
-	cleanupCred, cerr := b.configureAuth(cmd, pinAuth)
+	// cleanup removes the temp token/script dir. The helper only answers
+	// credential requests whose host was declared by this invocation
+	// (credentialHostsFor), so a token prepared for one host can never be
+	// handed to another.
+	cleanupCred, cerr := b.configureAuth(cmd, pinAuth, credentialHostsFor(args, repoPath))
 	defer cleanupKey()
 	defer cleanupPin()
 	defer cleanupCred()
@@ -212,8 +244,10 @@ func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
 // configureAuth 为 git 命令注入认证环境。
 // HTTPS 令牌走**临时 credential helper + ASKPASS**（gickup 模式）：
 // 令牌写入 0600 文件，git 进程只拿到 helper 路径，**argv/environ 均无令牌**。
+// hosts 是本次调用声明过的目标主机（见 credentialHostsFor）；helper/askpass
+// 只对白名单内的主机应答，令牌绝不发给未声明的主机。
 // 返回 cleanup：调用方在 git 命令结束后删除临时凭证目录。
-func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanup func(), err error) {
+func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig, hosts []string) (cleanup func(), err error) {
 	cleanup = func() {}
 	if cmd.Env == nil {
 		cmd.Env = cmd.Environ()
@@ -233,7 +267,7 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanu
 		if token == "" {
 			return cleanup, nil
 		}
-		sess, err := newCredSession(username, token)
+		sess, err := newCredSession(username, token, hosts)
 		if err != nil {
 			// **不再回退到 extraheader**:那条路把
 			// `GIT_CONFIG_VALUE_0=Authorization: Basic <base64>` 放进 **git 进程的
@@ -262,21 +296,269 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig) (cleanu
 
 // --- Output parsers ---
 
+// parsePushRefs 解析 `git push` 的输出，返回被远端成功更新的 ref 名。
+//
+// git push 的报告行形如（实测）：
+//
+//	To github.com:foo/bar.git            ← URL 行（可能内嵌凭据），忽略
+//	 * [new branch]      main -> main    ← 新建：dst 是「->」后的名字
+//	   abc123..def456    main -> main    ← 快进更新：同上
+//	 + def456...abc123   main -> main    ← 强推：同上
+//	 * [new tag]         v1 -> v1        ← 新标签：同上
+//	 - [deleted]         other           ← 删除：无「->」，ref 是末字段
+//	 ! [rejected]        main -> main (…)/[remote rejected] ← 失败：排除
+//
+// 旧实现把含 ":"/".." 的字段全收——URL（含内嵌凭据）与 old..new 区间都进了
+// 结果，而 `* [new branch]`/`- [deleted]` 行完全丢失（issue #107）。
 func parsePushRefs(output string) []string {
 	var refs []string
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "To ") || strings.Contains(line, "..") {
-			if strings.Contains(line, " ") {
-				for _, p := range strings.Fields(line) {
-					if strings.Contains(p, ":") || strings.Contains(p, "..") {
-						refs = append(refs, p)
-					}
-				}
+		switch {
+		case strings.HasPrefix(line, "! "):
+			// rejected/remote rejected/remote failure——未推送成功
+			continue
+		case strings.Contains(line, "->"):
+			fields := strings.Fields(line)
+			// dst 是最后一个字段（"src -> dst" 之后无后缀；rejected 行已在上面排除）
+			refs = append(refs, fields[len(fields)-1])
+		case strings.Contains(line, "[deleted]"):
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				refs = append(refs, fields[len(fields)-1])
 			}
 		}
 	}
 	return refs
+}
+
+// pushedRefsFromRefSpecs 把请求的 refspecs 归一成与 parsePushRefs 相同的口径
+// （git push 报告的 dst 短名），供 gogit 后端（拿不到逐 ref 报告）与 native
+// 的解析失败回填共用。refspec 形态："[+]src[:dst]"——无 dst 时推到同名 ref；
+// 通配 refspec（含 *）无法归一，保留 dst 原样。
+func pushedRefsFromRefSpecs(specs []string) []string {
+	refs := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		spec = strings.TrimPrefix(spec, "+")
+		dst := spec
+		if src, after, ok := strings.Cut(spec, ":"); ok {
+			if after == "" {
+				// "src:"（dst 空）＝推到同名 ref
+				dst = src
+			} else {
+				dst = after
+			}
+		}
+		switch {
+		case strings.Contains(dst, "*"):
+			// 通配 refspec 归一不出短名，保留全名
+		default:
+			dst = strings.TrimPrefix(dst, "refs/heads/")
+			dst = strings.TrimPrefix(dst, "refs/tags/")
+		}
+		refs = append(refs, dst)
+	}
+	return refs
+}
+
+// --- Credential host pinning ---
+
+// credentialHostsFor 推导一次 git 调用可能合法认证的目标主机集合：
+//   - argv 里 URL 形态的参数（clone <url> / fetch <url> / ls-remote <url>…）；
+//   - argv 里第一个非 flag 位置参数按 remote 名在本仓 config 中解析出的
+//     URL（`git fetch origin` 这类调用只带名字，主机只存在于 .git/config）；
+//   - argv 完全不含位置参数（如裸 `git push` 走上游追踪）时，回退为全部
+//     已配置 remote 的主机——它们都在本仓 config 里声明过。
+//
+// 推导是 best-effort：结果为空时凭证会话对一切主机静默拒绝（fail-closed，
+// 宁可认证失败也不把令牌发给未知主机）。
+func credentialHostsFor(args []string, repoPath string) []string {
+	var hosts []string
+	seen := make(map[string]bool)
+	add := func(h string) {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h != "" && !seen[h] {
+			seen[h] = true
+			hosts = append(hosts, h)
+		}
+	}
+
+	remoteURLs := repoRemoteURLs(repoPath)
+
+	candidate := ""
+	sawPositional := false
+	for i, arg := range args {
+		if i == 0 {
+			continue // args[0] 是子命令
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		// 任何非 flag 位置参数（含 URL 本身）都算「已声明目标」，
+		// 不再触发全部 remote 的回退
+		sawPositional = true
+		if h, ok := hostOfURL(arg); ok {
+			add(h)
+			continue
+		}
+		if candidate == "" {
+			candidate = arg
+		}
+	}
+
+	if sawPositional {
+		if urls, ok := remoteURLs[candidate]; ok {
+			for _, u := range urls {
+				if h, ok := hostOfURL(u); ok {
+					add(h)
+				}
+			}
+		}
+	} else {
+		for _, urls := range remoteURLs {
+			for _, u := range urls {
+				if h, ok := hostOfURL(u); ok {
+					add(h)
+				}
+			}
+		}
+	}
+	return hosts
+}
+
+// repoRemoteURLs 从仓库 config 读取 remote 名 → URL 列表。只做尽力而为的
+// 文本解析（config 是唯一存放 remote 定义的地方，子命令执行会造成
+// runGit→configureAuth→runGit 的递归面）；读不到时返回空——凭证会话按
+// fail-closed 处理。远程定义存于 common dir（worktree/submodule 的
+// <gitdir>/commondir 指回主仓）。
+func repoRemoteURLs(repoPath string) map[string][]string {
+	cfgPath, ok := gitConfigPath(repoPath)
+	if !ok {
+		return nil
+	}
+	data, err := os.ReadFile(cfgPath) //nolint:gosec // 路径由仓库布局推导，非调用方输入
+	if err != nil {
+		return nil
+	}
+	return parseRemoteURLs(string(data))
+}
+
+// gitConfigPath 定位工作树对应的 git config 文件：
+//   - repoPath/.git 是目录 → 其下 config；
+//   - repoPath/.git 是文件（gitfile：worktree/submodule）→ "gitdir: <path>"
+//     指向的 gitdir（存在 commondir 时再跳到 common dir）下的 config。
+func gitConfigPath(repoPath string) (string, bool) {
+	if repoPath == "" {
+		return "", false
+	}
+	dotGit := filepath.Join(repoPath, ".git")
+	st, err := os.Stat(dotGit)
+	if err != nil {
+		return "", false
+	}
+	gitDir := ""
+	if st.IsDir() {
+		gitDir = dotGit
+	} else {
+		data, err := os.ReadFile(dotGit) //nolint:gosec // 同上
+		if err != nil {
+			return "", false
+		}
+		line := strings.TrimSpace(string(data))
+		rest, ok := strings.CutPrefix(line, "gitdir:")
+		if !ok {
+			return "", false
+		}
+		gitDir = strings.TrimSpace(rest)
+		if !filepath.IsAbs(gitDir) {
+			gitDir = filepath.Join(repoPath, gitDir)
+		}
+		// linked worktree/submodule：remote 定义在 common dir
+		if common, err := os.ReadFile(filepath.Join(gitDir, "commondir")); err == nil { //nolint:gosec // 同上
+			c := strings.TrimSpace(string(common))
+			if c != "" {
+				if !filepath.IsAbs(c) {
+					c = filepath.Join(gitDir, c)
+				}
+				gitDir = c
+			}
+		}
+	}
+	cfg := filepath.Join(gitDir, "config")
+	if _, err := os.Stat(cfg); err != nil {
+		return "", false
+	}
+	return cfg, true
+}
+
+// parseRemoteURLs 从 git config 文本里提取 [remote "<name>"] 节的 url /
+// pushurl 值。只识别节头与这两个键；值两侧的引号剥掉。
+func parseRemoteURLs(content string) map[string][]string {
+	result := make(map[string][]string)
+	section := ""
+	for line := range strings.SplitSeq(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			header := strings.TrimSpace(line[1 : len(line)-1])
+			if name, ok := strings.CutPrefix(header, "remote "); ok {
+				name = strings.TrimSpace(name)
+				// [remote "origin"] — 剥 name 两侧的引号
+				name = strings.Trim(name, `"`)
+				section = "remote:" + name
+			} else {
+				section = ""
+			}
+			continue
+		}
+		if section == "" {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		if key != "url" && key != "pushurl" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"`)
+		name := strings.TrimPrefix(section, "remote:")
+		result[name] = append(result[name], value)
+	}
+	return result
+}
+
+// hostOfURL 从 git 远端 URL 提取小写主机名。支持 scheme:// 形态（https/ssh/
+// git…）与 scp 形态（git@host:path、host:path）。非 URL 返回 false。
+func hostOfURL(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "-") {
+		return "", false
+	}
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return strings.ToLower(u.Host), true
+	}
+	// scp 形态：[user@]host:path（首段不含 / 且含 :，且不像盘符 C:\…）
+	if before, _, ok := strings.Cut(raw, ":"); ok &&
+		!strings.Contains(before, "/") && !strings.HasPrefix(before, ".") &&
+		len(before) > 1 && !isWindowsDrive(before) {
+		host := before
+		if at := strings.LastIndexByte(host, '@'); at >= 0 {
+			host = host[at+1:]
+		}
+		if host != "" {
+			return strings.ToLower(host), true
+		}
+	}
+	return "", false
+}
+
+func isWindowsDrive(s string) bool {
+	return len(s) == 2 && s[1] == ':' && ((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z'))
 }
 
 func isText(data []byte) bool {

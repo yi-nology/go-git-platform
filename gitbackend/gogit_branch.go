@@ -297,53 +297,72 @@ func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, 
 		return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", err)
 	}
 
-	branchCommit, err := repo.CommitObject(branchRef.Hash())
+	ahead, behind, err := aheadBehindOf(repo, branchRef.Hash(), upstreamRef.Hash())
 	if err != nil {
 		return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", err)
 	}
-	upstreamCommit, err := repo.CommitObject(upstreamRef.Hash())
+	return ahead, behind, nil
+}
+
+// aheadBehindOf 统计两个提交各自独有的提交数（ahead = a 侧独有，behind =
+// b 侧独有），等价 git 的 `rev-list --left-right --count A...B`。
+// GetBranchSyncInfo 与 GetStatus（issue #102）共用这一个计数实现，
+// 保证两处的口径永不漂移。
+func aheadBehindOf(repo *git.Repository, aHash, bHash plumbing.Hash) (int, int, error) {
+	aCommit, err := repo.CommitObject(aHash)
 	if err != nil {
-		return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", err)
+		return 0, 0, err
+	}
+	bCommit, err := repo.CommitObject(bHash)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	bases, err := branchCommit.MergeBase(upstreamCommit)
-	if err != nil || len(bases) == 0 {
+	bases, err := aCommit.MergeBase(bCommit)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(bases) == 0 {
 		// **无共同祖先**(历史被改写/强推过):不能返回 (0,0)。
 		// git 的 `rev-list --left-right --count A...B` 在这种情形下仍会给出
 		// 两侧各自的提交数;返回 (0,0) 会让上层(漂移检测 / 同步状态)
 		// **误判成"已同步"** —— 目标仓被别人强推改写历史后,漂移就再也检测不到。
-		ahead, behind, cerr := countUnrelatedCommits(repo, branchCommit, upstreamCommit)
-		if cerr != nil {
-			return 0, 0, newGitError("GetBranchSyncInfo", repoPath, "", cerr)
-		}
-		return ahead, behind, nil
+		return countUnrelatedCommits(repo, aCommit, bCommit)
 	}
 	baseHash := bases[0].Hash
 
 	ahead := 0
-	iter, _ := repo.Log(&git.LogOptions{From: branchRef.Hash()})
-	if iter != nil {
-		_ = iter.ForEach(func(c *object.Commit) error {
-			if c.Hash == baseHash {
-				return io.EOF
-			}
-			ahead++
-			return nil
-		})
-		iter.Close()
+	iter, err := repo.Log(&git.LogOptions{From: aHash})
+	if err != nil {
+		return 0, 0, err
+	}
+	err = iter.ForEach(func(c *object.Commit) error {
+		if c.Hash == baseHash {
+			return io.EOF
+		}
+		ahead++
+		return nil
+	})
+	iter.Close()
+	if err != nil && err != io.EOF {
+		return 0, 0, err
 	}
 
 	behind := 0
-	iter2, _ := repo.Log(&git.LogOptions{From: upstreamRef.Hash()})
-	if iter2 != nil {
-		_ = iter2.ForEach(func(c *object.Commit) error {
-			if c.Hash == baseHash {
-				return io.EOF
-			}
-			behind++
-			return nil
-		})
-		iter2.Close()
+	iter2, err := repo.Log(&git.LogOptions{From: bHash})
+	if err != nil {
+		return 0, 0, err
+	}
+	err = iter2.ForEach(func(c *object.Commit) error {
+		if c.Hash == baseHash {
+			return io.EOF
+		}
+		behind++
+		return nil
+	})
+	iter2.Close()
+	if err != nil && err != io.EOF {
+		return 0, 0, err
 	}
 
 	return ahead, behind, nil

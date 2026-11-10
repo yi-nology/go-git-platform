@@ -15,6 +15,9 @@ func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*Fetch
 	if remote == "" {
 		remote = "origin"
 	}
+	if err := checkNameArg("Fetch", remote); err != nil {
+		return nil, err
+	}
 
 	// Snapshot the refs a fetch can move before running it, so the result can
 	// be derived from a before/after diff exactly like the gogit backend.
@@ -121,6 +124,12 @@ func (b *NativeGitBackend) snapshotFetchRefs(ctx context.Context, repoPath, remo
 }
 
 func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error) {
+	if err := checkNameArg("Push", opts.Remote); err != nil {
+		return nil, err
+	}
+	if err := checkNameArgs("Push", opts.RefSpecs...); err != nil {
+		return nil, err
+	}
 	args := []string{"push", opts.Remote}
 	if opts.Force {
 		args = append(args, "--force")
@@ -136,10 +145,21 @@ func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushRes
 	if err != nil {
 		return nil, newGitError("Push", opts.RepoPath, stderr, err)
 	}
-	return &PushResult{PushedRefs: parsePushRefs(stdout + stderr)}, nil
+	out := stdout + stderr
+	pushed := parsePushRefs(out)
+	// 解析不出任何 ref 且远端确实更新了（非 up-to-date）时，回填请求的
+	// refspecs（归一成 dst 短名，与解析口径一致）
+	if len(pushed) == 0 && !strings.Contains(out, "Everything up-to-date") &&
+		len(opts.RefSpecs) > 0 && !opts.Mirror {
+		pushed = pushedRefsFromRefSpecs(opts.RefSpecs)
+	}
+	return &PushResult{PushedRefs: pushed}, nil
 }
 
 func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
+	if err := checkNameArgs("Clone", opts.URL, opts.Path); err != nil {
+		return err
+	}
 	args := []string{"clone"}
 	if opts.Branch != "" {
 		args = append(args, "--branch", opts.Branch)
@@ -181,17 +201,28 @@ func (b *NativeGitBackend) Init(ctx context.Context, repoPath string) error {
 // --- Extended core operations ---
 
 func (b *NativeGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error {
-	// One full fetch across all configured remotes: git itself walks the
-	// remotes in a single subprocess (no per-branch round trips) and --prune
-	// keeps remote-tracking refs aligned so deletions surface.
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"fetch", "--all", "--tags", "--prune"}, auth)
+	// 逐 remote 单独 fetch（`git fetch --all` 的内部语义就是按序遍历），
+	// 而不是单条 `git fetch --all`：后者一次调用会向多个 remote 各自的
+	// 主机请求凭据，而凭证会话只能钉一个信任域——多 remote 混合信任域时
+	// 为 A 准备的令牌会被发给 B（issue #106）。逐 remote 调用让每次的
+	// credentialHostsFor 都能解析出当前 remote 自己的主机。
+	remotes, err := b.GetRemotes(ctx, repoPath)
 	if err != nil {
-		return newGitError("FetchAll", repoPath, stderr, err)
+		return err
+	}
+	for _, remote := range remotes {
+		_, stderr, err := b.runGit(ctx, repoPath, []string{"fetch", "--prune", "--tags", remote}, auth)
+		if err != nil {
+			return newGitError("FetchAll", repoPath, stderr, err)
+		}
 	}
 	return nil
 }
 
 func (b *NativeGitBackend) Pull(ctx context.Context, repoPath, remote, branch string, auth AuthConfig) error {
+	if err := checkNameArgs("Pull", remote, branch); err != nil {
+		return err
+	}
 	args := []string{"pull", remote}
 	if branch != "" {
 		args = append(args, branch)
@@ -208,6 +239,9 @@ func (b *NativeGitBackend) RunRaw(ctx context.Context, repoPath string, args []s
 }
 
 func (b *NativeGitBackend) TestConnection(ctx context.Context, url string, auth AuthConfig) error {
+	if err := checkNameArg("TestConnection", url); err != nil {
+		return err
+	}
 	_, stderr, err := b.runGit(ctx, "", []string{"ls-remote", "--heads", url}, auth)
 	if err != nil {
 		return newGitError("TestConnection", "", stderr, err)

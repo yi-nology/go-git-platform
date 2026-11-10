@@ -293,9 +293,10 @@ func TestNative_DiffStatusAndRevisionQueries(t *testing.T) {
 }
 
 func TestNativeOutputParsers(t *testing.T) {
+	// PushedRefs 是 ref 名（push 报告的 dst），不是 URL 与 old..new 区间
 	pushed := parsePushRefs("To /repo\n   abc123..def456  main -> main")
-	if len(pushed) != 1 || !strings.Contains(pushed[0], "..") {
-		t.Errorf("parsePushRefs: got %v", pushed)
+	if len(pushed) != 1 || pushed[0] != "main" {
+		t.Errorf("parsePushRefs: got %v, want [main]", pushed)
 	}
 	if got := parsePushRefs("nothing to do"); len(got) != 0 {
 		t.Errorf("parsePushRefs(no-op): got %v", got)

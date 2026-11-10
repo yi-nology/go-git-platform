@@ -40,6 +40,8 @@ type BranchOps interface {
 	// ListBranches lists both local and remote branches with extended details.
 	ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error)
 	// CreateBranch creates a branch pointing at ref (or HEAD when empty).
+	// branch and ref are positional git arguments: a leading '-' is rejected
+	// with ErrInvalidGitArg instead of being reinterpreted as a git flag.
 	CreateBranch(ctx context.Context, repoPath string, branch string, ref string) error
 	// DeleteBranch deletes a local branch.
 	DeleteBranch(ctx context.Context, repoPath string, branch string) error
@@ -57,8 +59,12 @@ type BranchOps interface {
 type StatusDiffOps interface {
 	// GetStatus returns the working tree status.
 	GetStatus(ctx context.Context, repoPath string) (*RepoStatus, error)
-	// Diff returns a textual diff. With empty From/To it diffs the working tree
-	// against HEAD; otherwise it diffs the two commits.
+	// Diff returns a textual unified diff. With empty From/To it diffs the
+	// working tree against HEAD (staged and unstaged changes both visible,
+	// `git diff HEAD` semantics on both backends); with both set it diffs the
+	// two commits. Giving only one of From/To is an error. From/To are
+	// positional git arguments: a leading '-' is rejected with
+	// ErrInvalidGitArg instead of being reinterpreted as a git flag.
 	Diff(ctx context.Context, repoPath string, opts DiffOptions) (string, error)
 }
 
@@ -96,7 +102,9 @@ type RemoteOps interface {
 
 // TagOps covers tag creation, deletion, listing, and pushing.
 type TagOps interface {
-	// CreateTag creates a tag pointing at ref (or HEAD when empty).
+	// CreateTag creates a tag pointing at ref (or HEAD when empty). name and
+	// ref are positional git arguments: a leading '-' is rejected with
+	// ErrInvalidGitArg instead of being reinterpreted as a git flag.
 	CreateTag(ctx context.Context, repoPath string, name string, ref string) error
 	// DeleteTag deletes a local tag.
 	DeleteTag(ctx context.Context, repoPath string, name string) error
@@ -109,6 +117,8 @@ type TagOps interface {
 // FileOps covers reading files, trees, and blobs at arbitrary revisions.
 type FileOps interface {
 	// GetFileAtRevision returns the raw bytes of path at the given ref.
+	// ref may be any revision (branch, tag, short/full hash, HEAD); an empty
+	// ref means HEAD — the committed content, not the staged index copy.
 	GetFileAtRevision(ctx context.Context, repoPath string, path string, ref string) ([]byte, error)
 	// GetFileHistory returns commits that touched path (most recent first),
 	// limited to limit entries (0 means all).

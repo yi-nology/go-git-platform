@@ -8,7 +8,10 @@ import (
 // --- Remote operations ---
 
 func (b *NativeGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "add", name, url}, AuthConfig{})
+	if err := checkNameArgs("AddRemote", name, url); err != nil {
+		return err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "add", "--", name, url}, AuthConfig{})
 	if err != nil {
 		return newGitError("AddRemote", repoPath, stderr, err)
 	}
@@ -16,7 +19,10 @@ func (b *NativeGitBackend) AddRemote(ctx context.Context, repoPath, name, url st
 }
 
 func (b *NativeGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "remove", name}, AuthConfig{})
+	if err := checkNameArg("RemoveRemote", name); err != nil {
+		return err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "remove", "--", name}, AuthConfig{})
 	if err != nil {
 		return newGitError("RemoveRemote", repoPath, stderr, err)
 	}
@@ -24,7 +30,10 @@ func (b *NativeGitBackend) RemoveRemote(ctx context.Context, repoPath, name stri
 }
 
 func (b *NativeGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error) {
-	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "get-url", name}, AuthConfig{})
+	if err := checkNameArg("GetRemoteURL", name); err != nil {
+		return "", err
+	}
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "get-url", "--", name}, AuthConfig{})
 	if err != nil {
 		return "", newGitError("GetRemoteURL", repoPath, stderr, err)
 	}
@@ -49,7 +58,12 @@ func (b *NativeGitBackend) GetRemotes(ctx context.Context, repoPath string) ([]s
 // --- Tag operations ---
 
 func (b *NativeGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string) error {
-	args := []string{"tag", name}
+	if err := checkNameArgs("CreateTag", name, ref); err != nil {
+		return err
+	}
+	// `--` 让 name/ref 按位置解析：name="-d"/ref="-f" 旧实现会反转成
+	// 删/改语义（issue #109）
+	args := []string{"tag", "--", name}
 	if ref != "" {
 		args = append(args, ref)
 	}
@@ -64,7 +78,10 @@ func (b *NativeGitBackend) CreateTag(ctx context.Context, repoPath, name, ref st
 }
 
 func (b *NativeGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error {
-	_, stderr, err := b.runGit(ctx, repoPath, []string{"tag", "-d", name}, AuthConfig{})
+	if err := checkNameArg("DeleteTag", name); err != nil {
+		return err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{"tag", "-d", "--", name}, AuthConfig{})
 	if err != nil {
 		return newGitError("DeleteTag", repoPath, stderr, err)
 	}
@@ -72,6 +89,10 @@ func (b *NativeGitBackend) DeleteTag(ctx context.Context, repoPath, name string)
 }
 
 func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error {
+	// refspec 带 refs/tags/ 前缀不会被解析成 flag，remote 校验即可
+	if err := checkNameArg("PushTag", remote); err != nil {
+		return err
+	}
 	_, stderr, err := b.runGit(ctx, repoPath, []string{"push", remote, "refs/tags/" + name}, auth)
 	if err != nil {
 		return newGitError("PushTag", repoPath, stderr, err)
@@ -80,34 +101,32 @@ func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name s
 }
 
 func (b *NativeGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error) {
-	// 字段分隔用 TAB，subject 置于末位：标签消息是任意文本，含分隔符时
-	// 由 SplitN 的最后一个分段整体吸收（for-each-ref 类 format 不支持
-	// %x00，argv 也无法内嵌 NUL，TAB 是能做到的最强分隔）。
+	// 记录以 %00（NUL）开头、字段 NUL 分隔、记录之间是 for-each-ref 默认
+	// 插入的 "\n"（落在末位 %(contents) 里，随其尾部换行一起 TrimRight）。
+	// for-each-ref 的 %xx 转义支持内嵌 NUL（git for-each-ref(1)：
+	// "%xx where xx are hex digits"），旧实现「不支持 %x00」的注释弄混了
+	// 语法（%x00 四位形态确实不存在，%00 两位十六进制形态可用）。
+	// %(contents) 是完整消息（annotated = tag 消息全文，lightweight =
+	// commit 消息全文）——旧实现 %(subject) 只有主题行，与 gogit 后端
+	// 的全文口径分裂（issue #103）。消息置于记录末位，任意文本整体吸收。
 	// Author 字段：annotated tag 的身份在 tagger（%(authorname) 恒空），
-	// lightweight tag 在 commit author——条件格式取先命中者（旧实现
-	// 对 annotated tag 的 Author 恒为空串，属顺带修复）。
+	// lightweight tag 在 commit author——条件格式取先命中者。
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
-		"tag", "-l", "--format=%(refname:short)\t%(objectname)\t%(if)%(taggername)%(then)%(taggername)%(else)%(authorname)%(end)\t%(subject)",
+		"for-each-ref", "--format=%00%(refname:short)%00%(objectname)%00%(if)%(taggername)%(then)%(taggername)%(else)%(authorname)%(end)%00%(contents)",
+		"refs/tags/",
 	}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("GetTagList", repoPath, stderr, err)
 	}
 
+	fields := strings.Split(stdout, "\x00")
 	var tags []TagInfo
-	for _, line := range strings.Split(stdout, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 4)
-		if len(parts) < 4 {
-			continue
-		}
+	for i := 1; i+3 < len(fields); i += 4 {
 		tags = append(tags, TagInfo{
-			Name:    parts[0],
-			Hash:    parts[1],
-			Author:  parts[2],
-			Message: parts[3],
+			Name:    fields[i],
+			Hash:    fields[i+1],
+			Author:  fields[i+2],
+			Message: strings.TrimRight(fields[i+3], "\n"),
 		})
 	}
 	return tags, nil

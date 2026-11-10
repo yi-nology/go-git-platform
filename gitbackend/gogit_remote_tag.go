@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -163,11 +164,12 @@ func (b *GoGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagIn
 	err = iter.ForEach(func(ref *plumbing.Reference) error {
 		tagObj, tagErr := repo.TagObject(ref.Hash())
 		if tagErr == nil {
-			// Annotated Tag
+			// Annotated Tag。Message 口径与 native GetTagList 的 %(contents)
+			// 一致：完整消息、尾部换行归一（issue #103）
 			tags = append(tags, TagInfo{
 				Name:    ref.Name().Short(),
 				Hash:    ref.Hash().String(),
-				Message: tagObj.Message,
+				Message: strings.TrimRight(tagObj.Message, "\n"),
 				Author:  tagObj.Tagger.Name,
 			})
 		} else {
@@ -177,7 +179,7 @@ func (b *GoGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagIn
 				tags = append(tags, TagInfo{
 					Name:    ref.Name().Short(),
 					Hash:    ref.Hash().String(),
-					Message: commit.Message,
+					Message: strings.TrimRight(commit.Message, "\n"),
 					Author:  commit.Author.Name,
 				})
 			}
