@@ -38,9 +38,13 @@ type ListPullReviewsOptions struct {
 	ListOptions ListOptions
 }
 
-// PullReviewRequestOptions mirrors the family's review-request body.
+// PullReviewRequestOptions mirrors the family's review-request body. Both
+// channels exist on the family wire (user reviewers and team reviewers are
+// independent fields), so RequestTeamReviewers rides the same port method
+// (issue #79).
 type PullReviewRequestOptions struct {
-	Reviewers []string
+	Reviewers     []string
+	TeamReviewers []string
 }
 
 // DismissPullReviewOptions mirrors the family's review-dismissal body.
@@ -152,6 +156,21 @@ func RequestReviewers(ctx context.Context, f Family, c ReviewPort, owner, repo, 
 	}
 	if err := c.CreateReviewRequests(ctx, owner, repo, n, PullReviewRequestOptions{Reviewers: reviewers}); err != nil {
 		return provider.Wrap(f.Platform, "RequestReviewers", err)
+	}
+	return nil
+}
+
+// RequestTeamReviewers requests review from the given teams (issue #79).
+// The unified ReviewManager carries user logins only; teams ride the same
+// review-request endpoint's team_reviewers channel, additive to any user
+// review requests.
+func RequestTeamReviewers(ctx context.Context, f Family, c ReviewPort, owner, repo, number string, teams []string) error {
+	n, err := backendutil.ParsePRNumber64(f.Platform, "RequestTeamReviewers", number)
+	if err != nil {
+		return err
+	}
+	if err := c.CreateReviewRequests(ctx, owner, repo, n, PullReviewRequestOptions{TeamReviewers: teams}); err != nil {
+		return provider.Wrap(f.Platform, "RequestTeamReviewers", err)
 	}
 	return nil
 }
@@ -349,10 +368,10 @@ func DeleteNote(ctx context.Context, f Family, c DiffPort, owner, repo, number, 
 	}
 	status, err := c.DeleteIssueComment(ctx, owner, repo, id)
 	if err != nil {
-		if status == 404 {
+		if provider.IsNotFound(familyError(f, "DeleteNote", status, err)) {
 			return nil
 		}
-		return provider.Wrap(f.Platform, "DeleteNote", err)
+		return familyError(f, "DeleteNote", status, err)
 	}
 	return nil
 }
@@ -407,10 +426,7 @@ type FilePort interface {
 func GetFileContent(ctx context.Context, f Family, c FilePort, owner, repo, path, ref string) (string, error) {
 	data, status, err := c.GetFile(ctx, owner, repo, ref, path)
 	if err != nil {
-		if status == 404 {
-			return "", provider.New(f.Platform, "GetFileContent", 404, err.Error())
-		}
-		return "", provider.Wrap(f.Platform, "GetFileContent", err)
+		return "", familyError(f, "GetFileContent", status, err)
 	}
 	return string(data), nil
 }
@@ -548,10 +564,7 @@ func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepo
 func GetRepo(ctx context.Context, f Family, c RepoPort, owner, repo string) (*provider.PlatformRepo, error) {
 	r, status, err := c.GetRepo(ctx, owner, repo)
 	if err != nil {
-		if status == 404 {
-			return nil, provider.Wrap(f.Platform, "GetRepo", provider.New(f.Platform, "GetRepo", 404, err.Error()))
-		}
-		return nil, provider.Wrap(f.Platform, "GetRepo", err)
+		return nil, familyError(f, "GetRepo", status, err)
 	}
 	return ConvertRepo(r, f.Platform), nil
 }

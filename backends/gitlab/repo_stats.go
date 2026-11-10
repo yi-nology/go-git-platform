@@ -30,7 +30,7 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 // GitLab does not expose a stargazers list endpoint equivalent to
 // GitHub's; this method always returns ErrNotImplemented.
 func (p *Provider) ListStargazers(_ context.Context, _, _ string) ([]*provider.CRUser, error) {
-	return nil, provider.Wrapf(provider.PlatformGitLab, "ListStargazers", "not supported on this platform")
+	return nil, provider.Wrap(provider.PlatformGitLab, "ListStargazers", provider.ErrNotImplemented)
 }
 
 // ListContributors implements provider.RepoStatsManager.

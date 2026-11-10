@@ -141,10 +141,7 @@ func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.Crea
 func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
 	hook, status, err := c.GetRepoHook(ctx, owner, repo, webhookID)
 	if err != nil {
-		if status == 404 {
-			return nil, provider.New(f.Platform, "GetWebhook", 404, err.Error())
-		}
-		return nil, provider.Wrap(f.Platform, "GetWebhook", err)
+		return nil, familyError(f, "GetWebhook", status, err)
 	}
 	return convertHook(hook), nil
 }

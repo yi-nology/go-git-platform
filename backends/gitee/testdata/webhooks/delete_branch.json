@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "X-Gitee-Event": "Push Hook"
+  },
+  "body": {
+    "ref": "refs/heads/feature",
+    "user": {
+      "id": 1,
+      "login": "dev",
+      "name": "Dev"
+    },
+    "repository": {
+      "full_name": "owner/repo"
+    },
+    "before": "def4567890abcdef4567890abcdef4567890abcd",
+    "after": "0000000000000000000000000000000000000000"
+  }
+}

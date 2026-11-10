@@ -117,6 +117,22 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 	return nil
 }
 
+// RequestTeamReviewers implements provider.TeamReviewManager (issue #79):
+// GitHub's review-request endpoint carries an independent team_reviewers
+// channel next to the user reviewers; the unified ReviewManager only
+// expresses the user half.
+func (p *Provider) RequestTeamReviewers(ctx context.Context, owner, repo, number string, teams []string) error {
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "RequestTeamReviewers", number)
+	if err != nil {
+		return err
+	}
+	req := github.ReviewersRequest{TeamReviewers: teams}
+	if _, _, err := p.client.PullRequests.RequestReviewers(ctx, owner, repo, n, req); err != nil {
+		return provider.Wrap(provider.PlatformGitHub, "RequestTeamReviewers", err)
+	}
+	return nil
+}
+
 // DismissReview implements provider.ReviewManager.
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "DismissReview", number)
@@ -165,4 +181,7 @@ func convertReview(r *github.PullRequestReview) provider.Review {
 	return review
 }
 
-var _ provider.ReviewManager = (*Provider)(nil)
+var (
+	_ provider.ReviewManager     = (*Provider)(nil)
+	_ provider.TeamReviewManager = (*Provider)(nil)
+)

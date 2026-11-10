@@ -5,20 +5,25 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"reflect"
+	"sync/atomic"
 	"time"
 
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // Manager caches Provider instances keyed by configuration so repeated
-// constructions of the same (platform, baseURL, token) reuse the underlying
-// HTTP client pools instead of leaking a fresh one per call.
+// constructions of the same (platform, baseURL, token, and every other
+// wire-affecting config field) reuse the underlying HTTP client pools
+// instead of leaking a fresh one per call.
 //
 // It automatically detects the platform from clone URLs and reuses existing
 // Provider instances within the TTL window. The cache key is derived from
-// platform + baseURL + a SHA-256 hash of the token, so different tokens map
-// to different entries without leaking the token itself in logs or memory
-// dumps.
+// the full Config: platform + baseURL + a SHA-256 hash of the token, plus
+// SkipTLS, TokenStyle, ConditionalRequests, the RetryConfig fingerprint and
+// the identity of TokenSource/Hooks/Logger — so differently configured
+// callers never share a provider (issue #66) and the token itself never
+// leaks into logs or memory dumps.
 //
 // The type is deliberately thin: the cache mechanics (TTL, LRU capacity
 // eviction, counters) live in ttlCache and the background-cleanup lifecycle
@@ -174,8 +179,78 @@ func (m *Manager) Stop() {
 // through the configured hasher (SHA-256 by default) so the raw token never
 // appears in the key. This avoids accidental leakage via logs, error
 // messages, or heap dumps.
+//
+// 键必须涵盖**全部影响 wire 行为的配置字段**(issue #66):此前只含
+// Platform/BaseURL/hash(Token)/SkipTLS,两个仅差 TokenSource 的 Config
+// 会命中同一个缓存 provider——旋转凭据的调用方拿到的 provider 用的是
+// **别的主体**的凭据源,静态 TokenStyle/ConditionalRequests/RetryConfig
+// 的差异也被静默抹平。各字段的键入口径:
+//
+//   - Token/SkipTLS/TokenStyle/ConditionalRequests:值语义,直接进键
+//     (Token 经 hasher);RetryConfig 同为值语义策略,按内容指纹进键,
+//     等值配置共享缓存是正确行为。
+//   - TokenSource/Hooks/Logger:指针语义(旋转凭据源、请求钩子、日志
+//     注入按身份生效)——指针形态取指针身份;可比较的值形态(如
+//     StaticTokenSource)取内容的 hasher 摘要(不落原文);不可比较的
+//     值形态无法判等,按调用次序发独立键(方向安全:宁可不命中,
+//     不可错命中)。
 func (m *Manager) buildKey(cfg Config) string {
 	// SkipTLS 参与 key:TLS 策略变化必须产生新 provider,
 	// 否则更新平台配置后仍命中旧缓存的严格 TLS client,直到重启才生效。
-	return fmt.Sprintf("%s:%s:%s:%t", cfg.Platform, cfg.BaseURL, m.hasher(cfg.Token), cfg.SkipTLS)
+	key := fmt.Sprintf("%s:%s:%s:%t", cfg.Platform, cfg.BaseURL, m.hasher(cfg.Token), cfg.SkipTLS)
+	if cfg.TokenStyle != "" {
+		key += ":style=" + cfg.TokenStyle
+	}
+	if cfg.ConditionalRequests {
+		key += ":etag=1"
+	}
+	if fp := retryConfigFingerprint(cfg.RetryConfig); fp != "" {
+		key += ":" + fp
+	}
+	for _, part := range []string{
+		identityPart(cfg.TokenSource, m.hasher),
+		identityPart(cfg.Hooks, m.hasher),
+		identityPart(cfg.Logger, m.hasher),
+	} {
+		if part != "" {
+			key += ":" + part
+		}
+	}
+	return key
+}
+
+// retryConfigFingerprint renders the retry policy's content as a compact
+// stable string; nil (retry disabled) yields "" so the key stays identical
+// to the historical no-retry form.
+func retryConfigFingerprint(cfg *RetryConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return fmt.Sprintf("retry=%d:%d:%d:%v", cfg.MaxRetries, cfg.BaseDelay, cfg.MaxDelay, cfg.RetryOn)
+}
+
+// identityPart keys a pointer-semantic config field by identity. Hasher is
+// the same one the token goes through, so a comparable value source (e.g.
+// StaticTokenSource, whose content embeds the credential) never lands in the
+// key as plaintext.
+var identitySeq atomic.Uint64
+
+func identityPart(v any, hasher func(string) string) string {
+	if v == nil {
+		return ""
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return fmt.Sprintf("%T@%p", v, rv.UnsafePointer())
+	default:
+		if rv.Comparable() {
+			// 值语义且可比较(StaticTokenSource 形态):等值共享缓存,
+			// 摘要走 token 同款 hasher,凭据不落键明文。
+			return fmt.Sprintf("%T#%s", v, hasher(fmt.Sprint(v)))
+		}
+		// 不可比较的值形态无法判等 ⇒ 每个值发独立键(方向安全:
+		// 宁可不命中,不可错命中)。
+		return fmt.Sprintf("%T@~%d", v, identitySeq.Add(1))
+	}
 }

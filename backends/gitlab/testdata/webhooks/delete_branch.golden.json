@@ -1,0 +1,21 @@
+{
+  "id": "",
+  "type": "branch.deleted",
+  "source": "gitlab",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "Dev",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "branch": "feature",
+  "action": "deleted",
+  "raw_payload": null
+}

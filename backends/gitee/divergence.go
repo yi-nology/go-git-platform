@@ -19,7 +19,7 @@ var divergences = []provider.Divergence{
 	{Capability: "ReleaseManager", Method: "CreateRelease", Field: "opts.Draft", Kind: provider.DivergenceIgnore,
 		Reason: "Gitee's release create wire takes no draft flag."},
 	{Capability: "CommitStatusManager", Method: "CreateCommitStatus", Field: "", Kind: provider.DivergenceMapping,
-		Reason: "Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral)."},
+		Reason: "Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name. Terminal verbs map to completed+conclusion (success/failure, unknown verbs to neutral); in-flight verbs (pending/running/unknown-in-flight) map to the in_progress form with no conclusion, so the read side normalizes them back to Pending/Running instead of inverting pending into Success (issue #58)."},
 	{Capability: "CommitStatusManager", Method: "ListCommitStatuses", Field: "", Kind: provider.DivergenceMapping,
 		Reason: "Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,

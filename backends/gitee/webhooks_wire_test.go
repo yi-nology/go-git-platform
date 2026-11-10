@@ -3,6 +3,7 @@ package gitee_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -105,5 +106,35 @@ func TestParseWebhookEvent_LegacyLowercaseKeys(t *testing.T) {
 	ne := contracttest.ParseSigned(t, p, r, "corpus-secret")
 	if ne.Type != "push" {
 		t.Fatalf("legacy key: type = %q, want push", ne.Type)
+	}
+}
+
+// TestParseWebhookEvent_BranchDeletionNormalized 分支删除归一（issue #67，
+// 同族 #47 的 push 案）：Gitee 家族没有独立 delete 事件，分支删除以
+// push + 全零 after 投递——此前一律归一成 push。
+func TestParseWebhookEvent_BranchDeletionNormalized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	mk := func(before, after string) *http.Request {
+		body := fmt.Sprintf(`{"ref":"refs/heads/feature","before":%q,"after":%q,"user":{"id":1,"login":"d"},"repository":{"full_name":"o/r"}}`, before, after)
+		r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+		r.Header.Set("X-Gitee-Event", "Push Hook")
+		r.Header.Set("Content-Type", "application/json")
+		return r
+	}
+
+	ne := contracttest.ParseSigned(t, p, mk("def4567890abcdef4567890abcdef4567890abcd", "0000000000000000000000000000000000000000"), "corpus-secret")
+	if ne.Type != "branch.deleted" || ne.Action != "deleted" || ne.Branch != "feature" {
+		t.Fatalf("删除投递必须归一 branch.deleted, got type=%q action=%q branch=%q", ne.Type, ne.Action, ne.Branch)
+	}
+	if ne.CommitSHA != "" {
+		t.Fatalf("删除投递不得携带全零标记作为 commit_sha, got %q", ne.CommitSHA)
+	}
+
+	ne = contracttest.ParseSigned(t, p, mk("def4567890abcdef4567890abcdef4567890abcd", "abc123"), "corpus-secret")
+	if ne.Type != "push" || ne.CommitSHA != "abc123" {
+		t.Fatalf("正常 push 不得误判为删除, got type=%q sha=%q", ne.Type, ne.CommitSHA)
 	}
 }
