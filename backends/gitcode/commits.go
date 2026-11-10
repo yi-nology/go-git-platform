@@ -24,6 +24,15 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	// Since/Until 先经共享解析器校验（issue #52）——malformed 报
+	// ErrInvalidInput，与其他后端同判；校验通过的值本平台无法下传
+	// （SDK 的 commit-list 选项不带时间过滤），按 divergence 台账登记。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+	}
+	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+	}
 	fetch := func(page, perPage int) ([]*gitcode.Commit, error) {
 		return p.client.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListCommitsOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},

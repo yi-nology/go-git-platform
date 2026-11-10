@@ -158,9 +158,24 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			ne.CommitSHA = e.GetPullRequest().GetHead().GetSHA()
 		}
 	case *github.PushEvent:
-		ne.Type = "push"
-		ne.Branch = strings.TrimPrefix(e.GetRef(), "refs/heads/")
-		ne.CommitSHA = e.GetAfter()
+		// tag push 归一（issue #76，同族 #47/#67）：ref 带 refs/tags/ 前缀时
+		// 归 tag.created 并填 Tag——对齐 gitee 的 tag_push 形态（forgejo/
+		// gitcode golden 同钉 tag.created）。旧实现一律产出 "push" 且
+		// TrimPrefix("refs/heads/") 不命中 ⇒ Branch 被污染成 "refs/tags/v1.0"
+		// 伪分支名、Tag 不填——按 tag.created 驱动的下游漏掉 GitHub 标签事件，
+		// 按分支过滤的下游被伪分支名污染。同文件 CreateEvent/DeleteEvent 的
+		// ref_type=tag 早已归 tag.created/tag.deleted，此处补齐一致。
+		if ref := e.GetRef(); strings.HasPrefix(ref, "refs/tags/") {
+			ne.Type = provider.EventTypeTag + "created"
+			ne.Action = "created"
+			ne.Tag = strings.TrimPrefix(ref, "refs/tags/")
+			// commit_sha 不带（与 create_tag、gitee tag_push 的 tag.created
+			// 形态一致——tag 事件的定位键是 Tag，不是 SHA）。
+		} else {
+			ne.Type = "push"
+			ne.Branch = strings.TrimPrefix(e.GetRef(), "refs/heads/")
+			ne.CommitSHA = e.GetAfter()
+		}
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
 			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())

@@ -130,6 +130,18 @@ func Wrap(platform Platform, op string, err error) error {
 		// StatusCode/*http.Response fields and error-message parsing are gone
 		// — see RegisterStatusExtractor).
 		if code, ok := statusExtractorFor(platform, cur); ok {
+			// SDK 限流判定（issue #50）：SDK 错误类型（go-github 的
+			// *RateLimitError/*AbuseRateLimitError 等）不实现 rateLimitedMarker，
+			// 裸状态分类会把恒 403 的主限流信号丢回 ErrForbidden。平台注册的
+			// ThrottleClassifier 在状态分类之前给出权威节流判定，恢复窗口
+			// （RetryAfter/ResetAt）一并复制——IsRateLimited/RateLimitRecovery
+			// 在 SDK 错误路上与 transport 错误路同样可用。
+			if ra, at, throttled := throttleClassifierFor(platform, cur); throttled {
+				pe.StatusCode = code
+				pe.Cause = fmt.Errorf("%w: %w", ErrRateLimited, err)
+				pe.RetryAfter, pe.ResetAt = ra, at
+				break
+			}
 			pe.StatusCode = code
 			pe.Cause = fmt.Errorf("%w: %w", classifyProviderStatus(code, cur), err)
 			copyRateLimitHints(pe, cur)
@@ -272,6 +284,46 @@ func statusExtractorFor(p Platform, err error) (int, bool) {
 	fn, _ := statusExtractors.Get(p)
 	if fn == nil {
 		return 0, false
+	}
+	return fn(err)
+}
+
+// ThrottleClassifier reports whether one of the platform's SDK error values
+// is an authoritative throttle verdict (issue #50), optionally carrying the
+// server-advised recovery window. It is the SDK-error-path counterpart of
+// rateLimitedMarker: SDK error types (go-github's *RateLimitError — always
+// HTTP 403 with the primary quota exhausted — and *AbuseRateLimitError for
+// secondary limits) implement neither StatusCode() int nor IsRateLimited(),
+// so Wrap's status classification alone would drop them into ErrForbidden.
+// retryAfter/resetAt mirror ProviderError's recovery fields (zero values
+// when the platform sent no hint).
+type ThrottleClassifier func(err error) (retryAfter time.Duration, resetAt time.Time, throttled bool)
+
+// throttleClassifiers maps each platform to its SDK throttle classifier,
+// backed by oekit container.SafeMap (same shape as statusExtractors).
+var throttleClassifiers = container.NewSafeMap[Platform, ThrottleClassifier]()
+
+// RegisterThrottleClassifier teaches Wrap which of the named platform's SDK
+// error values are throttle verdicts. Consulted per link of the chain Wrap
+// walks, before the bare-status classification, wherever a status extractor
+// produced a code. Backends register at init next to RegisterStatusExtractor;
+// a platform without a classifier keeps the status-only behavior. Panics on
+// duplicate registration (same convention as RegisterStatusExtractor).
+func RegisterThrottleClassifier(p Platform, fn ThrottleClassifier) {
+	if fn == nil {
+		panic("provider: RegisterThrottleClassifier with nil classifier")
+	}
+	if _, loaded := throttleClassifiers.GetOrSet(p, fn); loaded {
+		panic("provider: duplicate throttle classifier for " + string(p))
+	}
+}
+
+// throttleClassifierFor returns the platform's registered classifier's
+// verdict for err.
+func throttleClassifierFor(p Platform, err error) (time.Duration, time.Time, bool) {
+	fn, _ := throttleClassifiers.Get(p)
+	if fn == nil {
+		return 0, time.Time{}, false
 	}
 	return fn(err)
 }

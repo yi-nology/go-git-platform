@@ -52,6 +52,11 @@ type rawNotificationList struct {
 // platform's default page, violating the interface's "exhausting the
 // platform's pagination" contract.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
+	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
+	}
 	u := fmt.Sprintf("%s/notifications", p.baseURL)
 	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]rawNotification, error) {
@@ -70,6 +75,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // ListRepoNotifications implements provider.NotificationManager.
 // Same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "ListRepoNotifications", err)
+	}
 	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, backendutil.Esc(owner), backendutil.Esc(repo))
 	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]rawNotification, error) {

@@ -87,13 +87,23 @@ func ProjectList[T any](items []T, fields ...string) ([]map[string]any, error) {
 	return out, nil
 }
 
-// add folds one dotted path into the tree. Later paths never shrink
-// earlier ones: "head" followed by "head.ref" keeps all of head.
+// add folds one dotted path into the tree. The union is order-independent
+// (issue #53): "head" followed by "head.ref" keeps all of head, and the
+// mirrored order — "head.ref" followed by "head" — upgrades the nested
+// keepTree the narrower descendant built back into a whole-subtree leaf.
+// Earlier implementations kept the child tree in the leaf branch, silently
+// dropping the wider ancestor: the same field set projected differently
+// depending on the order an LLM-generated field list happened to come in.
 func (t keepTree) add(segs []string) {
 	cur := t
 	for i, seg := range segs {
 		if i == len(segs)-1 {
-			if _, exists := cur[seg]; !exists {
+			// Leaf branch. nil (absent): record the leaf; keepTree (an
+			// earlier NARROWER path built a subtree here): the wider
+			// ancestor absorbs it — union semantics (issue #53); true
+			// leaf: already keeps the whole subtree.
+			switch cur[seg].(type) {
+			case nil, keepTree:
 				cur[seg] = true
 			}
 			return

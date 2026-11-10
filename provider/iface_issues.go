@@ -8,6 +8,16 @@ import "context"
 // on numeric platforms parse with strconv.Atoi and fail with a wrapped
 // "invalid issue number" error.
 type IssueManager interface {
+	// ListIssues lists a repository's issues under the caller-paged
+	// pagination contract (issue #51 — see NormalizePageOpts, which anchors
+	// the SDK-wide Page semantics): opts.Page == 0 (the zero value, the
+	// default) serves the platform's FIRST page at the normalized page
+	// size — one request, no walk; opts.Page > 0 returns exactly that
+	// page; callers page through explicitly until a short page comes back.
+	// The int return is uniformly len(issues), the served rows' count —
+	// NOT a platform total. Callers that need the total should page until
+	// a short page and count, or read it off the platform's own headers
+	// via a raw client.
 	ListIssues(ctx context.Context, opts ListIssuesOptions) ([]*Issue, int, error)
 	GetIssue(ctx context.Context, owner, repo, number string) (*Issue, error)
 	CreateIssue(ctx context.Context, opts CreateIssueOptions) (*Issue, error)

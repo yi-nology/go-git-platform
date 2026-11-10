@@ -3,6 +3,8 @@ package gitlab
 import (
 	"context"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 
 	"github.com/yi-nology/go-git-platform/provider"
@@ -89,49 +91,56 @@ func (p *Provider) ListCRReactions(ctx context.Context, owner, repo, number stri
 	return convertAwardEmojis(emojis), nil
 }
 
+// --- note-level reactions: one shape, one verdict (issue #57) ---
+//
+// GitLab's award-emoji-on-note API (GET/POST/DELETE
+// /projects/:id/issues/:iid/notes/:note_id/award_emoji and the MR/PR
+// counterpart) addresses the reaction by the PARENT awardable (issue IID /
+// MR IID) plus the note ID. The provider interface addresses comments by
+// their platform ID alone, so the endpoint cannot be driven without an
+// interface change — a genuine platform-side capability gap, registered as
+// DivergenceStub entries in the backend ledger. All six note-level methods
+// fail with ErrNotImplemented and touch no wire: the previous mixed forms
+// ((nil, nil) silent-empty reads that were indistinguishable from "no
+// reactions", plus sentinel-less text errors on writes) left both escape
+// hatches — IsNotImplemented and IsNotFound — false at the same time.
+
 // ListIssueCommentReactions implements provider.ReactionManager.
-// On GitLab, issue comments are "notes" on the issue.
+// On GitLab, issue comments are "notes" on the issue; see the note-level
+// header comment for why this cannot be implemented on the current surface.
 func (p *Provider) ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	// GitLab's award-emoji-on-note API needs the parent issue IID as well
-	// as the note ID. The SDK's ReactionManager addresses comments by their
-	// platform ID alone, so we use the generic note endpoint via the
-	// discussions API. However, the AwardEmoji service requires the
-	// awardable ID (issue IID). Since we don't have the issue number here,
-	// we fall back to the raw API: GET /projects/:id/issues/:iid/notes/:note_id/award_emoji
-	// This is a known limitation — callers that need per-comment reactions
-	// on GitLab should use the raw client directly.
-	//
-	// For now, return an empty list with a nil error. A future iteration
-	// can accept the issue number as an additional parameter.
-	return nil, nil
+	return nil, provider.Wrap(provider.PlatformGitLab, "ListIssueCommentReactions",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent issue IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 // AddIssueCommentReaction implements provider.ReactionManager.
 func (p *Provider) AddIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
-	// Same limitation as ListIssueCommentReactions — GitLab requires the
-	// parent issue IID. See comment there.
-	return nil, provider.Wrapf(provider.PlatformGitLab, "AddIssueCommentReaction", "gitlab requires the parent issue number to manage note reactions; use the raw client directly")
+	return nil, provider.Wrap(provider.PlatformGitLab, "AddIssueCommentReaction",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent issue IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 // RemoveIssueCommentReaction implements provider.ReactionManager.
 func (p *Provider) RemoveIssueCommentReaction(ctx context.Context, owner, repo string, commentID, reactionID int64) error {
-	return provider.Wrapf(provider.PlatformGitLab, "RemoveIssueCommentReaction", "gitlab requires the parent issue number to manage note reactions; use the raw client directly")
+	return provider.Wrap(provider.PlatformGitLab, "RemoveIssueCommentReaction",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent issue IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 // ListCRCommentReactions implements provider.ReactionManager.
 func (p *Provider) ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
-	// Same limitation — GitLab requires the parent MR IID.
-	return nil, nil
+	return nil, provider.Wrap(provider.PlatformGitLab, "ListCRCommentReactions",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent MR IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 // AddCRCommentReaction implements provider.ReactionManager.
 func (p *Provider) AddCRCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
-	return nil, provider.Wrapf(provider.PlatformGitLab, "AddCRCommentReaction", "gitlab requires the parent MR number to manage note reactions; use the raw client directly")
+	return nil, provider.Wrap(provider.PlatformGitLab, "AddCRCommentReaction",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent MR IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 // RemoveCRCommentReaction implements provider.ReactionManager.
 func (p *Provider) RemoveCRCommentReaction(ctx context.Context, owner, repo string, commentID, reactionID int64) error {
-	return provider.Wrapf(provider.PlatformGitLab, "RemoveCRCommentReaction", "gitlab requires the parent MR number to manage note reactions; use the raw client directly")
+	return provider.Wrap(provider.PlatformGitLab, "RemoveCRCommentReaction",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab note award-emoji API needs the parent MR IID alongside the note ID, which the provider interface cannot address; use the raw client directly"))
 }
 
 func convertAwardEmojis(in []*gitlab.AwardEmoji) []*provider.Reaction {

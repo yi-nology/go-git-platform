@@ -106,6 +106,39 @@ func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 		im, _ := newIM(t)
 		assertIssueListNormalized(t, im)
 	})
+	t.Run("List_PageZero_SingleRequest", func(t *testing.T) {
+		// Caller-paged family (issue #51 — see provider.NormalizePageOpts):
+		// a default ListIssues (Page == 0) must serve the first page in
+		// EXACTLY one request. A walk means the backend still exhausts
+		// pagination on the zero value — the pre-fix gitea/forgejo/gitcode/
+		// tencentcode shape, where a default call's request volume scaled
+		// silently with the repository's issue count.
+		im, requests := newIM(t)
+		issues, total, err := im.ListIssues(context.Background(), provider.ListIssuesOptions{Owner: "owner", Repo: "repo"})
+		if err != nil {
+			t.Fatalf("ListIssues(Page==0): %v", err)
+		}
+		if got := countGETs(requests); got != 1 {
+			t.Fatalf("Page==0: expected exactly 1 GET, got %d — caller-paged contract violated (issue #51)", got)
+		}
+		if total != len(issues) {
+			t.Fatalf("Page==0: total = %d, want len(result) = %d — the int return is the served rows' count, never a platform total (issue #51)", total, len(issues))
+		}
+	})
+	t.Run("List_TotalEqualsItemCount", func(t *testing.T) {
+		// The int return means "how many rows I served" on every backend —
+		// the fixture list response carries X-Total: 999 so a backend
+		// forwarding the platform total fails here even when the page is
+		// served correctly (the pre-fix TencentCode shape).
+		im, _ := newIM(t)
+		issues, total, err := im.ListIssues(context.Background(), provider.ListIssuesOptions{Owner: "owner", Repo: "repo", Page: 1, PerPage: 10})
+		if err != nil {
+			t.Fatalf("ListIssues(Page==1): %v", err)
+		}
+		if total != len(issues) {
+			t.Fatalf("Page==1: total = %d, want len(result) = %d (issue #51)", total, len(issues))
+		}
+	})
 	t.Run("Get_ReturnsIssue", func(t *testing.T) {
 		im, _ := newIM(t)
 		assertIssueGet(t, im)
@@ -518,6 +551,11 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 				_, _ = w.Write([]byte(h.LabelsResponse))
 			}
 		default:
+			// X-Total: 999 pins the total-semantics contract (issue #51):
+			// a platform total that differs from the served page's item
+			// count so ListIssues forwarding the header value instead of
+			// len(result) fails the suite.
+			w.Header().Set("X-Total", "999")
 			_, _ = w.Write([]byte(h.ListResponse))
 		}
 	}))

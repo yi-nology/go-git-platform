@@ -75,10 +75,11 @@ type IssuePort interface {
 // one cached scan per repo).
 type IssueLabelCache = backendutil.IDCache
 
-// ListIssues lists issues (dual-mode pagination via backendutil.PageList;
-// with Page == 0 the full list is walked, with Page > 0 exactly that
-// caller-driven page). The family mixes PRs into the issue endpoint, so the
-// engine filters to real issues (Type: "issues").
+// ListIssues lists issues (caller-paged family, issue #51 — see
+// provider.NormalizePageOpts: Page == 0 serves the platform's first page in
+// exactly one request, Page > 0 exactly that caller-driven page; the int
+// return is len(result), the served rows' count). The family mixes PRs into
+// the issue endpoint, so the engine filters to real issues (Type: "issues").
 func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
 	listOpts := FamilyIssueListOption{Type: "issues"}
 	if opts.State != "" {
@@ -90,11 +91,9 @@ func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIs
 	if opts.Assignee != "" {
 		listOpts.Assignee = opts.Assignee
 	}
-	issues, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
-		func(page, perPage int) ([]*Issue, error) {
-			listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}
-			return c.ListRepoIssues(ctx, opts.Owner, opts.Repo, listOpts)
-		})
+	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+	listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}
+	issues, err := c.ListRepoIssues(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
 		return nil, 0, provider.Wrap(f.Platform, "ListIssues", err)
 	}

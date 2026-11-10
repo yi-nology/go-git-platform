@@ -7,6 +7,79 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 
+### Fixed（第四批 9 连修：SDK 限流分类 / ListIssues 分页统一 / Since-Until 显式报错 / projection 集合并 / branchfilter 逗号 / Reaction 桩三态 / State=merged / tag push 归一 / compare 截断）
+
+- fix(provider,backends/github): **SDK 错误路的限流分类接通**（issue #50）——
+  go-github 的 `*RateLimitError`（主配额耗尽）与 `*AbuseRateLimitError`
+  （次级限流）恒为 HTTP 403，且既不实现 `StatusCode()` 也不携带 transport 的
+  rateLimitedMarker ⇒ Wrap 的裸状态分类把 GitHub 最常见的节流信号丢回
+  ErrForbidden，IsRateLimited/RateLimitRecovery 双双失灵。机制级修复：新增
+  `RegisterThrottleClassifier`（与 RegisterStatusExtractor 并肩的注册面），
+  Wrap 在状态分类之前采纳平台注册的权威节流判定并复制恢复窗口
+  （Rate.Reset / RetryAfter）；GitHub 后端 init 注册，其他 SDK 路平台
+  （Gitee/Gitea 等）可同面接入。补 SDK 错误路端到端 + 机制面 + 「普通 403
+  仍 ErrForbidden」对照三测试。
+- fix(backends,provider): **ListIssues 分页/total 语义全后端统一**（issue #51）——
+  caller-paged 族契约落齐（见 NormalizePageOpts）：Page==0 一律单请求取
+  首页、Page>0 恰取该页，int 返回一律 len(result)——不再是平台总数。
+  对齐面：giteafamily（gitea/forgejo）与 gitcode ListIssues 旧 Page==0 走
+  全部页、tencentcode 旧 caller 页保留平台总数（X-Total）都改为单请求 +
+  len(result)；接口方法补成文契约注释（原来没有 doc），契约套件补
+  「Page==0 恰 1 请求」「total==len(result)（夹具 X-Total:999 钉差异）」
+  双断言。**迁移说明**：依赖 gitea/forgejo/gitcode/tencentcode
+  ListIssues(Page==0) 全量行走语义的调用方请显式翻页。
+- fix(provider,backends): **Since/Until 解析失败显式报错**（issue #52）——
+  新增共享解析器 `provider.ParseTimestamp`（RFC3339；空=不过滤；其余一律
+  ErrInvalidInput 并命名选项与版式），解析失败静默丢弃（日期写错悄悄返回
+  全量历史、err=nil）改为报错：github/gitlab ListCommits（Since/Until）、
+  github ListNotifications/ListRepoNotifications、giteafamily
+  ListNotifications/ListRepoNotifications（Since）、gitee/giteafamily/gitcode
+  ListCommits 与 gitee/gitcode/gitee-notifications 等裸串透传面（先校验后
+  透传，接受/拒绝面全后端一致）；家族 SDK 不带 commit 时间过滤的面
+  （giteafamily/gitcode ListCommits 合法值无法下传）按 DivergenceIgnore
+  登记进台账；契约套件补「malformed Since/Until ⇒ ErrInvalidInput 且
+  0 wire」全后端断言（notifications 含 repo-scoped 半边）。
+- fix(pkg/projection): **字段集合并与列出顺序无关**（issue #53）——keepTree.add
+  叶子分支遇既有嵌套子树时升级为整棵子树保留：祖先路径排在后代之后不再
+  被静默忽略（旧实现同一组字段仅因次序不同投影结果不同，LLM 生成的字段
+  清单顺序不稳定时静默丢字段）；补次序置换/深层祖先/兄弟路径共存表驱动
+  测试（红↔绿）。
+- feat(pkg/branchfilter): **NewPatterns 免切分构造器**（issue #54）——
+  每个元素即一个完整 glob pattern，逗号是普通 pattern 字符：含逗号的合法
+  git ref 名（`release,1.0`）首次可被过滤器匹配（旧字符串形态逗号恒为
+  分隔符、无转义、本尊永不可匹配且无绕法）；New 保留逗号切分便利面并在
+  包 doc 写明分隔符地位与表达力边界；两构造器同走 ErrBadPattern 预检。
+- fix(backends/gitlab,backends/internal/giteafamily): **ReactionManager 桩
+  三态统一**（issue #57）——gitlab 六个 note 级方法统一为
+  `Wrap(ErrNotImplemented)` 桩（平台 award-emoji-on-note 端点需要父 issue
+  IID/MR IID + note ID 双址，provider 接口只给 commentID 单址，接口面无法
+  驱动），(nil,nil) 静默空与无哨兵文本错误两形态并存全部清零，六条
+  DivergenceStub 登记 + 契约 dispatch 表配对（哨兵⇒台账机器互检、零 wire）；
+  giteafamily 四个 CR 级方法**实装**（家族 CR 即 issue 共享 index、CR 评论
+  即 issue 评论——ListCRComments 同一先例，github 后端同型委托）：CR/评论
+  级反应读写走既有端点，不再返回 (nil,nil) 或文本错误；ReactionsSuite 补
+  「每方法恰一形态」七方法断言（读 (nil,nil) / 无哨兵文本错误全部钉死）。
+- fix(backends/gitcode,backends/github,backends/internal/giteafamily):
+  **ListCRs State=merged 四家分化收口**（issue #59）——gitcode 走后过滤
+  精确化（SDK PullRequest.Merged 标志筛掉 closed-but-unmerged，四家退化
+  后端里唯一可精确的，补 wire 回归钉 merged:true/false 混合夹具）；
+  github/giteafamily（gitea/forgejo）的 closed 超集近似按 mapping 登记
+  进台账（closed∪merged 混返此前仅代码注释披露，违反「禁止文档-only
+  偏离」），`go generate` 再生成 docs/divergence-ledger.md。
+- fix(backends/github): **tag push 归一对齐跨后端词表**（issue #76）——
+  PushEvent ref 带 refs/tags/ 前缀时归 `tag.created` 并填 Tag（对齐 gitee
+  tag_push 与 forgejo/gitcode golden；同文件 CreateEvent/DeleteEvent 的
+  ref_type=tag 早已归 tag.created/tag.deleted）：旧实现产出 "push" 且
+  Branch 被污染成 "refs/tags/v1.0" 伪分支名，按 tag.created 驱动的下游
+  漏掉 GitHub 标签事件；webhookcorpus 补 push_tag 夹具 + golden 钉形态。
+- fix(backends/github,provider): **CompareCommits 静默截断收口**（issue #77）——
+  commits 走分页拉全（GitHub compare 单次上限 250 条，旧实现 nil
+  ListOptions 只取一页）；files 平台侧无分页线（仅首页返回、全量上限
+  300 条）——`CompareResult` 新增 `FilesTruncated` 字段，len==300 时置
+  true 截断可见；补 >250 提交两页拉全 + 恰 300 文件置位 + 小 compare
+  单页短页终止三条 wire 回归（红↔绿）。
+
+
 ### Fixed（第三批 7 连修：Page==0 双模契约 / ListMilestones State 统一 / 422-410-5xx 哨兵 / 规则一残留 / janitor 身份检查 / 契约五族补白）
 
 - fix(provider): **Page==0 分页语义双族契约钉死**（issue #60）——`NormalizePageOpts`

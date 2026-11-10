@@ -16,6 +16,8 @@ var divergences = []provider.Divergence{
 		Reason: "See GetCR."},
 	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "total", Kind: provider.DivergenceMapping,
 		Reason: "GitHub exposes no exact total on the PR list; total is derived from the Link header as LastPage*PerPage — an upper bound for the served page, not an exact count (headers are authoritative when present, never the page length; issue #60)."},
+	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "State (merged)", Kind: provider.DivergenceMapping,
+		Reason: "GitHub's PR list filter has no merged vocabulary: State=merged fetches the closed superset (closed+merged mixed) and no post-filter narrows it — consumers disambiguate via the returned CR's State (ConvertPR maps the merged flag). GetCR stays exact. Registered here instead of living in a code comment only (issue #59); GitCode post-filters the superset into the precise merged set instead."},
 	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceDetour,
 		Reason: "Archive downloads two-hop: the go-github link endpoint resolves the signed URL, the byte download streams through the token-less followClient (no auth wrapper, no per-request timeout - large archives must not be truncated; issue #72), behind a status gate so error pages never return as archive bytes."},
 	{Capability: "WebhookConfigManager", Method: "UpdateWebhook", Field: "opts.Events (empty)", Kind: provider.DivergenceIgnore,

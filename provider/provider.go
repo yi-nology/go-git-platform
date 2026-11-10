@@ -282,6 +282,14 @@ type CompareResult struct {
 	TotalCommits int            `json:"total_commits"`
 	AheadBy      int            `json:"ahead_by"`
 	BehindBy     int            `json:"behind_by"`
+	// FilesTruncated reports that the Files list is KNOWN to be incomplete
+	// because the platform caps the compare-diff file list (issue #77:
+	// GitHub serves at most 300 changed files per comparison, first page
+	// only, with no pagination line to exhaust). A compare-based audit or
+	// sync must treat Files as a prefix, never as the full changeset, when
+	// this is true. Backends without a platform cap (or that paginate the
+	// file list fully) always leave it false.
+	FilesTruncated bool `json:"files_truncated,omitempty"`
 }
 
 // TagInfo represents a tag.

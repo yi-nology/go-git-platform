@@ -25,6 +25,14 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	// 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的接受/
+	// 拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+	}
+	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+	}
 	pid := owner + "/" + repo
 	buildOpts := func(page, perPage int) *gongfeng.ListCommitsOptions {
 		listOpts := &gongfeng.ListCommitsOptions{

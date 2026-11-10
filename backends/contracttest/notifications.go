@@ -96,6 +96,20 @@ func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
 		},
 	})
 
+	t.Run("ListNotifications_MalformedSince_Rejected", func(t *testing.T) {
+		// issue #52: the SAME malformed timestamp must produce the same
+		// outcome on every backend — an ErrInvalidInput rejection, never a
+		// silently unfiltered (full stream) result with err == nil.
+		nm := newNM(t)
+		_, err := nm.ListNotifications(context.Background(), provider.ListNotificationsOptions{Since: "2026-01-01"})
+		if err == nil {
+			t.Fatal("malformed Since must error, got nil — the filter was silently dropped")
+		}
+		if !provider.IsInvalidInput(err) {
+			t.Fatalf("malformed Since = %v, want an error wrapping ErrInvalidInput", err)
+		}
+	})
+
 	t.Run("ListNotifications_ReturnsResults", func(t *testing.T) {
 		nm := newNM(t)
 		notifications, err := nm.ListNotifications(context.Background(), provider.ListNotificationsOptions{})
@@ -157,6 +171,15 @@ func runGlobalUnsupportedSuite(t *testing.T, newNM func(*testing.T) provider.Not
 		}
 		if err := nm.MarkRepoNotificationsRead(context.Background(), "owner", "repo", provider.MarkNotificationsOptions{}); err != nil {
 			t.Errorf("MarkRepoNotificationsRead: %v", err)
+		}
+	})
+	t.Run("RepoScoped_MalformedSince_Rejected", func(t *testing.T) {
+		// issue #52: the same malformed timestamp on the repo-scoped half —
+		// ErrInvalidInput, never a silently unfiltered stream.
+		nm := newNM(t)
+		_, err := nm.ListRepoNotifications(context.Background(), "owner", "repo", provider.ListNotificationsOptions{Since: "2026-01-01"})
+		if err == nil || !provider.IsInvalidInput(err) {
+			t.Fatalf("malformed Since = %v, want an error wrapping ErrInvalidInput", err)
 		}
 	})
 }

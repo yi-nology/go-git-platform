@@ -26,6 +26,11 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
+	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
+	}
 	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
 		return gitcode.ListNotificationsOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
