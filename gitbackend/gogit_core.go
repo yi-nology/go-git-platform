@@ -128,6 +128,7 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 	if len(refSpecs) == 0 {
 		refSpecs = []string{"refs/heads/*:refs/heads/*"}
 	}
+	refSpecStrings := refSpecs
 
 	rs := make([]config.RefSpec, 0, len(refSpecs))
 	for _, s := range refSpecs {
@@ -158,9 +159,12 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 		return nil, newGitError("Push", opts.RepoPath, "", err)
 	}
 	// go-git's PushContext does not expose per-ref success/failure details,
-	// so we return the requested refspecs as PushedRefs. Callers that need
-	// granular per-ref error reporting should use the native backend.
-	return &PushResult{PushedRefs: refSpecs}, nil
+	// so we derive PushedRefs from the requested refspecs. They are
+	// normalized to the destination ref's short name (strip leading '+',
+	// take the dst side, strip refs/heads|tags/) — the same form the native
+	// backend parses out of git push's report, so consumers see one
+	// PushedRefs shape regardless of backend (issue #107).
+	return &PushResult{PushedRefs: pushedRefsFromRefSpecs(refSpecStrings)}, nil
 }
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {

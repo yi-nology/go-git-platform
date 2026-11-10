@@ -2,7 +2,9 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	oekiterrors "github.com/oekit/pkg/errors"
@@ -10,32 +12,38 @@ import (
 
 // --- Commit operations ---
 
-// commitLogFormat 是 git log 提交行的输出格式。字段分隔用 NUL（%x00）：
-// 提交标题是任意文本，含 "|" 时旧的 `%H|%s|%an|%ai` 会把 Author/Date
-// 解析错位（"fix: handle a | b" 这类标题实测复现）。哈希为十六进制、
-// 日期为固定格式，均不含 NUL；%s 只输出单行标题，标题内不可能有 NUL。
-const commitLogFormat = "--pretty=format:%H%x00%s%x00%an%x00%ai"
+// commitLogFormat 是 git log 的输出格式。每条记录以 %x00（NUL）开头、字段以
+// NUL 分隔、记录之间是 git 默认插入的 "\n"（落在记录末位的 %B 里，随其尾部
+// 换行一起被 TrimRight 吸收）：
+//   - %B = 完整提交消息（可多行），置于记录末位吸收任意分隔符。旧实现用
+//     %s 只有主题行，与 gogit 后端的全文口径分裂（issue #103）；
+//   - %aI = author date 的 RFC3339/ISO-strict 形态。旧实现 %ai 是空格分隔
+//     偏移（"2005-04-07 22:13:13 +0200"），time.Parse(RFC3339) 必败；
+//   - 消息内含 NUL 属病理形态，git 的 porcelain 类输出对它本无定义。
+const commitLogFormat = "--pretty=format:%x00%H%x00%an%x00%aI%x00%B"
 
-// parseCommitLines 解析 commitLogFormat 的输出（每提交一行，NUL 分字段）。
+// parseCommitLines 解析 commitLogFormat 的输出：整流按 NUL 切分，每 4 段
+// 一条记录（format 前导 NUL 产生首段空段）。消息在记录末位，其尾部自身的
+// 换行 + 记录分隔符一起 TrimRight，与 gogit 后端 TrimRight(c.Message, "\n")
+// 同口径。
 func parseCommitLines(stdout string) []CommitInfo {
+	fields := strings.Split(stdout, "\x00")
 	var commits []CommitInfo
-	for _, line := range strings.Split(stdout, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\x00", 4)
-		if len(parts) < 4 {
-			continue
-		}
+	for i := 1; i+3 < len(fields); i += 4 {
 		commits = append(commits, CommitInfo{
-			Hash: parts[0], Message: parts[1], Author: parts[2], Date: parts[3],
+			Hash:    fields[i],
+			Message: strings.TrimRight(fields[i+3], "\n"),
+			Author:  fields[i+1],
+			Date:    fields[i+2],
 		})
 	}
 	return commits
 }
 
 func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error) {
+	if err := checkNameArgs("GetCommitsBetween", from, to); err != nil {
+		return nil, err
+	}
 	var rangeArg string
 	if from == "" {
 		rangeArg = to
@@ -52,16 +60,30 @@ func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from
 }
 
 func (b *NativeGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error) {
-	_, _, err := b.runGit(ctx, repoPath, []string{
-		"merge-base", "--is-ancestor", ancestor, descendant,
+	if err := checkNameArgs("IsAncestor", ancestor, descendant); err != nil {
+		return false, err
+	}
+	_, stderr, err := b.runGit(ctx, repoPath, []string{
+		"merge-base", "--is-ancestor", "--", ancestor, descendant,
 	}, AuthConfig{})
-	if err != nil {
+	if err == nil {
+		return true, nil
+	}
+	// `git merge-base --is-ancestor` 的退出码语义：1 = 非祖先（正常结论），
+	// 其余（128 等）= 致命错误（ref 不存在/非 git 仓库/ctx 取消）。只有 1
+	// 才映射 (false, nil)；一切错误透传——否则调用方把「无效 ref」当
+	// 「未合入」继续执行（跳过 cherry-pick、误判漂移、放行合并）。
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return false, nil
 	}
-	return true, nil
+	return false, newGitError("IsAncestor", repoPath, stderr, err)
 }
 
 func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, opts MergeOptions) error {
+	if err := checkNameArg("Merge", branch); err != nil {
+		return err
+	}
 	args := []string{"merge"}
 	if opts.Squash {
 		args = append(args, "--squash")
@@ -102,7 +124,11 @@ func isConflictOutput(stdout, stderr string) bool {
 }
 
 func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error {
-	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"cherry-pick", commitHash}, AuthConfig{})
+	if err := checkNameArg("CherryPick", commitHash); err != nil {
+		return err
+	}
+	args := []string{"cherry-pick", "--", commitHash}
+	stdout, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
 	if err != nil {
 		if isConflictOutput(stdout, stderr) {
 			return newGitError("CherryPick", repoPath, stderr, ErrMergeConflict)
@@ -113,7 +139,10 @@ func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash 
 }
 
 func (b *NativeGitBackend) Rebase(ctx context.Context, repoPath, onto string) error {
-	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", onto}, AuthConfig{})
+	if err := checkNameArg("Rebase", onto); err != nil {
+		return err
+	}
+	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"rebase", "--", onto}, AuthConfig{})
 	if err != nil {
 		if isConflictOutput(stdout, stderr) {
 			return newGitError("Rebase", repoPath, stderr, ErrMergeConflict)
@@ -145,6 +174,9 @@ func (b *NativeGitBackend) RebaseContinue(ctx context.Context, repoPath string) 
 // --- Commit query and index operations ---
 
 func (b *NativeGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) (*CommitInfo, error) {
+	if err := checkNameArg("GetCommit", hashStr); err != nil {
+		return nil, err
+	}
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{
 		"log", "-1", commitLogFormat, hashStr,
 	}, AuthConfig{})
@@ -159,7 +191,8 @@ func (b *NativeGitBackend) GetCommit(ctx context.Context, repoPath, hashStr stri
 }
 
 func (b *NativeGitBackend) Add(ctx context.Context, repoPath string, files []string) error {
-	args := append([]string{"add"}, files...)
+	// `--` 后接 pathspec：以 "-" 开头的文件名不会被解析成 flag
+	args := append([]string{"add", "--"}, files...)
 	_, stderr, err := b.runGit(ctx, repoPath, args, AuthConfig{})
 	if err != nil {
 		return newGitError("Add", repoPath, stderr, err)

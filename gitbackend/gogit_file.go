@@ -26,6 +26,10 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 		return nil, err
 	}
 
+	// 空 ref = HEAD（契约口径，与 native 一致）；其余 ref 一律走 resolveRev
+	// （分支/标签/短 hash/rev 表达式统一解析）。旧实现对非空 ref 直接
+	// plumbing.NewHash 盲 hex 解码——"main"/"v1.0"/短 hash 全部解出零/垃圾
+	// hash 后报错，而同文件 GetTree/GetBlob 都走 ResolveRevision（issue #108）
 	var hash plumbing.Hash
 	if ref == "" || ref == "HEAD" {
 		head, err := repo.Head()
@@ -34,7 +38,10 @@ func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, re
 		}
 		hash = head.Hash()
 	} else {
-		hash = plumbing.NewHash(ref)
+		hash, err = resolveRev(repo, ref)
+		if err != nil {
+			return nil, newGitError("GetFileAtRevision", repoPath, "", err)
+		}
 	}
 
 	commit, err := repo.CommitObject(hash)
