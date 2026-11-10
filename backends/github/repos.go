@@ -8,7 +8,11 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListRepos implements provider.RepoManager.
+// ListRepos implements provider.RepoManager. An Owner targets the org
+// endpoint first; GitHub 404s it for personal accounts (not "no repos",
+// which is an empty 200), so a 404 falls back to the user-namespace
+// listing — both namespace kinds are listable without the caller knowing
+// which one the login is (issue #80; registered divergence).
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.RepositoryListOptions{
@@ -20,6 +24,11 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		repos, _, err = p.client.Repositories.ListByOrg(ctx, opts.Owner, &github.RepositoryListByOrgOptions{
 			ListOptions: listOpts.ListOptions,
 		})
+		if provider.IsNotFound(provider.Wrap(provider.PlatformGitHub, "ListRepos", err)) {
+			repos, _, err = p.client.Repositories.ListByUser(ctx, opts.Owner, &github.RepositoryListByUserOptions{
+				ListOptions: listOpts.ListOptions,
+			})
+		}
 	} else {
 		// Same wire call the deprecated Repositories.List makes when user is
 		// empty: list repositories of the authenticated user.

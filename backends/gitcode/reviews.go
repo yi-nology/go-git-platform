@@ -17,7 +17,7 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	reviews, err := p.client.ListPullRequestReviews(ctx, owner, repo, n)
+	reviews, err := p.client.ListPullRequestReviews(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListReviews", err)
 	}
@@ -35,7 +35,7 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 	if err != nil {
 		return nil, err
 	}
-	review, err := p.client.GetPullRequestReview(ctx, owner, repo, n, reviewID)
+	review, err := p.client.GetPullRequestReview(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, reviewID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetReview", err)
 	}
@@ -57,7 +57,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	if err != nil {
 		return nil, err
 	}
-	review, err := p.client.CreatePullRequestReview(ctx, owner, repo, n, opts.Body, opts.Event)
+	review, err := p.client.CreatePullRequestReview(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts.Body, opts.Event)
 	if err != nil {
 		return p.createReviewFallback(ctx, owner, repo, number, opts)
 	}
@@ -110,7 +110,7 @@ func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, 
 	if side == "" {
 		side = "RIGHT"
 	}
-	_, err := p.client.CreatePullRequestInlineComment(ctx, owner, repo, number, gitcode.CreatePullRequestInlineCommentOptions{
+	_, err := p.client.CreatePullRequestInlineComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, gitcode.CreatePullRequestInlineCommentOptions{
 		Body: comment.Body, Path: comment.Path, Line: comment.Line, Side: side, CommitID: commitID,
 	})
 	if err != nil {
@@ -127,7 +127,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 	if err != nil {
 		return err
 	}
-	if err := p.client.RequestPullRequestReviewers(ctx, owner, repo, n, gitcode.PullRequestReviewRequest{
+	if err := p.client.RequestPullRequestReviewers(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, gitcode.PullRequestReviewRequest{
 		Reviewers: reviewers,
 	}); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "RequestReviewers", err)
@@ -143,7 +143,7 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return err
 	}
-	if err := p.client.DismissPullRequestReview(ctx, owner, repo, n, reviewID, message); err != nil {
+	if err := p.client.DismissPullRequestReview(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, reviewID, message); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DismissReview", err)
 	}
 	return nil

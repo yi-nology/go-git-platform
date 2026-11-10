@@ -12,7 +12,9 @@ type DeploymentManager interface {
 	// CreateDeployment requests a deployment of ref to environment.
 	CreateDeployment(ctx context.Context, owner, repo, ref, environment string, opts CreateDeploymentOptions) (*Deployment, error)
 	// ListDeployments lists a repository's deployment records, newest first,
-	// optionally filtered by environment.
+	// optionally filtered by environment. The int return is the number of
+	// items on the returned page (the IssueManager total convention); the
+	// platform serves no repository-wide total on this endpoint.
 	ListDeployments(ctx context.Context, owner, repo string, environment string, page, perPage int) ([]*Deployment, int, error)
 	// CreateDeploymentStatus reports state on a deployment.
 	CreateDeploymentStatus(ctx context.Context, owner, repo string, deploymentID int64, opts DeploymentStatusOptions) error

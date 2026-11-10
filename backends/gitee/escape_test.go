@@ -47,9 +47,16 @@ func TestGitee_PathEscaping(t *testing.T) {
 	_, _ = p.ListBranches(ctx, owner, repo)
 	_ = p.(provider.LabelManager).DeleteLabel(ctx, owner, repo, "la bel%1中文")
 	_, _ = p.GetFileContent(ctx, owner, repo, "dir one/file#2.txt", "bra nch")
+	// issue #84: the label-name segment on RemoveIssueLabel used to go out
+	// raw — a name like "C#" truncated the URL at the fragment and deleted
+	// the wrong label.
+	_ = p.(provider.IssueManager).RemoveIssueLabel(ctx, owner, repo, "1", "C#")
 
-	if len(paths) != 3 {
-		t.Fatalf("expected 3 recorded requests, got %d: %v", len(paths), paths)
+	if len(paths) != 4 {
+		t.Fatalf("expected 4 recorded requests, got %d: %v", len(paths), paths)
+	}
+	if !strings.Contains(paths[3], "/labels/C#") {
+		t.Errorf("path %q lost label name (segment not escaped)", paths[3])
 	}
 	for _, path := range paths {
 		if !strings.Contains(path, owner) {

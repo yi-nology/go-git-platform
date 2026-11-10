@@ -147,7 +147,11 @@ func canonicalWebhookEvents(names []string) []string {
 		}
 	}
 	slices.Sort(out)
-	return out
+	// Aliases collapse onto one canonical name ("note"+"comment" → "note"):
+	// dedupe after the sort so equalEvents compares sets, not multisets —
+	// a backend reading one flag back under two names (issue #85) must not
+	// look like drift against the single-name desired set.
+	return slices.Compact(out)
 }
 
 func equalEvents(a, sortedB []string) bool {

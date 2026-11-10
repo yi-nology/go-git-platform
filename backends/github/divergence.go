@@ -18,6 +18,8 @@ var divergences = []provider.Divergence{
 		Reason: "go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from \"unchanged\" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets)."},
 	{Capability: "CILogManager", Method: "ListFailedJobLogs", Field: "", Kind: provider.DivergenceMapping,
 		Reason: "A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline."},
+	{Capability: "RepoManager", Method: "ListRepos", Field: "opts.Owner", Kind: provider.DivergenceMapping,
+		Reason: "GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (mirrors the search-based fallback the gitea family registers)."},
 }
 
 // Divergences returns the registered divergence ledger for the GitHub backend.

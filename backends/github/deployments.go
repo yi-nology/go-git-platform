@@ -37,13 +37,18 @@ func (p *Provider) CreateDeployment(ctx context.Context, owner, repo, ref, envir
 	return convertDeployment(dep), nil
 }
 
-// ListDeployments implements provider.DeploymentManager.
+// ListDeployments implements provider.DeploymentManager. The int return is
+// the number of items on the returned page (the IssueManager total
+// convention, per #51/#60): GitHub's deployments API exposes no platform
+// total, and Response.LastPage is a page number (0 on single-page
+// responses), not an item count — using it here fed callers 0 or a page
+// index instead of a count.
 func (p *Provider) ListDeployments(ctx context.Context, owner, repo, environment string, page, perPage int) ([]*provider.Deployment, int, error) {
 	opts := &sdkgithub.DeploymentsListOptions{
 		Environment: environment,
 		ListOptions: sdkgithub.ListOptions{Page: page, PerPage: perPage},
 	}
-	deps, resp, err := p.client.Repositories.ListDeployments(ctx, owner, repo, opts)
+	deps, _, err := p.client.Repositories.ListDeployments(ctx, owner, repo, opts)
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitHub, "ListDeployments", err)
 	}
@@ -53,11 +58,7 @@ func (p *Provider) ListDeployments(ctx context.Context, owner, repo, environment
 			out = append(out, convertDeployment(d))
 		}
 	}
-	total := 0
-	if resp != nil {
-		total = resp.LastPage
-	}
-	return out, total, nil
+	return out, len(out), nil
 }
 
 // CreateDeploymentStatus implements provider.DeploymentManager.

@@ -14,7 +14,7 @@ import (
 // (GitCode's page-size ceiling is 100).
 func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
 	forks, err := backendutil.AllPages(func(page int) ([]*gitcode.Repository, error) {
-		return p.client.ListForks(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+		return p.client.ListForks(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: 100})
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListForks", err)
@@ -31,7 +31,7 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 // (GitCode's page-size ceiling is 100).
 func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
 	stargazers, err := backendutil.AllPages(func(page int) ([]*gitcode.User, error) {
-		return p.client.ListStargazers(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+		return p.client.ListStargazers(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: 100})
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListStargazers", err)
@@ -53,7 +53,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 // ListContributors endpoint exposes no page parameter (it hard-codes
 // per_page=100), so the call stays single-shot.
 func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
-	contributors, err := p.client.ListContributors(ctx, owner, repo)
+	contributors, err := p.client.ListContributors(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListContributors", err)
 	}

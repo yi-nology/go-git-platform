@@ -18,7 +18,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 	if err != nil {
 		return nil, err
 	}
-	files, err := p.client.ListPullRequestFiles(ctx, owner, repo, n)
+	files, err := p.client.ListPullRequestFiles(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetCRDiff", err)
 	}
@@ -41,7 +41,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	files, err := p.client.ListPullRequestFiles(ctx, owner, repo, n)
+	files, err := p.client.ListPullRequestFiles(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetCRFiles", err)
 	}
@@ -58,7 +58,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	if err != nil {
 		return "", err
 	}
-	comment, err := p.client.CreatePullRequestComment(ctx, owner, repo, n, body, "", "", "")
+	comment, err := p.client.CreatePullRequestComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, body, "", "", "")
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitCode, "CreateNote", err)
 	}
@@ -76,20 +76,40 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteNote", err)
 	}
-	err = p.client.DeleteIssueComment(ctx, owner, repo, id)
+	err = p.client.DeleteIssueComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), id)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteNote", err)
 	}
 	return nil
 }
 
-// CreateDiscussion implements provider.DiffManager.
+// CreateDiscussion implements provider.DiffManager. Anchored discussions
+// (FilePath set) ride the SDK's inline-comment endpoint — the same wire
+// createInlineComment uses for review comments (issue #86: the anchors used
+// to be silently dropped and every discussion landed as a top-level note).
+// NewLine anchors the RIGHT side, OldLine the LEFT side; CommitID carries
+// HeadSHA. The base/start SHA pair and multi-line ranges have no GitCode
+// wire (registered divergence).
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}
-	comment, err := p.client.CreatePullRequestComment(ctx, owner, repo, n, opts.Body, "", "", "")
+	var comment *gitcode.PullRequestComment
+	if opts.FilePath == "" {
+		comment, err = p.client.CreatePullRequestComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts.Body, "", "", "")
+	} else {
+		inline := gitcode.CreatePullRequestInlineCommentOptions{
+			Body: opts.Body, Path: opts.FilePath, Side: "RIGHT", CommitID: opts.HeadSHA,
+		}
+		if opts.NewLine > 0 {
+			inline.Line = opts.NewLine
+		} else if opts.OldLine > 0 {
+			inline.Line = opts.OldLine
+			inline.Side = "LEFT"
+		}
+		comment, err = p.client.CreatePullRequestInlineComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, inline)
+	}
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitCode, "CreateDiscussion", err)
 	}

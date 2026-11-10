@@ -235,7 +235,10 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	}
 	result := make([]*provider.CRCommit, 0, len(commits))
 	for _, c := range commits {
-		cc := &provider.CRCommit{SHA: c.ShortID, Message: c.Title, CreatedAt: timeOrZero(c.CreatedAt)}
+		// Full SHA (c.ID), matching every other backend and this backend's
+		// own convertCommit — ShortID (7 hex) broke joins/dedup keys
+		// against CRCommit.SHA produced elsewhere (issue #82).
+		cc := &provider.CRCommit{SHA: c.ID, Message: c.Title, CreatedAt: timeOrZero(c.CreatedAt)}
 		if c.AuthorName != "" {
 			cc.Author = &provider.CRUser{Name: c.AuthorName}
 		}

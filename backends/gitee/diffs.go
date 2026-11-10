@@ -75,9 +75,38 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 
 // CreateDiscussion implements provider.DiffManager.
 //
-// Gitee has no separate discussion endpoint; PR comments are the only option.
+// Gitee has no separate discussion endpoint; PR comments are the only
+// option. Anchored discussions (FilePath set) ride the comment wire's
+// path/position/commit_id fields (issue #86: the anchors used to be
+// silently dropped and every discussion landed as a top-level note).
+// Gitee's position is a single diff line number with no side channel, so
+// NewLine wins when both line anchors are set; the base/start SHA pair and
+// multi-line ranges have no wire (registered divergence).
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	return p.CreateNote(ctx, owner, repo, number, opts.Body)
+	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "CreateDiscussion", number)
+	if err != nil {
+		return "", err
+	}
+	commentOpts := &gitee.CreatePullRequestCommentOptions{
+		Body: gitee.String(opts.Body),
+	}
+	if opts.FilePath != "" {
+		commentOpts.Path = gitee.String(opts.FilePath)
+		if opts.HeadSHA != "" {
+			commentOpts.CommitID = gitee.String(opts.HeadSHA)
+		}
+		switch {
+		case opts.NewLine > 0:
+			commentOpts.Position = gitee.Int(opts.NewLine)
+		case opts.OldLine > 0:
+			commentOpts.Position = gitee.Int(opts.OldLine)
+		}
+	}
+	comment, _, err := p.client.PullRequests.CreateComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, commentOpts)
+	if err != nil {
+		return "", provider.Wrap(provider.PlatformGitee, "CreateDiscussion", err)
+	}
+	return strconv.FormatInt(int64(deref(comment.ID)), 10), nil
 }
 
 var _ provider.DiffManager = (*Provider)(nil)

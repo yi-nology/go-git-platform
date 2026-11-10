@@ -30,6 +30,8 @@ var divergences = []provider.Divergence{
 		Reason: "Gitee's issue wire takes a single assignee field; multiple logins are comma-joined into it, which only round-trips if the platform re-splits the joined value (undocumented platform behavior; single-assignee use is the verified shape)."},
 	{Capability: "IssueManager", Method: "UpdateIssue", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
 		Reason: "See CreateIssue: the issue wire takes a single assignee field; multiple logins are comma-joined into it."},
+	{Capability: "DiffManager", Method: "CreateDiscussion", Field: "opts.BaseSHA, opts.StartSHA, opts.StartNewLine, side distinction of opts.NewLine/OldLine", Kind: provider.DivergenceMapping,
+		Reason: "Gitee's inline-comment wire takes path + a single position (diff line number) + commit_id: NewLine wins when both line anchors are set (no side channel), HeadSHA rides commit_id, and the base/start SHA pair and multi-line ranges have no fields and are dropped."},
 }
 
 // Divergences returns the registered divergence ledger for the Gitee backend.

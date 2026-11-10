@@ -11,7 +11,7 @@ import (
 
 // GetCommit implements provider.CommitManager.
 func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
-	c, err := p.client.GetCommit(ctx, owner, repo, sha)
+	c, err := p.client.GetCommit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(sha))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetCommit", err)
 	}
@@ -25,7 +25,7 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
 	fetch := func(page, perPage int) ([]*gitcode.Commit, error) {
-		return p.client.ListCommits(ctx, owner, repo, gitcode.ListCommitsOptions{
+		return p.client.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListCommitsOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
 			Branch:      opts.Branch,
 		})
@@ -47,7 +47,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 
 // CompareCommits implements provider.CommitManager.
 func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
-	cmp, err := p.client.CompareCommits(ctx, owner, repo, base, head)
+	cmp, err := p.client.CompareCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(base), backendutil.Esc(head))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CompareCommits", err)
 	}

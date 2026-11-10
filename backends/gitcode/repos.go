@@ -5,14 +5,17 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// ListRepos implements provider.RepoManager.
+// ListRepos implements provider.RepoManager. Owner rides the SDK options
+// but is interpolated into the /users/{owner}/repos path verbatim, so it
+// passes through Esc like every other path segment (issue #84).
 func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
 	repos, err := p.client.ListRepositories(ctx, gitcode.ListRepositoriesOptions{
 		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
-		Owner:       opts.Owner,
+		Owner:       backendutil.Esc(opts.Owner),
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepos", err)
@@ -41,7 +44,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 
 // GetRepo implements provider.RepoManager.
 func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
-	r, err := p.client.GetRepository(ctx, owner, repo)
+	r, err := p.client.GetRepository(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetRepo", err)
 	}
@@ -107,9 +110,16 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 	}, nil
 }
 
-// ForkRepo implements provider.RepoManager.
+// ForkRepo implements provider.RepoManager. opts.Name maps onto the fork
+// body's name field (renaming the fork at creation, issue #87); the fork
+// endpoint takes no organization — forks always land under the
+// authenticated user's namespace (registered divergence).
 func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
-	r, err := p.client.ForkRepository(ctx, owner, repo, nil)
+	var forkOpts *gitcode.CreateRepositoryOptions
+	if opts.Name != "" {
+		forkOpts = &gitcode.CreateRepositoryOptions{Name: opts.Name}
+	}
+	r, err := p.client.ForkRepository(ctx, backendutil.Esc(owner), backendutil.Esc(repo), forkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ForkRepo", err)
 	}
@@ -133,7 +143,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 
 // DeleteRepo implements provider.RepoManager.
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
-	err := p.client.DeleteRepository(ctx, owner, repo)
+	err := p.client.DeleteRepository(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteRepo", err)
 	}
@@ -142,7 +152,7 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 
 // UpdateRepo implements provider.RepoManager.
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
-	r, err := p.client.UpdateRepository(ctx, owner, repo, gitcode.UpdateRepositoryOptions{
+	r, err := p.client.UpdateRepository(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.UpdateRepositoryOptions{
 		Name:          opts.Name,
 		Description:   opts.Description,
 		DefaultBranch: opts.DefaultBranch,
