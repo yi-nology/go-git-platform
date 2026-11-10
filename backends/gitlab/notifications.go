@@ -25,6 +25,11 @@ import (
 // todos, violating the interface's "exhausting the platform's pagination"
 // contract.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	// Since 无 Todos 线路面（登记 mapping 台账）：合法值按 ignore 丢弃，
+	// 但 malformed 值仍必须报错（issue #52）——时间戳选项的拒绝面全后端一致。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotifications", err)
+	}
 	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitlab.Todo, error) {
 			list, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{
@@ -46,6 +51,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // Filters todos by project ID (resolved from owner/repo via the project
 // API) with the same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+	}
 	pid, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)

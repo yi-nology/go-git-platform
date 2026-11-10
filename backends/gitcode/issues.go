@@ -11,30 +11,25 @@ import (
 
 // ListIssues implements provider.IssueManager.
 //
-// Dual-mode pagination is handled by backendutil.PageList:
-// opts.Page == 0 walks every page (budget-capped, fails loud);
-// opts.Page > 0 returns exactly that single caller-driven page.
+// Caller-paged family (issue #51 — see provider.NormalizePageOpts):
+// opts.Page == 0 serves the platform's first page in exactly one request;
+// opts.Page > 0 returns exactly that caller-driven page. The int return is
+// len(result), the served rows' count.
 func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
-	buildOpts := func(page, perPage int) gitcode.ListIssuesOptions {
-		listOpts := gitcode.ListIssuesOptions{
-			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-		}
-		if opts.State != "" {
-			listOpts.State = gitcode.IssueState(opts.State)
-		}
-		if opts.Assignee != "" {
-			listOpts.Assignee = opts.Assignee
-		}
-		if opts.Labels != "" {
-			listOpts.Labels = opts.Labels
-		}
-		return listOpts
+	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
+	listOpts := gitcode.ListIssuesOptions{
+		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
 	}
-	var issues []*gitcode.Issue
-	issues, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
-		func(page, perPage int) ([]*gitcode.Issue, error) {
-			return p.client.ListIssues(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), buildOpts(page, perPage))
-		})
+	if opts.State != "" {
+		listOpts.State = gitcode.IssueState(opts.State)
+	}
+	if opts.Assignee != "" {
+		listOpts.Assignee = opts.Assignee
+	}
+	if opts.Labels != "" {
+		listOpts.Labels = opts.Labels
+	}
+	issues, err := p.client.ListIssues(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), listOpts)
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
 	}

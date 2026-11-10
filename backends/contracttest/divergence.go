@@ -114,9 +114,45 @@ func dispatchDivergenceCall(p provider.Provider, capability, method string) (boo
 		"NotificationManager.MarkNotificationsRead",
 		"NotificationManager.MarkRepoNotificationsRead":
 		return dispatchNotificationDivergenceCall(p, capability, method, ctx)
+	case "ReactionManager.ListIssueCommentReactions",
+		"ReactionManager.AddIssueCommentReaction",
+		"ReactionManager.RemoveIssueCommentReaction",
+		"ReactionManager.ListCRCommentReactions",
+		"ReactionManager.AddCRCommentReaction",
+		"ReactionManager.RemoveCRCommentReaction":
+		return dispatchReactionDivergenceCall(p, capability, method, ctx)
 	default:
 		return false, nil
 	}
+}
+
+// dispatchReactionDivergenceCall serves the ReactionManager stub cases
+// (issue #57's note-level reactions); split out to keep
+// dispatchDivergenceCall's branch budget flat.
+func dispatchReactionDivergenceCall(p provider.Provider, capability, method string, ctx context.Context) (bool, error) {
+	rm, ok := p.(provider.ReactionManager)
+	if !ok {
+		return true, nil
+	}
+	switch capability + "." + method {
+	case "ReactionManager.ListIssueCommentReactions":
+		_, err := rm.ListIssueCommentReactions(ctx, "owner", "repo", 1)
+		return true, err
+	case "ReactionManager.AddIssueCommentReaction":
+		_, err := rm.AddIssueCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+		return true, err
+	case "ReactionManager.RemoveIssueCommentReaction":
+		return true, rm.RemoveIssueCommentReaction(ctx, "owner", "repo", 1, 1)
+	case "ReactionManager.ListCRCommentReactions":
+		_, err := rm.ListCRCommentReactions(ctx, "owner", "repo", 1)
+		return true, err
+	case "ReactionManager.AddCRCommentReaction":
+		_, err := rm.AddCRCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+		return true, err
+	case "ReactionManager.RemoveCRCommentReaction":
+		return true, rm.RemoveCRCommentReaction(ctx, "owner", "repo", 1, 1)
+	}
+	return false, nil
 }
 
 // dispatchNotificationDivergenceCall serves the NotificationManager stub

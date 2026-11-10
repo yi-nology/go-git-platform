@@ -198,15 +198,6 @@ func (p *Provider) doRequest(ctx context.Context, op, method, path string, body,
 	return nil
 }
 
-// extractTotalCount returns the total item count from the SDK response,
-// falling back to the length of the result slice.
-func extractTotalCount(resp *gongfeng.Response, fallback int) int {
-	if resp != nil && resp.TotalItems > 0 {
-		return resp.TotalItems
-	}
-	return fallback
-}
-
 // pid returns the project identifier in "owner/repo" format for SDK calls.
 // The SDK's typed methods pass it through parseID (url.PathEscape), so the
 // pid stays unescaped there; raw doRequest/NewRequest paths must instead

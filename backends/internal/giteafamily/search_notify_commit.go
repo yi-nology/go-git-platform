@@ -53,16 +53,22 @@ type NotificationPort interface {
 var notificationReadStates = []string{"read", "unread", "pinned"}
 
 // buildListNotificationOptions maps provider options onto the family's
-// list filters; pagination is applied by the callers.
-func buildListNotificationOptions(opts provider.ListNotificationsOptions) ListNotificationOptions {
+// list filters; pagination is applied by the callers. Since 解析失败必须
+// 报错（issue #52，批2 #75 同型）：静默丢弃会让格式笔误悄悄变成不过滤的
+// 全量通知流。
+func buildListNotificationOptions(opts provider.ListNotificationsOptions) (ListNotificationOptions, error) {
 	listOpts := ListNotificationOptions{}
-	if opts.Since != "" {
-		listOpts.Since, _ = time.Parse(time.RFC3339, opts.Since)
+	since, err := provider.ParseTimestamp("Since", opts.Since)
+	if err != nil {
+		return listOpts, err
+	}
+	if !since.IsZero() {
+		listOpts.Since = since
 	}
 	if opts.All {
 		listOpts.Status = notificationReadStates
 	}
-	return listOpts
+	return listOpts, nil
 }
 
 // ListNotifications lists notifications across the account.
@@ -71,7 +77,10 @@ func buildListNotificationOptions(opts provider.ListNotificationsOptions) ListNo
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	listOpts := buildListNotificationOptions(opts)
+	listOpts, err := buildListNotificationOptions(opts)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListNotifications", err)
+	}
 	threads, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
 		func(page, perPage int) ([]*NotificationThread, error) {
 			listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}
@@ -90,7 +99,10 @@ func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts p
 // ListRepoNotifications lists one repository's notifications (dual-mode
 // pagination as in ListNotifications).
 func ListRepoNotifications(ctx context.Context, f Family, c NotificationPort, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	listOpts := buildListNotificationOptions(opts)
+	listOpts, err := buildListNotificationOptions(opts)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListRepoNotifications", err)
+	}
 	threads, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
 		func(page, perPage int) ([]*NotificationThread, error) {
 			listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}
@@ -218,7 +230,18 @@ func GetCommit(ctx context.Context, f Family, c CommitPort, owner, repo, sha str
 
 // ListCommits lists commits (dual-mode pagination: Page == 0 walks every
 // page; Page > 0 returns exactly that single caller-driven page).
+//
+// Since/Until 先经共享解析器校验（issue #52）——malformed 报 ErrInvalidInput，
+// 与其他后端同判；校验通过的值本家族无法下传（family SDK 的 commit-list
+// 选项与平台 wire 都不带时间过滤），按 divergence 台账登记为 ignore，
+// 增量同步需自行客户端过滤。
 func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(f.Platform, "ListCommits", err)
+	}
+	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+		return nil, provider.Wrap(f.Platform, "ListCommits", err)
+	}
 	commits, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
 		func(page, perPage int) ([]*Commit, error) {
 			return c.ListRepoCommits(ctx, owner, repo, ListCommitOptions{

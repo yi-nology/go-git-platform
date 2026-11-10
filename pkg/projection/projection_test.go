@@ -2,6 +2,7 @@ package projection
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -119,4 +120,76 @@ func TestProjectList(t *testing.T) {
 	if len(got) != 2 || got[0]["number"] != "1" || got[1]["number"] != "2" {
 		t.Fatalf("ProjectList() = %v", got)
 	}
+}
+
+// issue #53：字段集合并与列出顺序无关——祖先路径排在后代之后必须吸收后代
+// （旧实现把窄路径建成的嵌套 keepTree 原样返回，宽路径被静默忽略）。
+func TestProjectFieldUnionOrderIndependent(t *testing.T) {
+	doc := map[string]any{
+		"head": map[string]any{"ref": "main", "sha": "abc123", "repo": "x"},
+		"num":  float64(7),
+	}
+	wide := map[string]any{"head": map[string]any{"ref": "main", "sha": "abc123", "repo": "x"}}
+
+	t.Run("ancestor_after_descendant_upgrades_to_wide", func(t *testing.T) {
+		got, err := Project(doc, "head.ref", "head")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if !reflect.DeepEqual(got, wide) {
+			t.Fatalf("Project(head.ref, head) = %v, want %v (ancestor path must absorb the descendant)", got, wide)
+		}
+	})
+
+	t.Run("permutations_agree", func(t *testing.T) {
+		a, err := Project(doc, "head.ref", "head")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		b, err := Project(doc, "head", "head.ref")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		c, err := Project(doc, "head")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if !reflect.DeepEqual(a, b) || !reflect.DeepEqual(b, c) {
+			t.Fatalf("同一字段集合的次序置换投影结果不一致:\nnarrow→wide = %v\nwide→narrow = %v\nwide alone = %v", a, b, c)
+		}
+	})
+
+	t.Run("deep_ancestor_after_deep_descendant", func(t *testing.T) {
+		d := map[string]any{"a": map[string]any{"b": map[string]any{"c": 1, "d": 2}}}
+		got, err := Project(d, "a.b.c", "a")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		// Project 经 UseNumber 解码：数值以 json.Number 呈现。
+		want := map[string]any{"a": map[string]any{"b": map[string]any{"c": json.Number("1"), "d": json.Number("2")}}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Project(a.b.c, a) = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("descendant_after_ancestor_stays_wide", func(t *testing.T) {
+		got, err := Project(doc, "head", "head.ref")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if !reflect.DeepEqual(got, wide) {
+			t.Fatalf("Project(head, head.ref) = %v, want %v", got, wide)
+		}
+	})
+
+	t.Run("unrelated_fields_untouched", func(t *testing.T) {
+		got, err := Project(doc, "num", "head.sha", "head")
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		want := map[string]any{"num": json.Number("7"), "head": map[string]any{"ref": "main", "sha": "abc123", "repo": "x"}}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Project(num, head.sha, head) = %v, want %v", got, want)
+		}
+	})
 }

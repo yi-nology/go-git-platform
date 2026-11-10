@@ -1,5 +1,4 @@
-// Package branchfilter matches branch names against comma-separated glob
-// patterns (e.g. "main,release-*,feature/*").
+// Package branchfilter matches branch names against glob patterns.
 //
 // Patterns follow filepath.Match semantics. Notably, `*` matches any run of
 // non-separator characters and therefore never crosses `/`:
@@ -9,8 +8,19 @@
 //
 // There is no `**`; to match additional path levels, spell them out (e.g.
 // "feature/*/*"). Malformed patterns (such as an unclosed "[") are rejected
-// by New with an error wrapping filepath.ErrBadPattern — a bad pattern never
-// silently matches nothing.
+// by both constructors with an error wrapping filepath.ErrBadPattern — a
+// bad pattern never silently matches nothing.
+//
+// Pattern lists come in two shapes:
+//
+//   - NewPatterns([]string): each element IS one glob pattern, verbatim —
+//     commas are ordinary pattern characters. This is the only way to name
+//     a branch whose ref name contains a comma ("release,1.0" is a valid
+//     git ref name; git check-ref-format accepts it).
+//   - New("main,release-*"): the convenience string form splits on commas,
+//     trims whitespace, and skips empty items. The comma is ALWAYS a
+//     separator in this form — there is no escape — so a ref name that
+//     contains a comma cannot be expressed here; use NewPatterns.
 package branchfilter
 
 import (
@@ -29,6 +39,11 @@ type BranchFilter struct {
 // New creates a BranchFilter from a comma-separated list of glob patterns
 // (e.g. "main,release-*,feature/*"). An empty string matches everything.
 //
+// The comma is ALWAYS a separator in this form (whitespace around each
+// pattern is trimmed, empty items skipped) — there is no escape mechanism,
+// so a branch name containing a comma can never be expressed here; use
+// NewPatterns for that (issue #54).
+//
 // Each pattern is validated up front with filepath.Match; a malformed
 // pattern yields an error wrapping filepath.ErrBadPattern instead of a
 // filter that silently never matches.
@@ -44,14 +59,35 @@ func New(filterStr string) (*BranchFilter, error) {
 		if p == "" {
 			continue
 		}
-		// Pre-flight every pattern: filepath.Match's ErrBadPattern would
-		// otherwise be swallowed at match time, where a malformed pattern
-		// silently matches nothing and callers cannot tell exclusion caused
-		// by the filter apart from a broken pattern.
+		patterns = append(patterns, p)
+	}
+	return newPatterns(patterns)
+}
+
+// NewPatterns creates a BranchFilter from explicit patterns: each element IS
+// one glob pattern, verbatim — no comma splitting, no trimming, no escaping
+// rules to remember (issue #54: "release,1.0" is a valid git ref name and is
+// matched literally here). An empty slice matches everything.
+//
+// Each pattern is validated up front with filepath.Match; a malformed
+// pattern yields an error wrapping filepath.ErrBadPattern instead of a
+// filter that silently never matches.
+func NewPatterns(patterns []string) (*BranchFilter, error) {
+	return newPatterns(append([]string(nil), patterns...))
+}
+
+// newPatterns pre-flights each pattern (filepath.Match's ErrBadPattern would
+// otherwise be swallowed at match time, where a malformed pattern silently
+// matches nothing and callers cannot tell exclusion caused by the filter
+// apart from a broken pattern) and builds the filter.
+func newPatterns(patterns []string) (*BranchFilter, error) {
+	if len(patterns) == 0 {
+		return &BranchFilter{patterns: nil}, nil
+	}
+	for _, p := range patterns {
 		if _, err := filepath.Match(p, ""); err != nil {
 			return nil, oekiterrors.Wrap(err, "branchfilter: bad pattern", "pattern", p)
 		}
-		patterns = append(patterns, p)
 	}
 	return &BranchFilter{patterns: patterns}, nil
 }

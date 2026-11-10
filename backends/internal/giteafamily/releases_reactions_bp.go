@@ -267,11 +267,22 @@ func RemoveIssueReaction(ctx context.Context, f Family, c ReactionPort, owner, r
 	return provider.Wrapf(f.Platform, "RemoveIssueReaction", "reaction %d not found", reactionID)
 }
 
-// ListCRReactions reports change-request-level reactions as unsupported: the
-// family has no dedicated PR-level reaction API (PR reactions are issue
-// reactions — use ListIssueReactions).
+// ListCRReactions lists every reaction on a change request. The family has
+// no dedicated PR-level reaction API because it needs none: a PR IS an issue
+// sharing the same index (the family's own CR surface relies on this —
+// ListCRComments walks the issue-comment endpoint), so PR-level reactions
+// are the issue reactions of that index — the same delegation the GitHub
+// backend makes (issue #57: 实装 instead of a sentinel-less stub).
 func ListCRReactions(ctx context.Context, f Family, c ReactionPort, owner, repo, number string) ([]*provider.Reaction, error) {
-	return nil, provider.Wrapf(f.Platform, "ListCRReactions", "%s does not support change-request-level reactions; use ListIssueReactions instead", f.Platform)
+	n, err := backendutil.ParseIssueNumber64(f.Platform, "ListCRReactions", number)
+	if err != nil {
+		return nil, err
+	}
+	reactions, err := c.ListIssueReactions(ctx, owner, repo, n)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListCRReactions", err)
+	}
+	return convertReactions(reactions), nil
 }
 
 // ListIssueCommentReactions lists every reaction on an issue comment.
@@ -307,20 +318,43 @@ func RemoveIssueCommentReaction(ctx context.Context, f Family, c ReactionPort, o
 	return provider.Wrapf(f.Platform, "RemoveIssueCommentReaction", "reaction %d not found", reactionID)
 }
 
-// ListCRCommentReactions returns no reactions: the family has no PR-comment
-// reaction API.
-func ListCRCommentReactions(_ context.Context, _ Family, _ ReactionPort, _, _ string, _ int64) ([]*provider.Reaction, error) {
-	return nil, nil
+// ListCRCommentReactions lists every reaction on a change-request comment.
+// The family's CR comments ARE issue comments (ListCRComments walks the
+// issue-comment endpoint), so the comment ID is an issue-comment ID and the
+// issue-comment reaction endpoints address it directly (issue #57 实装;
+// the (nil, nil) silent-empty form was indistinguishable from "no reactions").
+func ListCRCommentReactions(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
+	reactions, err := c.GetIssueCommentReactions(ctx, owner, repo, commentID)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListCRCommentReactions", err)
+	}
+	return convertReactions(reactions), nil
 }
 
-// AddCRCommentReaction reports PR-comment reactions as unsupported.
-func AddCRCommentReaction(_ context.Context, f Family, _ ReactionPort, _, _ string, _ int64, _ string) (*provider.Reaction, error) {
-	return nil, provider.Wrapf(f.Platform, "AddCRCommentReaction", "%s does not support reactions on pull-request review comments", f.Platform)
+// AddCRCommentReaction adds an emoji reaction to a change-request comment
+// (an issue comment, see ListCRCommentReactions).
+func AddCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
+	r, err := c.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "AddCRCommentReaction", err)
+	}
+	return convertReaction(r), nil
 }
 
-// RemoveCRCommentReaction reports PR-comment reactions as unsupported.
-func RemoveCRCommentReaction(_ context.Context, f Family, _ ReactionPort, _, _ string, _, _ int64) error {
-	return provider.Wrapf(f.Platform, "RemoveCRCommentReaction", "%s does not support reactions on pull-request review comments", f.Platform)
+// RemoveCRCommentReaction removes a change-request comment reaction (same
+// N+1 scan as RemoveIssueCommentReaction: the ID is the reacting user's
+// UserID).
+func RemoveCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID, reactionID int64) error {
+	reactions, err := c.GetIssueCommentReactions(ctx, owner, repo, commentID)
+	if err != nil {
+		return provider.Wrap(f.Platform, "RemoveCRCommentReaction", err)
+	}
+	for _, r := range reactions {
+		if r.UserID == reactionID {
+			return provider.Wrap(f.Platform, "RemoveCRCommentReaction", c.DeleteIssueCommentReaction(ctx, owner, repo, commentID, r.Reaction))
+		}
+	}
+	return provider.Wrapf(f.Platform, "RemoveCRCommentReaction", "reaction %d not found", reactionID)
 }
 
 func convertReactions(in []*FamilyReaction) []*provider.Reaction {

@@ -37,12 +37,14 @@ var pagePolicy = pagination.Policy{
 //     and fail loud (error wrapping ErrPageBudgetExceeded) when a platform's
 //     pagination never advances, so a silent partial list is impossible.
 //
-//   - Caller-paged family (unbounded sets — change requests; the issue
-//     family's ListIssues is tracked by issue #51). Page == 0 returns the
+//   - Caller-paged family (unbounded sets — change requests and the issue
+//     family's ListIssues, unified by issue #51). Page == 0 returns the
 //     platform's FIRST page at the normalized page size — one request, no
 //     walk, because a default call's request volume must not scale silently
 //     with the repository's size. Page > 0 returns exactly that page;
-//     callers page through explicitly until a short page comes back.
+//     callers page through explicitly until a short page comes back. On
+//     ListIssues the int return is uniformly len(result) (the served rows'
+//     count), never a platform total.
 //
 // Per-backend departures from either family are machine-readable in each
 // backend's divergence ledger (Provider.Divergences, regenerated into

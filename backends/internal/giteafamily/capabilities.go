@@ -269,8 +269,12 @@ func Divergences(displayName string) []provider.Divergence {
 			Reason: fmt.Sprintf("%s payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request.", displayName)},
 		{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,
 			Reason: "See GetCR."},
+		{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "State (merged)", Kind: provider.DivergenceMapping,
+			Reason: "The family's list filter has no merged vocabulary: State=merged fetches the closed superset (closed+merged mixed) and no post-filter narrows it — consumers disambiguate via the returned CR's State (ConvertPR maps the merged flag). GetCR stays exact. Registered here instead of living in a code comment only (issue #59); GitCode post-filters the superset into the precise merged set instead."},
 		{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 			Reason: fmt.Sprintf("%s's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves).", displayName)},
+		{Capability: "CommitManager", Method: "ListCommits", Field: "opts.Since, opts.Until (valid values)", Kind: provider.DivergenceIgnore,
+			Reason: "The family SDK's commit-list options carry no time filters (the platform wire has none either); values are validated against RFC3339 (issue #52 — unparsable input fails the call with ErrInvalidInput) but valid filters cannot be applied — incremental syncs must filter client-side."},
 		{Capability: "RepoStatsManager", Method: "ListContributors", Kind: provider.DivergenceStub,
 			Reason: "The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56)."},
 	}

@@ -12,15 +12,18 @@ import (
 )
 
 // notificationBaseOpts builds the shared (pagination-free) notification
-// filter options.
-func notificationBaseOpts(opts provider.ListNotificationsOptions) github.NotificationListOptions {
+// filter options. Since 解析失败必须报错（issue #52）：静默丢弃会把一个
+// 格式笔误升级成不过滤的全量通知流。
+func notificationBaseOpts(opts provider.ListNotificationsOptions) (github.NotificationListOptions, error) {
 	base := github.NotificationListOptions{All: opts.All}
-	if opts.Since != "" {
-		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			base.Since = t
-		}
+	since, err := provider.ParseTimestamp("Since", opts.Since)
+	if err != nil {
+		return base, err
 	}
-	return base
+	if !since.IsZero() {
+		base.Since = since
+	}
+	return base, nil
 }
 
 // ListNotifications implements provider.NotificationManager.
@@ -31,7 +34,10 @@ func notificationBaseOpts(opts provider.ListNotificationsOptions) github.Notific
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every matching notification is returned.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	base := notificationBaseOpts(opts)
+	base, err := notificationBaseOpts(opts)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+	}
 	var threads []*github.Notification
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
@@ -66,7 +72,10 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // exactly that one caller-managed page; opts.Page == 0 exhausts pagination
 // via backendutil.AllPages.
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	base := notificationBaseOpts(opts)
+	base, err := notificationBaseOpts(opts)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+	}
 	var threads []*github.Notification
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)

@@ -7,9 +7,11 @@ import "context"
 // capability interface: consumers should gate on
 // Provider.Capabilities().Reactions (or type-assert) before use.
 //
-// Platform support: GitHub, GitCode, GitLab (via award-emoji), Gitea,
-// Forgejo. Gitee and TencentCode have no reaction API — both report
-// Reactions=false in CapabilitySet.
+// Platform support: GitHub, GitLab (issues/CRs via award-emoji; the
+// note-level half is a registered stub family, issue #57), Gitea, Forgejo
+// (PR-level reactions ride the issue endpoints — a PR is an issue sharing
+// the same index). Gitee, GitCode and TencentCode have no reaction API and
+// report Reactions=false in CapabilitySet.
 //
 // GitLab maps reactions to its "award emoji" API; the SDK normalizes emoji
 // names (e.g. +1 ↔ thumbsup, hooray ↔ tada) so callers use the same

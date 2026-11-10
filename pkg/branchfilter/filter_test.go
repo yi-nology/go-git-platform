@@ -132,3 +132,87 @@ func TestNew_WhitespaceHandling(t *testing.T) {
 		t.Errorf("expected 3 patterns after trimming, got %d", len(f.Patterns()))
 	}
 }
+
+// issue #54：含逗号的合法 git ref 名（git check-ref-format --branch
+// 'release,1.0' 实测通过）在逗号切分的字符串形态下永不可匹配且无绕法。
+// NewPatterns 提供免切分构造器：每个元素就是一个完整 glob pattern。
+func TestNewPatterns_SupportsCommasInRefNames(t *testing.T) {
+	f, err := NewPatterns([]string{"release,1.0"})
+	if err != nil {
+		t.Fatalf("NewPatterns: %v", err)
+	}
+	cases := []struct {
+		branch string
+		want   bool
+	}{
+		{"release,1.0", true}, // 本尊必须匹配得上
+		{"release", false},    // 不得被拆开的半个 pattern 误命中
+		{"1.0", false},
+		{"release,1.0-beta", false},
+	}
+	for _, tc := range cases {
+		if got := f.Match(tc.branch); got != tc.want {
+			t.Errorf("Match(%q) = %v, want %v", tc.branch, got, tc.want)
+		}
+	}
+	if got := f.FilterBranches([]string{"main", "release,1.0"}); len(got) != 1 || got[0] != "release,1.0" {
+		t.Errorf("FilterBranches = %v, want [release,1.0]", got)
+	}
+	if len(f.Patterns()) != 1 || f.Patterns()[0] != "release,1.0" {
+		t.Errorf("Patterns() = %v, want [release,1.0]", f.Patterns())
+	}
+}
+
+func TestNewPatterns_MatchesAndErrors(t *testing.T) {
+	t.Run("empty_slice_matches_everything", func(t *testing.T) {
+		f, err := NewPatterns(nil)
+		if err != nil {
+			t.Fatalf("NewPatterns(nil): %v", err)
+		}
+		if !f.IsEmpty() || !f.Match("anything") {
+			t.Fatal("nil patterns = match-all filter")
+		}
+	})
+	t.Run("glob_semantics_unchanged", func(t *testing.T) {
+		f, err := NewPatterns([]string{"main", "release-*", "feature/*"})
+		if err != nil {
+			t.Fatalf("NewPatterns: %v", err)
+		}
+		if !f.Match("main") || !f.Match("release-2") || !f.Match("feature/x") || f.Match("release/2") {
+			t.Fatal("NewPatterns must follow filepath.Match semantics, same as New")
+		}
+	})
+	t.Run("bad_pattern_rejected_loud", func(t *testing.T) {
+		f, err := NewPatterns([]string{"main", "[bad"})
+		if err == nil || f != nil {
+			t.Fatal("malformed pattern must error wrapping filepath.ErrBadPattern")
+		}
+		if !errors.Is(err, filepath.ErrBadPattern) {
+			t.Fatalf("err = %v, want wrapping filepath.ErrBadPattern", err)
+		}
+	})
+	t.Run("spaces_inside_one_pattern_are_literal", func(t *testing.T) {
+		// 与 New 的 TrimSpace 不同：免切分形态里元素即 pattern，内部空格
+		// 是字面量（ref 名允许空格之外的多数符号；空格本身不合法，但
+		// 构造器不做二次修剪，保持所见即所得）。
+		f, err := NewPatterns([]string{" release "})
+		if err != nil {
+			t.Fatalf("NewPatterns: %v", err)
+		}
+		if !f.Match(" release ") {
+			t.Fatal("NewPatterns must not trim inside one pattern element")
+		}
+	})
+}
+
+// New 的字符串形态保留逗号切分（便利面，包 doc 写明分隔符地位）：含逗号的
+// ref 名在字符串形态下无法表达——这正是 NewPatterns 存在的原因。
+func TestNew_CommaIsAlwaysASeparator(t *testing.T) {
+	f := mustNew(t, "release,1.0")
+	if got := f.Patterns(); len(got) != 2 || got[0] != "release" || got[1] != "1.0" {
+		t.Fatalf("Patterns() = %v, want [release 1.0]", got)
+	}
+	if !f.Match("release") || !f.Match("1.0") || f.Match("release,1.0") {
+		t.Fatal("comma-split convenience surface must keep its splitting semantics")
+	}
+}

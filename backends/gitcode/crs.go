@@ -36,7 +36,13 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	return convertPullRequest(pr), nil
 }
 
-// ListCRs implements provider.ChangeRequestManager.
+// ListCRs implements provider.ChangeRequestManager. State=merged 是精确集
+// （issue #59 审计补充）：closed 过滤返回 closed∪merged 超集，但 SDK 的
+// PullRequest.Merged 标志可以后过滤出纯 merged 集——github/gitea/forgejo
+// 的列表 wire 没有等价字段，只能登记近似（见各自台账），这里选择精确化。
+// 代价与 github 的 SourceBranch 客户端过滤（issue #78）同型：caller-driven
+// 页在后过滤后可能短于 PerPage 且仍有后续页（total 本就不上报，调用方以
+// 短页判断分页终点，语义不受影响）。
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	// **未指定状态(零值)⇒ 不过滤**(平台上不加 state = 全部)。
@@ -56,6 +62,15 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	})
 	if err != nil {
 		return nil, nil, provider.Wrap(provider.PlatformGitCode, "ListCRs", err)
+	}
+	if opts.State == provider.CRStateMerged {
+		merged := make([]*gitcode.PullRequest, 0, len(prs))
+		for _, pr := range prs {
+			if pr != nil && pr.Merged {
+				merged = append(merged, pr)
+			}
+		}
+		prs = merged
 	}
 	result := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {

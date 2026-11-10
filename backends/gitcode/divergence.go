@@ -19,6 +19,8 @@ var divergences = []provider.Divergence{
 		Reason: "GitCode's label API has no description field."},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 		Reason: "GitCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
+	{Capability: "CommitManager", Method: "ListCommits", Field: "opts.Since, opts.Until (valid values)", Kind: provider.DivergenceIgnore,
+		Reason: "The gitcode SDK's commit-list options carry no time filters; values are validated against RFC3339 (issue #52 — unparsable input fails the call with ErrInvalidInput) but valid filters cannot be applied — incremental syncs must filter client-side."},
 	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceStub,
 		Reason: "GitCode serves no archive endpoint — /archive, /archive/{ref.ext}, /archive/status all 404 live (probe round 2026-11-03); the method fails with ErrNotImplemented and touches no wire."},
 	{Capability: "NotificationManager", Method: "ListNotifications", Kind: provider.DivergenceStub,

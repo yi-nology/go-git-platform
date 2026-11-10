@@ -28,6 +28,15 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // opts.PerPage only sizes the underlying requests and defaults to Gitee's
 // per_page maximum of 100.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	// 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的接受/
+	// 拒绝面必须全后端一致——RFC3339 之外的值在这里报 ErrInvalidInput，
+	// 与解析型后端同判，而不是把「平台自己报什么」交给 wire。
+	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+	}
+	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+	}
 	baseOpts := gitee.CommitListOptions{}
 	if opts.Branch != "" {
 		baseOpts.SHA = gitee.String(opts.Branch)

@@ -2,7 +2,6 @@ package gitlab
 
 import (
 	"context"
-	"time"
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
@@ -21,6 +20,16 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 
 // ListCommits implements provider.CommitManager.
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+	// Since/Until 解析失败必须报错（issue #52，批2 #75 LastReadAt 同型）：
+	// 静默丢弃会把格式笔误升级成不过滤的全量历史。
+	since, err := provider.ParseTimestamp("Since", opts.Since)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommits", err)
+	}
+	until, err := provider.ParseTimestamp("Until", opts.Until)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommits", err)
+	}
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListCommitsOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
@@ -28,15 +37,11 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	if opts.Branch != "" {
 		listOpts.RefName = new(opts.Branch)
 	}
-	if opts.Since != "" {
-		if t, err := time.Parse(time.RFC3339, opts.Since); err == nil {
-			listOpts.Since = new(t)
-		}
+	if !since.IsZero() {
+		listOpts.Since = new(since)
 	}
-	if opts.Until != "" {
-		if t, err := time.Parse(time.RFC3339, opts.Until); err == nil {
-			listOpts.Until = new(t)
-		}
+	if !until.IsZero() {
+		listOpts.Until = new(until)
 	}
 	commits, _, err := p.client.Commits.ListCommits(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {

@@ -205,6 +205,41 @@ func RunCommitSuite(t *testing.T, h CommitHarness) {
 			t.Fatalf("expected commits or files in the compare result, got %+v", cr)
 		}
 	})
+
+	t.Run("List_MalformedSince_Rejected", func(t *testing.T) {
+		assertMalformedTimestampRejected(t, newCM, "Since", "2026-01-01")
+	})
+
+	t.Run("List_MalformedUntil_Rejected", func(t *testing.T) {
+		assertMalformedTimestampRejected(t, newCM, "Until", "not-a-date")
+	})
+}
+
+// assertMalformedTimestampRejected pins the timestamp-option contract of
+// issue #52: the SAME malformed value must produce the same outcome on every
+// backend — an ErrInvalidInput rejection before the wire, never a silently
+// unfiltered (full history) result with err == nil. A date-only string is
+// exactly the hand-written shape incremental syncs naturally produce.
+func assertMalformedTimestampRejected(t *testing.T, newCM func(*testing.T) (provider.CommitManager, *[]recordedRequest), field, value string) {
+	t.Helper()
+	cm, requests := newCM(t)
+	opts := provider.ListCommitsOptions{}
+	switch field {
+	case "Since":
+		opts.Since = value
+	default:
+		opts.Until = value
+	}
+	_, err := cm.ListCommits(context.Background(), "owner", "repo", opts)
+	if err == nil {
+		t.Fatalf("malformed %s=%q must error, got nil — the filter was silently dropped and the full history served", field, value)
+	}
+	if !provider.IsInvalidInput(err) {
+		t.Fatalf("malformed %s = %v, want an error wrapping ErrInvalidInput", field, err)
+	}
+	if got := countGETs(requests); got != 0 {
+		t.Fatalf("rejection must happen before the wire, recorded %d GETs", got)
+	}
 }
 
 // --- DiffManager (GetCRDiff / GetCRFiles / CreateNote) ---
