@@ -3,6 +3,10 @@ package credential
 import (
 	"crypto/ed25519"
 	crand "crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -73,5 +77,49 @@ func TestSSHKeyHelper_HostKeyMismatch(t *testing.T) {
 	// Same key must still verify cleanly.
 	if err := cb("host.example.com", nil, pk1); err != nil {
 		t.Fatalf("expected clean verify for matching key, got %v", err)
+	}
+}
+
+// TestSSHKeyHelper_ProcessPrivateKey_PreservesCauseChain pins the rule-1 fix
+// (issue #68): wrapping a parse failure with oekiterrors.Wrap must keep the
+// cause reachable via errors.Is/Unwrap — the pre-fix `%v` formatting erased
+// the chain, hiding typed causes like ssh.PassphraseMissingError from
+// callers.
+func TestSSHKeyHelper_ProcessPrivateKey_PreservesCauseChain(t *testing.T) {
+	// A valid, unencrypted key: parsing it WITH a passphrase is a
+	// deterministic rejection whose typed cause comes straight from the ssh
+	// package, so the assertion does not depend on message text.
+	_, priv, err := ed25519.GenerateKey(crand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatalf("marshal pkcs8: %v", err)
+	}
+	pemKey := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+
+	_, wantCause := ssh.ParseRawPrivateKeyWithPassphrase([]byte(pemKey), []byte("secret"))
+	if wantCause == nil {
+		t.Fatal("expected the ssh package to reject an unencrypted key with a passphrase")
+	}
+
+	h := NewSSHKeyHelper()
+	_, err = h.ProcessPrivateKey(pemKey, "secret")
+	if err == nil {
+		t.Fatal("expected ProcessPrivateKey to fail")
+	}
+	// The ssh package builds this cause inline, so identity-based errors.Is
+	// cannot match across calls; chain reachability plus cause-message
+	// equality is the exact property the pre-fix `%v` formatting destroyed.
+	gotCause := errors.Unwrap(err)
+	if gotCause == nil {
+		t.Fatal("Unwrap(err) = nil: percent-v-style wrapping erased the cause chain")
+	}
+	if gotCause.Error() != wantCause.Error() {
+		t.Fatalf("wrong cause on chain: got %q, want %q", gotCause, wantCause)
+	}
+	if !strings.Contains(err.Error(), "failed to parse encrypted private key") {
+		t.Errorf("friendly context missing from message: %q", err.Error())
 	}
 }

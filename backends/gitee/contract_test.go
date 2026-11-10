@@ -50,6 +50,29 @@ func TestGitee_Contract(t *testing.T) {
 			GetResponse:    `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
 			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01"}`,
 		},
+		// Family suites (issue #63): Gitee wire shapes (nested patch object
+		// on changed files).
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"sha":"abc123"}}]`,
+			MutateResponse: `{"name":"feature-y"}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:  `{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00+08:00"}}}`,
+			ListResponse: `[{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00+08:00"}}}]`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse: `[{"filename":"a.txt","patch":{"old_path":"a.txt","new_path":"a.txt","diff":"@@ -1,1 +1,1 @@\n+hello","new_file":false,"deleted_file":false,"renamed_file":false},"additions":"1","deletions":"0"}]`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+		},
+		// CR suite fixtures (issue #63): Gitee pull shape — number-addressed,
+		// head/base keys, open state.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}]`,
+			GetResponse:    `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}`,
+			MutateResponse: `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse: `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

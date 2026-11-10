@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/oekit/pkg/container"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // ErrWebhookFiltered 是 ParseWebhookEvent 的「噪声过滤」哨兵（issue #45）：
@@ -27,6 +28,8 @@ var (
 	ErrConflict             = errors.New("conflict")
 	ErrNotImplemented       = errors.New("not implemented")
 	ErrInvalidInput         = errors.New("invalid input")
+	ErrGone                 = errors.New("resource permanently gone")
+	ErrServerSide           = errors.New("server-side failure")
 	ErrWebhookValidation    = errors.New("webhook validation failed")
 	ErrConnectionFailed     = errors.New("connection failed")
 	ErrPlatformNotSupported = errors.New("platform not supported")
@@ -177,7 +180,10 @@ func copyRateLimitHints(pe *ProviderError, cur error) {
 // message. The format is intentionally simple ("%s/%s") so platform code can
 // embed the resource identifier without re-implementing the prefix logic.
 func Wrapf(platform Platform, op, format string, args ...any) error {
-	cause := fmt.Errorf(format, args...)
+	// oekiterrors.Errorf (issue #68): same shape as fmt.Errorf but keeps the
+	// cause chain for %w verbs and satisfies the "no bare fmt.Errorf" rule —
+	// this spot is outside the package's double-chain exemption quota.
+	cause := oekiterrors.Errorf(format, args...)
 	return &ProviderError{Platform: platform, Op: op, Cause: cause}
 }
 
@@ -273,12 +279,26 @@ func statusExtractorFor(p Platform, err error) (int, bool) {
 // ClassifyStatus maps an HTTP status code to a sentinel error. Exposed so
 // transports and platform implementations can produce consistent error
 // categories without importing each other.
+//
+// The full mapping (issue #64): 400 and 422 → ErrInvalidInput, 401 →
+// ErrAuthentication, 403 → ErrForbidden, 404 → ErrNotFound, 409 →
+// ErrConflict, 410 → ErrGone, 429 → ErrRateLimited, 5xx → ErrServerSide;
+// every other status yields a plain formatted error (classify by IsStatus).
+// Statuses without a dedicated sentinel above stay text-only by design —
+// match them with ProviderError.IsStatus, not errors.Is.
 func ClassifyStatus(statusCode int) error {
 	return classifyStatusCode(statusCode)
 }
 
 func classifyStatusCode(statusCode int) error {
 	switch {
+	case statusCode == http.StatusBadRequest,
+		statusCode == http.StatusUnprocessableEntity:
+		// Both "the request payload was rejected" shapes (issue #64: 400 and
+		// 422 are the two most common validation-rejection statuses, and both
+		// previously fell to the text default, leaving IsInvalidInput false
+		// for real server rejections).
+		return ErrInvalidInput
 	case statusCode == http.StatusNotFound:
 		return ErrNotFound
 	case statusCode == http.StatusUnauthorized:
@@ -289,10 +309,14 @@ func classifyStatusCode(statusCode int) error {
 		return ErrRateLimited
 	case statusCode == http.StatusConflict:
 		return ErrConflict
+	case statusCode == http.StatusGone:
+		// Resource existed but is permanently gone (e.g. an emptied
+		// paginated page marker) — distinct from "never existed".
+		return ErrGone
 	case statusCode >= 500 && statusCode < 600:
-		return fmt.Errorf("server error (status %d)", statusCode)
+		return ErrServerSide
 	default:
-		return fmt.Errorf("HTTP %d", statusCode)
+		return oekiterrors.Errorf("HTTP %d", statusCode)
 	}
 }
 
@@ -340,6 +364,15 @@ func IsForbidden(err error) bool { return errors.Is(err, ErrForbidden) }
 
 // IsConflict reports whether err wraps ErrConflict (HTTP 409).
 func IsConflict(err error) bool { return errors.Is(err, ErrConflict) }
+
+// IsGone reports whether err wraps ErrGone (HTTP 410): the resource existed
+// and is now permanently gone — distinct from IsNotFound ("never existed").
+func IsGone(err error) bool { return errors.Is(err, ErrGone) }
+
+// IsServerSide reports whether err wraps ErrServerSide (any HTTP 5xx). True
+// here means "retrying after backoff is meaningful"; a false result with
+// IsClientError true means the request itself must change.
+func IsServerSide(err error) bool { return errors.Is(err, ErrServerSide) }
 
 // IsNotImplemented reports whether err wraps ErrNotImplemented.
 func IsNotImplemented(err error) bool { return errors.Is(err, ErrNotImplemented) }

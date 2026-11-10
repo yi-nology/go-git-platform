@@ -73,6 +73,32 @@ func TestGitLab_Contract(t *testing.T) {
 		// the publish timestamp). Update is a tag-addressed PUT carrying
 		// name/description; Draft/Prerelease have no GitLab counterpart
 		// (registered ignore in the backend).
+		// Family suites (issue #63): GitLab wire shapes (id-keyed commits,
+		// old_path/new_path/diff keyed files and diffs).
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"id":"abc123"}}]`,
+			MutateResponse: `{"name":"feature-y","commit":{"id":"abc123"}}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"id":"abc123","short_id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}`,
+			ListResponse:    `[{"id":"abc123","short_id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}]`,
+			CompareResponse: `{"commits":[{"id":"abc123","short_id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}],"diffs":[{"old_path":"a.txt","new_path":"a.txt","diff":"@@ -1,1 +1,1 @@\n+hello"}]}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse: `[{"old_path":"a.txt","new_path":"a.txt","diff":"@@ -1,1 +1,1 @@\n+hello","new_file":false,"deleted_file":false,"renamed_file":false}]`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			// GetRawFile returns the raw bytes, not an envelope.
+			GetResponse:  "hello world",
+			ContentIsRaw: true,
+		},
+		// CR suite fixtures (issue #63): GitLab MR shape — iid-addressed,
+		// source_branch/target_branch keys, state_event verbs, "opened" state.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,
 			UpdateResponse:   `{"tag_name":"v1.0.0","name":"v1.0.0-renamed","description":"updated notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,

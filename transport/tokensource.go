@@ -80,11 +80,13 @@ func (a TokenSourceAuth) ApplyContext(ctx context.Context, req *http.Request) er
 }
 
 // Apply implements AuthStrategy for callers that invoke it directly
-// without a context. No context means no cancellation/refresh
-// coordination; the transport pipeline itself always goes through
-// ApplyContext.
-func (a TokenSourceAuth) Apply(req *http.Request) {
-	_ = a.ApplyContext(context.Background(), req)
+// without a context. No context means no cancellation/refresh coordination;
+// the transport pipeline itself always goes through ApplyContext. The
+// refresh error is returned, not discarded — a caller stuck on the plain
+// Apply path must see the failure instead of sending an unauthenticated
+// request (issue #68: the pre-fix `_ =` swallowed TokenSource errors).
+func (a TokenSourceAuth) Apply(req *http.Request) error {
+	return a.ApplyContext(context.Background(), req)
 }
 
 // contextAuthStrategy is implemented by AuthStrategies that need the
@@ -104,6 +106,5 @@ func applyAuth(ctx context.Context, a AuthStrategy, req *http.Request) error {
 	if ca, ok := a.(contextAuthStrategy); ok {
 		return ca.ApplyContext(ctx, req)
 	}
-	a.Apply(req)
-	return nil
+	return a.Apply(req)
 }

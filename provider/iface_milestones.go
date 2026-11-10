@@ -22,7 +22,15 @@ import "context"
 // Milestone.Number (list/get results) round-trip back into these methods
 // on the platform they came from.
 type MilestoneManager interface {
-	// ListMilestones lists the repository's milestones.
+	// ListMilestones lists the repository's milestones. State contract
+	// (issue #61): "open"/"closed" filter, empty State lists ALL
+	// milestones — platforms whose own default is open-only send the
+	// platform's explicit "all" value instead of relying on the default,
+	// so an empty State never silently drops closed milestones. Tencent
+	// Code's list endpoint has no state filter (registered divergence).
+	//
+	// Page semantics: exhaustive family (issue #60, see NormalizePageOpts)
+	// — Page == 0 walks every page; Page > 0 returns exactly that page.
 	ListMilestones(ctx context.Context, owner, repo string, opts ListMilestonesOptions) ([]Milestone, error)
 	// GetMilestone fetches the milestone with the given number.
 	GetMilestone(ctx context.Context, owner, repo, number string) (*Milestone, error)

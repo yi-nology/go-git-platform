@@ -155,6 +155,21 @@ func RunLabelsSuite(t *testing.T, h LabelsHarness) {
 		}
 		assertListPaginationWire(t, h, requests)
 	})
+	// Page==0 dual-mode contract (issue #60): labels are an exhaustive-family
+	// list — zero Page walks every page, Page>0 serves exactly that page.
+	runPageZeroDualModeSuite(t, h.NewProvider, PageZeroFixture{
+		Platform:  h.Platform,
+		ListBody:  h.ListResponse,
+		EmptyBody: `[]`,
+		ListZero: func(p provider.Provider) error {
+			_, err := p.(provider.LabelManager).ListLabels(context.Background(), "owner", "repo", provider.ListLabelsOptions{})
+			return err
+		},
+		ListPageOne: func(p provider.Provider) error {
+			_, err := p.(provider.LabelManager).ListLabels(context.Background(), "owner", "repo", provider.ListLabelsOptions{Page: 1, PerPage: 10})
+			return err
+		},
+	})
 
 	t.Run("Create_ReturnsLabel", func(t *testing.T) {
 		lm, requests := newLM(t)

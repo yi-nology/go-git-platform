@@ -78,6 +78,24 @@ func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
 		return
 	}
 
+	// Page==0 dual-mode contract (issue #60): notifications are an
+	// exhaustive-family list — zero Page walks every page, Page>0 serves
+	// exactly that page. The terminal empty page mirrors the fixture's
+	// top-level shape (array vs wrapped object).
+	runPageZeroDualModeSuite(t, h.NewProvider, PageZeroFixture{
+		Platform:  h.Platform,
+		ListBody:  h.ListResponse,
+		EmptyBody: emptyNotificationPage(h.ListResponse),
+		ListZero: func(p provider.Provider) error {
+			_, err := p.(provider.NotificationManager).ListNotifications(context.Background(), provider.ListNotificationsOptions{})
+			return err
+		},
+		ListPageOne: func(p provider.Provider) error {
+			_, err := p.(provider.NotificationManager).ListNotifications(context.Background(), provider.ListNotificationsOptions{Page: 1, PerPage: 10})
+			return err
+		},
+	})
+
 	t.Run("ListNotifications_ReturnsResults", func(t *testing.T) {
 		nm := newNM(t)
 		notifications, err := nm.ListNotifications(context.Background(), provider.ListNotificationsOptions{})
@@ -143,6 +161,16 @@ func runGlobalUnsupportedSuite(t *testing.T, newNM func(*testing.T) provider.Not
 	})
 }
 
+// emptyNotificationPage renders the terminal empty page in the same
+// top-level JSON shape as listResponse: an object fixture yields an empty
+// wrapped object (total_count 0, empty list), an array fixture yields [].
+func emptyNotificationPage(listResponse string) string {
+	if len(listResponse) > 0 && listResponse[0] == '{' {
+		return `{"total_count":0,"list":[]}`
+	}
+	return `[]`
+}
+
 // notificationStubServer returns a mock server for the notification suite.
 func notificationStubServer(listResponse string) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,9 +178,11 @@ func notificationStubServer(listResponse string) *httptest.Server {
 		switch r.Method {
 		case http.MethodGet:
 			// Page-aware: AllPages-driven backends probe page 2; serve an
-			// empty terminal page so the loop stops.
+			// empty terminal page so the loop stops. The empty page keeps
+			// the first page's top-level shape (array vs wrapped object) so
+			// shape-sensitive raw-HTTP backends (gitee) parse it too.
 			if beyondFirstPage(r) {
-				_, _ = w.Write([]byte(`[]`))
+				_, _ = w.Write([]byte(emptyNotificationPage(listResponse)))
 				return
 			}
 			_, _ = w.Write([]byte(listResponse))

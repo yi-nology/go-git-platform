@@ -66,6 +66,29 @@ func TestGitCode_Contract(t *testing.T) {
 		},
 		// GitCode release payloads are GitHub-shaped (id/tag_name/name/body/
 		// draft/prerelease/html_url).
+		// Family suites (issue #63): GitCode wire shapes (GitHub-like).
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"sha":"abc123"}}]`,
+			MutateResponse: `{"name":"feature-y","commit":{"sha":"abc123"}}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"sha":"abc123","message":"commit msg","author":{"id":"1","login":"dev"}}`,
+			ListResponse:    `[{"sha":"abc123","message":"commit msg","author":{"id":"1","login":"dev"}}]`,
+			CompareResponse: `{"total_commits":1,"commits":[{"sha":"abc123","message":"commit msg"}],"files":[]}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse: `[{"filename":"a.txt","status":"modified","additions":1,"deletions":0,"patch":"@@ -1,1 +1,1 @@\n+hello"}]`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+		},
+		// CR suite fixtures (issue #63): GitCode pull shape — number-addressed,
+		// head/base keys, string author id.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

@@ -24,20 +24,30 @@ import (
 //     ISOTime), so DueOn's time-of-day is lost on the wire.
 
 // ListMilestones implements provider.MilestoneManager. State filters by
-// GitLab's "active"/"closed" (open maps to active); GitLab defaults to all.
+// GitLab's "active"/"closed" (open maps to active); an empty State sends no
+// filter and GitLab lists all — already the unified contract (issue #61).
+//
+// Dual-mode pagination is handled by backendutil.PageList (issue #60 — the
+// exhaustive family): opts.Page == 0 walks every page (budget-capped, fails
+// loud); opts.Page > 0 returns exactly that single caller-driven page. The
+// pre-fix shape normalized Page==0 to page 1 and silently returned only
+// GitLab's default 20-milestone page.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	listOpts := &gitlab.ListMilestonesOptions{
-		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
-	}
-	if opts.State != "" {
-		s := opts.State
-		if s == string(provider.MilestoneStateOpen) {
-			s = "active" // GitLab milestones vocabulary
-		}
-		listOpts.State = new(s)
-	}
-	milestones, _, err := p.client.Milestones.ListMilestones(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
+	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitlab.Milestone, error) {
+			listOpts := &gitlab.ListMilestonesOptions{
+				ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
+			}
+			if opts.State != "" {
+				s := opts.State
+				if s == string(provider.MilestoneStateOpen) {
+					s = "active" // GitLab milestones vocabulary
+				}
+				listOpts.State = new(s)
+			}
+			list, _, err := p.client.Milestones.ListMilestones(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
+			return list, err
+		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListMilestones", err)
 	}

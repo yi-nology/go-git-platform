@@ -149,10 +149,14 @@ type MilestonePort interface {
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	listOpts := ListMilestoneOption{}
-	if opts.State != "" {
-		listOpts.State = opts.State
+	// State contract (issue #61): empty State sends the family's explicit
+	// "all" — the family's own default (open) silently dropped closed
+	// milestones, which the unified contract forbids.
+	state := opts.State
+	if state == "" {
+		state = "all"
 	}
+	listOpts := ListMilestoneOption{State: state}
 	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
 		func(page, perPage int) ([]*Milestone, error) {
 			listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}

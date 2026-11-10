@@ -166,3 +166,25 @@ func TestUserAgentAppendsToSDKAgent(t *testing.T) {
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// TestTokenSourceAuthPlainApplyPropagatesRefreshError pins the issue #68
+// fix: the context-free Apply entry point must return the TokenSource
+// failure instead of discarding it — the pre-fix `_ =` sent callers out
+// with an unauthenticated request and no signal.
+func TestTokenSourceAuthPlainApplyPropagatesRefreshError(t *testing.T) {
+	boom := errors.New("refresh failed")
+	a := TokenSourceAuth{Source: tokenFunc(func(ctx context.Context) (string, error) {
+		return "", boom
+	})}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+
+	if err := a.Apply(req); !errors.Is(err, boom) {
+		t.Fatalf("TokenSourceAuth.Apply err = %v, want boom", err)
+	}
+	if err := applyAuth(context.Background(), a, req); !errors.Is(err, boom) {
+		t.Fatalf("applyAuth (plain path) err = %v, want boom", err)
+	}
+	if got := req.Header.Get("Authorization"); got != "" {
+		t.Errorf("failed auth must not half-apply credentials, got %q", got)
+	}
+}

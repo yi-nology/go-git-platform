@@ -74,6 +74,35 @@ func TestTencentCode_Contract(t *testing.T) {
 		// carry a name (registered limitation), so the suite asserts the
 		// description key. By-tag lookups resolve through the list scan the
 		// suite's collection route already serves.
+		// Family suites (issue #63): gongfeng wire shapes (id-keyed commits,
+		// old_path/new_path/diff keyed files and diffs).
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main"},{"name":"dev"}]`,
+			MutateResponse: `{"name":"feature-y"}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}`,
+			ListResponse:    `[{"id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}]`,
+			CompareResponse: `{"commits":[{"id":"abc123","message":"commit msg","author_name":"dev","authored_date":"2026-01-01T00:00:00Z"}],"diffs":[{"old_path":"a.txt","new_path":"a.txt","diff":"@@ -1,1 +1,1 @@\n+hello"}]}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			// gongfeng serves the CR diff from merge_request/{id}/changes as
+			// a wrapped object, not a bare array.
+			ChangesResponse: `{"files":[{"old_path":"a.txt","new_path":"a.txt","diff":"@@ -1,1 +1,1 @@\n+hello"}]}`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+		},
+		// CR suite fixtures (issue #63): gongfeng MR shape — iid-addressed,
+		// source_branch/target_branch keys, state_event verbs. Page==0 walks
+		// every page (registered ListCRs Page divergence; the suite
+		// cross-checks this flag against the ledger).
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			PageZeroWalks:  true,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:              `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse:             `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"updated notes","created_at":"2026-01-01T00:00:00Z"}`,

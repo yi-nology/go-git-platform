@@ -14,6 +14,8 @@ var divergences = []provider.Divergence{
 		Reason: "GitHub's head filter is namespace-pinned (owner:branch), so a pure branch-name filter is applied client-side on the unified SourceBranch (head.ref) instead - fork-sourced PRs match like on GitLab. Pagination semantics differ from GitLab's server-side filter: totals stay the pre-filter upper bound and a page can return fewer rows than PerPage while more pages remain (issue #78)."},
 	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,
 		Reason: "See GetCR."},
+	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "total", Kind: provider.DivergenceMapping,
+		Reason: "GitHub exposes no exact total on the PR list; total is derived from the Link header as LastPage*PerPage — an upper bound for the served page, not an exact count (headers are authoritative when present, never the page length; issue #60)."},
 	{Capability: "ReleaseManager", Method: "GetArchive", Kind: provider.DivergenceDetour,
 		Reason: "Archive downloads two-hop: the go-github link endpoint resolves the signed URL, the byte download streams through the token-less followClient (no auth wrapper, no per-request timeout - large archives must not be truncated; issue #72), behind a status gate so error pages never return as archive bytes."},
 	{Capability: "WebhookConfigManager", Method: "UpdateWebhook", Field: "opts.Events (empty)", Kind: provider.DivergenceIgnore,

@@ -13,11 +13,21 @@ import (
 )
 
 // ListLabels implements provider.LabelManager.
+//
+// Dual-mode pagination is handled by backendutil.PageList (issue #60 — the
+// exhaustive family): opts.Page == 0 walks every page (budget-capped, fails
+// loud); opts.Page > 0 returns exactly that single caller-driven page. The
+// pre-fix shape normalized Page==0 to page 1 and silently returned only
+// GitLab's default 20-label page while every other backend returned the
+// full set.
 func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	labels, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
-		&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)}},
-		gitlab.WithContext(ctx))
+	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitlab.Label, error) {
+			list, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
+				&gitlab.ListLabelsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)}},
+				gitlab.WithContext(ctx))
+			return list, err
+		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListLabels", err)
 	}
