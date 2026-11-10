@@ -14,7 +14,7 @@ import (
 // TencentCode does not expose a forks list endpoint; this method
 // always returns ErrNotImplemented.
 func (p *Provider) ListForks(_ context.Context, _, _ string) ([]*provider.PlatformRepo, error) {
-	return nil, provider.Wrapf(provider.PlatformTencentCode, "ListForks", "not supported on this platform")
+	return nil, provider.Wrap(provider.PlatformTencentCode, "ListForks", provider.ErrNotImplemented)
 }
 
 // ListStargazers implements provider.RepoStatsManager. The endpoint has no
@@ -48,7 +48,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 // TencentCode does not expose a contributors list endpoint; this method
 // always returns ErrNotImplemented.
 func (p *Provider) ListContributors(_ context.Context, _, _ string) ([]*provider.Contributor, error) {
-	return nil, provider.Wrapf(provider.PlatformTencentCode, "ListContributors", "not supported on this platform")
+	return nil, provider.Wrap(provider.PlatformTencentCode, "ListContributors", provider.ErrNotImplemented)
 }
 
 var _ provider.RepoStatsManager = (*Provider)(nil)

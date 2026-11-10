@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"github.com/google/go-github/v93/github"
 
@@ -126,16 +127,34 @@ func (p *Provider) resolveReleaseID(ctx context.Context, op, owner, repo, tag st
 }
 
 // GetArchive implements provider.ReleaseManager.
+//
+// 下载跳(issue #72 三连修复):
+//  1. ctx 贯穿 —— NewRequestWithContext,调用方取消/超时必须传导;
+//  2. 状态码门 —— 非 2xx 的错误页(codeload 限流/抖动时的 HTML)不得
+//     当归档字节返回,经 provider.New 归类(404→ErrNotFound、429→
+//     ErrRateLimited……),调用方分类重试/报错;
+//  3. 下载走 followClient(无 30s Timeout)——p.client.Client() 挂着
+//     transport.DefaultTimeout,大归档必然被截断;signed URL 本就不该
+//     见 API token(followClient 无 auth 包装,同一 TLS 策略)。
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	url, _, err := p.client.Repositories.GetArchiveLink(ctx, owner, repo, github.ArchiveFormat(format), &github.RepositoryContentGetOptions{Ref: ref}, 1)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
 	}
-	resp, err := p.client.Client().Get(url.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), http.NoBody)
+	if err != nil {
+		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
+	}
+	resp, err := p.followClient.Do(req)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 400 {
+		// 错误体只截前 4KB 进错误信息,避免把超大错误页整个吞进内存。
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, provider.New(provider.PlatformGitHub, "GetArchive", resp.StatusCode, string(body))
+	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)

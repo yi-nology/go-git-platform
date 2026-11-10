@@ -32,4 +32,14 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 	return giteafamily.DismissReview(ctx, p.family, p.ports, owner, repo, number, reviewID, message)
 }
 
-var _ provider.ReviewManager = (*Provider)(nil)
+// RequestTeamReviewers implements provider.TeamReviewManager (issue #79):
+// the family's review-request wire carries an independent team_reviewers
+// channel.
+func (p *Provider) RequestTeamReviewers(ctx context.Context, owner, repo, number string, teams []string) error {
+	return giteafamily.RequestTeamReviewers(ctx, p.family, p.ports, owner, repo, number, teams)
+}
+
+var (
+	_ provider.ReviewManager     = (*Provider)(nil)
+	_ provider.TeamReviewManager = (*Provider)(nil)
+)

@@ -200,7 +200,7 @@ func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 				return cr, nil
 			}
 		}
-		return nil, provider.Wrap(f.Platform, "MergeCR", err)
+		return nil, familyError(f, "MergeCR", status, err)
 	}
 	return GetCR(ctx, f, c, owner, repo, number)
 }

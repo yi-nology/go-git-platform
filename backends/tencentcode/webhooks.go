@@ -244,9 +244,18 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			UpdatedAt:    pl.ObjectAttributes.UpdatedAt.Time,
 		}
 	case "push":
-		event.Type = "push"
+		// 删除归一（issue #67，同族 #47 的 push 案）：工蜂家族没有独立
+		// delete 事件，分支删除以 push + 全零 after 投递——此前一律归一成
+		// push，消费方 switch branch.deleted 静默漏掉。before 非零确认真删除。
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = provider.EventTypeBranch + "deleted"
+			event.Action = "deleted"
+			// 全零 after 是删除标记而非提交,不设 commit_sha。
+		} else {
+			event.Type = "push"
+			event.CommitSHA = pl.After
+		}
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
-		event.CommitSHA = pl.After
 	case "tag_push":
 		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
 		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {

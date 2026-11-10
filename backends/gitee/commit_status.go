@@ -2,6 +2,7 @@ package gitee
 
 import (
 	"context"
+	"strings"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -11,18 +12,30 @@ import (
 
 // CreateCommitStatus implements provider.CommitStatusManager.
 // Gitee uses the Checks API (check runs) for CI status reporting.
+//
+// in-flight 态不得写成 completed+neutral(issue #58):读侧
+// convertCommitStatuses 对 completed 的 check run 取 conclusion 归一,
+// 而 "neutral" 归一成 Success——「写 pending 读回 success」的静默反转
+// 会把合并门禁提前放行。统一词表的终态动词(Terminal)才落
+// completed+conclusion;pending/running/未知动词一律写 in_progress
+// 形态(不带 conclusion),读侧走 Status 分支归一回 Pending/Running,
+// round-trip 语义闭环。
 func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts provider.CommitStatusOptions) error {
-	status := mapCommitStatus(opts.State)
-	_, _, err := p.client.Checks.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.CreateCheckRunOptions{
-		Name:       gitee.String(opts.Context),
-		HeadSHA:    gitee.String(sha),
-		Status:     gitee.String("completed"),
-		Conclusion: gitee.String(status),
+	check := &gitee.CreateCheckRunOptions{
+		Name:    gitee.String(opts.Context),
+		HeadSHA: gitee.String(sha),
 		Output: &gitee.CheckRunOutput{
 			Title:   gitee.String(opts.Context),
 			Summary: gitee.String(opts.Description),
 		},
-	})
+	}
+	if provider.CommitStatusState(strings.ToLower(strings.TrimSpace(opts.State))).Terminal() {
+		check.Status = gitee.String("completed")
+		check.Conclusion = gitee.String(mapCommitStatus(opts.State))
+	} else {
+		check.Status = gitee.String("in_progress")
+	}
+	_, _, err := p.client.Checks.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), check)
 	return provider.Wrap(provider.PlatformGitee, "CreateCommitStatus", err)
 }
 
@@ -81,15 +94,15 @@ func convertCommitStatuses(runs []*gitee.CheckRun) []provider.CommitStatus {
 }
 
 // mapCommitStatus maps the SDK's normalized state strings to Gitee check-run
-// conclusion values.
+// conclusion values. 只接受终态动词——in-flight 态在 CreateCommitStatus
+// 里已经分流成 in_progress 形态,不落 conclusion(issue #58;pending→neutral
+// 的旧映射已删:它是「写 pending 读回 success」反转的写侧根源)。
 func mapCommitStatus(state string) string {
-	switch state {
+	switch strings.ToLower(strings.TrimSpace(state)) {
 	case "success":
 		return "success"
 	case "failure", "error":
 		return "failure"
-	case "pending":
-		return "neutral"
 	default:
 		return "neutral"
 	}

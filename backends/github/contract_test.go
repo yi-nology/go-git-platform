@@ -107,7 +107,7 @@ func TestGitHub_Contract(t *testing.T) {
 		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
-			StargazersResponse:   `[{"id":1,"login":"star"}]`,
+			StargazersResponse:   `[{"starred_at":"2026-01-01T00:00:00Z","user":{"id":1,"login":"star"}}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
 	})

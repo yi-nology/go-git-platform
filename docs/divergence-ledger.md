@@ -29,6 +29,7 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
+| RepoStatsManager | ListStargazers |  | stub | GitLab exposes no stargazers list endpoint; the stub carries ErrNotImplemented (issue #56). |
 | CollaboratorManager | AddCollaborator | opts.Permission | mapping | The read/write/admin vocabulary maps onto GitLab access levels (read→reporter, write→developer, admin→maintainer); GitLab's add-member endpoint has no platform default and rejects a missing access_level, so empty maps to developer. |
 | ReviewManager | ListReviews |  | mapping | GitLab has no per-review objects: approvals are summarized into one review per approver, each keyed by the MR IID because no per-approval IDs exist. |
 | ReviewManager | GetReview |  | mapping | Backed by the approval state; returns the first approver's synthesized review and reports NotFound when nobody has approved yet. |
@@ -46,8 +47,9 @@ This document is generated from the backends' registered divergence ledgers
 |---|---|---|---|---|
 | BranchProtectionManager | ListBranchProtections |  | stub | GitHub exposes no list-all-protections endpoint; per-branch protection reads are served by GetBranchProtection. |
 | ChangeRequestManager | GetCR | BaseSHA | mapping | GitHub payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
+| ChangeRequestManager | ListCRs | opts.SourceBranch (pure branch name) | mapping | GitHub's head filter is namespace-pinned (owner:branch), so a pure branch-name filter is applied client-side on the unified SourceBranch (head.ref) instead - fork-sourced PRs match like on GitLab. Pagination semantics differ from GitLab's server-side filter: totals stay the pre-filter upper bound and a page can return fewer rows than PerPage while more pages remain (issue #78). |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
-| ReleaseManager | GetArchive |  | detour | Archive downloads stream through the raw transport client rather than go-github. |
+| ReleaseManager | GetArchive |  | detour | Archive downloads two-hop: the go-github link endpoint resolves the signed URL, the byte download streams through the token-less followClient (no auth wrapper, no per-request timeout - large archives must not be truncated; issue #72), behind a status gate so error pages never return as archive bytes. |
 | WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline. |
 | RepoManager | ListRepos | opts.Owner | mapping | GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (mirrors the search-based fallback the gitea family registers). |
@@ -62,7 +64,7 @@ This document is generated from the backends' registered divergence ledgers
 | LabelManager | CreateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | LabelManager | UpdateLabel | opts.Description | ignore | Gitee's label wire has no description field. |
 | ReleaseManager | CreateRelease | opts.Draft | ignore | Gitee's release create wire takes no draft flag. |
-| CommitStatusManager | CreateCommitStatus |  | mapping | Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name, state to the conclusion (pending→neutral). |
+| CommitStatusManager | CreateCommitStatus |  | mapping | Gitee's public API has no commit-status endpoint; statuses are published as check runs (Checks API). Context maps to the check-run name. Terminal verbs map to completed+conclusion (success/failure, unknown verbs to neutral); in-flight verbs (pending/running/unknown-in-flight) map to the in_progress form with no conclusion, so the read side normalizes them back to Pending/Running instead of inverting pending into Success (issue #58). |
 | CommitStatusManager | ListCommitStatuses |  | mapping | Reads map to the check runs of the commit (Checks.List). Context is the check-run name; state is concluded from status/conclusion. This surface has no string description, so CommitStatus.Description stays empty. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitee's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
 | ChangeRequestManager | UpdateCR | opts.Assignees | mapping | Gitee has no assignee field on the pull-update endpoint; a non-empty opts.Assignees converges via read-modify-write over the pull assignee add/remove endpoints. Concurrent editors can lose updates in the window. |
@@ -77,6 +79,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | GetCR | BaseSHA | mapping | Gitea payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Gitea's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| RepoStatsManager | ListContributors |  | stub | The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56). |
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple Actions runs (one per workflow file path); failed jobs are collected from the latest run per workflow path (runs return newest-first, first sighting wins) instead of a single pipeline. |
 
 ## forgejo
@@ -86,6 +89,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | GetCR | BaseSHA | mapping | Forgejo payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request. |
 | ChangeRequestManager | ListCRs | BaseSHA | mapping | See GetCR. |
 | IssueManager | ListIssues | opts.Sort, opts.Direction | ignore | Forgejo's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves). |
+| RepoStatsManager | ListContributors |  | stub | The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56). |
 
 ## gitcode
 
@@ -107,6 +111,8 @@ This document is generated from the backends' registered divergence ledgers
 
 | Capability | Method | Field | Kind | Reason |
 |---|---|---|---|---|
+| RepoStatsManager | ListForks |  | stub | TencentCODE exposes no forks list endpoint; the stub carries ErrNotImplemented (issue #56). |
+| RepoStatsManager | ListContributors |  | stub | TencentCODE exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56). |
 | ChangeRequestManager | UpdateCRLabels |  | stub | The Gongfeng API no longer accepts labels via the merge-request update endpoint. |
 | ReviewManager | ListReviews |  | mapping | Reviews are mapped from MR notes: every review is in the commented state and ordinary comments mix in. |
 | ReviewManager | GetReview |  | mapping | See ListReviews. |

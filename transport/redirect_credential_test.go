@@ -252,6 +252,114 @@ func TestSameHostRedirect_KeepsQueryToken(t *testing.T) {
 		"同 host 重定向必须继续带 query 凭据(实际 query=%q)", seenQuery)
 }
 
+// TestClient_MultiHopRedirect_NoCredentialResurrection 多跳重定向链**不得**
+// 在第二跳把令牌「复活」(issue #65,P0 回归)。
+//
+// 链形:平台 P → 第三方 E/hop1 → E/hop2(第三方侧同域再跳——http→https
+// 升级、S3 尾斜杠 301、签名 URL 重发都是现实形态)。
+//
+// 修复前:剥凭据判据只比紧邻上一跳,第二跳「与上一跳同 host」被判定
+// 为非跨 host ⇒ applyAuth 把平台令牌重新施加到 E/hop2 的请求上
+// (hop1 剥过一次也拦不住 RoundTripper 的逐跳重施加)。
+// 同时模拟 go-gitee 形态的 query 令牌 SDK(外层 tokenTransport 每跳
+// 重塞 access_token),验证剥除发生在该层之内、两跳全部生效。
+func TestClient_MultiHopRedirect_NoCredentialResurrection(t *testing.T) {
+	var mu sync.Mutex
+	type hopSeen struct {
+		auth, private, query string
+		calls                int
+	}
+	seen := map[string]hopSeen{} // path → 该跳收到的凭据头
+
+	record := func(name string, r *http.Request) {
+		mu.Lock()
+		seen[name] = hopSeen{
+			auth:    r.Header.Get("Authorization"),
+			private: r.Header.Get("PRIVATE-TOKEN"),
+			query:   r.URL.RawQuery,
+			calls:   1,
+		}
+		mu.Unlock()
+	}
+
+	// 第三方主机:hop1 302 → 同 host 的 hop2;hop2 终点。
+	target := http.NewServeMux()
+	target.HandleFunc("/hop1", func(w http.ResponseWriter, r *http.Request) {
+		record("hop1", r)
+		http.Redirect(w, r, "/hop2", http.StatusFound)
+	})
+	target.HandleFunc("/hop2", func(w http.ResponseWriter, r *http.Request) {
+		record("hop2", r)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	third := httptest.NewServer(target)
+	defer third.Close()
+
+	// 平台主机:302 → 第三方 hop1。
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, third.URL+"/hop1", http.StatusFound)
+	}))
+	defer source.Close()
+
+	c := NewClient(source.URL, nil)
+	// 认证同时带 Authorization + PRIVATE-TOKEN 两种形态:RoundTripper 内的
+	// applyAuth 每跳都会重施加非标准头(Go 只剥 Authorization 家族),
+	// 正是链形回灌的通道。
+	c.auth = AuthFunc(func(req *http.Request) {
+		BearerToken{Token: "BEARER-SECRET"}.Apply(req)
+		PrivateToken{Token: "PRIVATE-SECRET"}.Apply(req)
+	})
+	// 外层 tokenTransport(每跳重塞 query 令牌,go-gitee 形态)。
+	outer := http.RoundTripper(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		r2 := r.Clone(r.Context())
+		q := r2.URL.Query()
+		q.Set("access_token", "QUERY-SECRET")
+		r2.URL.RawQuery = q.Encode()
+		return c.NewRetryingRoundTripper().RoundTrip(r2)
+	}))
+	httpCli := &http.Client{Transport: outer}
+
+	req, err := http.NewRequest(http.MethodGet, source.URL+"/start?access_token=QUERY-SECRET", nil)
+	require.NoError(t, err)
+	resp, err := httpCli.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	mu.Lock()
+	hop1, hop2 := seen["hop1"], seen["hop2"]
+	mu.Unlock()
+	require.Equal(t, 1, hop1.calls, "hop1 应恰好到达一次")
+	require.Equal(t, 1, hop2.calls, "hop2 应恰好到达一次")
+	assert.Empty(t, hop1.auth, "第一跳(跨 host)不得带 Authorization")
+	assert.Empty(t, hop1.private, "第一跳(跨 host)不得带 PRIVATE-TOKEN")
+	assert.NotContains(t, hop1.query, "QUERY-SECRET", "第一跳(跨 host)不得带 query 令牌")
+	assert.Empty(t, hop2.auth, "第二跳(第三方同域再跳)不得复活 Authorization")
+	assert.Empty(t, hop2.private, "第二跳(第三方同域再跳)不得复活 PRIVATE-TOKEN")
+	assert.NotContains(t, hop2.query, "QUERY-SECRET", "第二跳(第三方同域再跳)不得复活 query 令牌")
+}
+
+// TestOriginRedirectHost_WalksChain OriginRedirectHost 回溯到链头。
+func TestOriginRedirectHost_WalksChain(t *testing.T) {
+	// 无 Response ⇒ 非重定向跳,返回自身 host。
+	r0, err := http.NewRequest(http.MethodGet, "http://origin.example/x", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "origin.example", OriginRedirectHost(r0))
+	assert.False(t, CrossHostRedirect(r0))
+
+	// 两跳链:hop2 的链头是 origin,hop1 的链头也是 origin。
+	r1, err := http.NewRequest(http.MethodGet, "http://third.example/hop1", nil)
+	require.NoError(t, err)
+	r1.Response = &http.Response{Request: r0}
+	r2, err := http.NewRequest(http.MethodGet, "http://third.example/hop2", nil)
+	require.NoError(t, err)
+	r2.Response = &http.Response{Request: r1}
+
+	assert.Equal(t, "origin.example", OriginRedirectHost(r1))
+	assert.Equal(t, "origin.example", OriginRedirectHost(r2))
+	assert.True(t, CrossHostRedirect(r1), "origin→third 是跨 host")
+	assert.True(t, CrossHostRedirect(r2), "third→third 但链头是 origin ⇒ 仍跨 host(修复点)")
+}
+
 // TestRedactURL_MasksUserInfo URL 里的 userinfo 密码不能进日志。
 //
 // 回归背景(P2,当前不可达但形状危险):`redactURL` 只处理 query ⇒

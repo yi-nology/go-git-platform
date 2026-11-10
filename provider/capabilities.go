@@ -32,6 +32,7 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 	_, deployments := p.(DeploymentManager)
 	_, repoTemplates := p.(TemplateRepoManager)
 	_, forkSync := p.(ForkSyncManager)
+	_, teamReviews := p.(TeamReviewManager)
 	return CapabilitySet{
 		Issues:            issues,
 		Search:            search,
@@ -55,5 +56,6 @@ func DeriveCapabilities(p Provider) CapabilitySet {
 		Deployments:       deployments,
 		RepoTemplates:     repoTemplates,
 		ForkSync:          forkSync,
+		TeamReviews:       teamReviews,
 	}
 }

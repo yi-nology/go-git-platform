@@ -219,3 +219,51 @@ func TestParseWebhookEvent_TagDeletionNormalized(t *testing.T) {
 		t.Fatalf("创建投递不得误判为删除, got type=%q action=%q", ne.Type, ne.Action)
 	}
 }
+
+// TestParseWebhookEvent_BranchDeletionNormalized 分支删除归一（issue #67，
+// #47 的 push 案同族）：GitLab 家族没有独立 delete 事件，分支删除以
+// push + 全零 after 投递——此前一律归一成 push，消费方 switch
+// branch.deleted 静默漏掉全部分支删除。
+func TestParseWebhookEvent_BranchDeletionNormalized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	p := newTestProvider(t, srv)
+
+	mk := func(before, after string) *http.Request {
+		body := fmt.Sprintf(`{"object_kind":"push","ref":"refs/heads/feature","before":%q,"after":%q,"project":{"path_with_namespace":"o/r"},"user":{"id":1,"username":"d","name":"D"}}`, before, after)
+		r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+		r.Header.Set("X-Gitlab-Token", "corpus-secret")
+		r.Header.Set("X-Gitlab-Event", "push")
+		r.Header.Set("Content-Type", "application/json")
+		return r
+	}
+
+	ne, err := p.ParseWebhookEvent(mk("def4567890abcdef4567890abcdef4567890abcd", "0000000000000000000000000000000000000000"), "corpus-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "branch.deleted" || ne.Action != "deleted" || ne.Branch != "feature" {
+		t.Fatalf("删除投递必须归一 branch.deleted, got type=%q action=%q branch=%q", ne.Type, ne.Action, ne.Branch)
+	}
+	if ne.CommitSHA != "" {
+		t.Fatalf("删除投递不得携带全零标记作为 commit_sha, got %q", ne.CommitSHA)
+	}
+
+	// 正常 push 不受影响
+	ne, err = p.ParseWebhookEvent(mk("def4567890abcdef4567890abcdef4567890abcd", "abc123"), "corpus-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "push" || ne.Action != "push" || ne.CommitSHA != "abc123" {
+		t.Fatalf("正常 push 不得误判为删除, got type=%q action=%q sha=%q", ne.Type, ne.Action, ne.CommitSHA)
+	}
+
+	// 全零 before+after 的异常形态不硬归（同 #47 口径）
+	ne, err = p.ParseWebhookEvent(mk("0000000000000000000000000000000000000000", "0000000000000000000000000000000000000000"), "corpus-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "push" {
+		t.Fatalf("全零 before+after 不得硬归为删除, got type=%q", ne.Type)
+	}
+}

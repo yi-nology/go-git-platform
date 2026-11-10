@@ -267,5 +267,7 @@ func Divergences(displayName string) []provider.Divergence {
 			Reason: "See GetCR."},
 		{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
 			Reason: fmt.Sprintf("%s's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves).", displayName)},
+		{Capability: "RepoStatsManager", Method: "ListContributors", Kind: provider.DivergenceStub,
+			Reason: "The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56)."},
 	}
 }

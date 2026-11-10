@@ -429,7 +429,9 @@ func ListStargazers(ctx context.Context, f Family, c RepoStatsPort, owner, repo 
 }
 
 // ListContributors always returns ErrNotImplemented: the family exposes no
-// contributors list endpoint.
+// contributors list endpoint. The sentinel rides provider.Wrap so
+// IsNotImplemented stays decidable (issue #56: a bare Wrapf makes the
+// predicate always false and the DivergenceSuite stub lock blind).
 func ListContributors(_ context.Context, f Family, _ RepoStatsPort, _, _ string) ([]*provider.Contributor, error) {
-	return nil, provider.Wrapf(f.Platform, "ListContributors", "not supported on this platform")
+	return nil, provider.Wrap(f.Platform, "ListContributors", provider.ErrNotImplemented)
 }

@@ -55,6 +55,7 @@ type CapabilitySet struct {
 	Deployments       bool // provider.DeploymentManager
 	RepoTemplates     bool // provider.TemplateRepoManager
 	ForkSync          bool // provider.ForkSyncManager
+	TeamReviews       bool // provider.TeamReviewManager
 }
 
 // Provider is the unified interface for all Git hosting platforms.
