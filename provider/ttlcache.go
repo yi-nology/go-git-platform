@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -31,14 +32,25 @@ import (
 // 装饰器不提供 Clear/Size/Sweep（这三项只在内层有），因此内层句柄仍留着，
 // 由 remove/purge/len/cleanup 走内层。
 //
-// 回源函数由**调用点注入**（GetOrLoadWithSource）：Manager.Get 的回源闭包
+// 回源函数由**调用点注入**（按 key 收敛见 getOrBuild）：Manager.Get 的回源闭包
 // 捕获的是本次调用的 cfg（Provider 按 cfg 构造），构造期固定的 Source 拿不到它。
 type ttlCache[V any] struct {
 	inner *cache.LocalCache[V]        // 装饰器未透传 Clear/Size/Sweep，走内层
-	sf    *cache.SingleFlightCache[V] // 读路径 + 回源去重 + 计数
+	sf    *cache.SingleFlightCache[V] // 读路径 + 计数 + 回填
+
+	flightsMu sync.Mutex
+	flights   map[string]*ttlFlight[V] // 按 key 收敛的回源 flight（赢家构造、等待者共享）
 
 	mu       sync.Mutex
 	baseline cache.Stats // ResetStats 时刻的计数基线（对外按差值暴露）
+}
+
+// ttlFlight 是一次按 key 收敛的回源：赢家跑 build 并回填缓存，等待者在 done
+// 关闭后共享结果（v/err 在 done 关闭后只读——channel close 提供 happens-before）。
+type ttlFlight[V any] struct {
+	done chan struct{}
+	v    V
+	err  error
 }
 
 // newTTLCache 构建缓存（ttl <= 0 表示不过期；maxSize <= 0 表示不限容量）。
@@ -61,30 +73,75 @@ func newTTLCache[V any](ttl time.Duration, maxSize int) *ttlCache[V] {
 
 // getOrBuild 返回缓存值；未命中则用 build 构造并写入。
 //
-// 未命中时的构造经上游 singleflight 去重：同一 key 的并发调用只真正构造一次，
-// 所有调用方拿到同一个实例——这与本仓历史实现的「双检收敛到同一个赢家」
-// 语义一致，且顺带省掉了 N-1 次重复构造。
+// 未命中时的构造按 key 单飞去重：同一 key 的并发调用只真正构造一次，所有
+// 调用方拿到同一个实例——与本仓历史实现的「双检收敛到同一个赢家」语义
+// 一致，且省掉 N-1 次重复构造。
+//
+// 为什么在本地自建 flight 而不用上游装饰器的 GetOrLoadWithSource：回源闭包
+// 捕获本次调用的 cfg，构造期固定的 Source 拿不到它；而上游 pkg v0.44.0 起
+// （pkg#353）按调用注入的 source **有意不进 singleflight**——source 不可比较，
+// 泛化 API 按 key 合并会让等待者共享先到者的回源结果（同 key 不同凭据时
+// 串扰），这是上游正确的保守。本缓存的用法下同 key 必然同 cfg（key 由
+// buildKey(cfg) 派生）、构造结果可互换，去重安全且必要（构造 Provider 新建
+// http.Client 与连接池，N 份并发持有是真实的资源浪费），故按 key 自建。
 func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error) {
 	ctx := context.Background()
 
-	value, err := c.sf.GetOrLoadWithSource(ctx, key, func(context.Context, string) (*V, error) {
-		built, err := build()
-		if err != nil {
-			// 回源失败不写缓存（含 null marker）：失败必须能被下一次查找重试。
-			return nil, err
+	// 快路径：命中即返（含值为 nil 的真值命中，照上游 #203 口径早退）。
+	// 未命中恰好计一次 miss；加载/等待路径不再触碰内层计数——一次查找恰好
+	// 计入命中或未命中之一（对外计数契约不变）。
+	value, hit, err := c.sf.Peek(ctx, key)
+	if err == nil && hit {
+		if value == nil {
+			var zero V
+			return zero, nil
 		}
-		// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
-		return &built, nil
-	})
-	if err != nil {
-		var zero V
-		return zero, err
+		return *value, nil
 	}
-	if value == nil {
-		var zero V
-		return zero, nil
+
+	// 按 key 单飞：赢家构造并回填，等待者等 done 共享结果。
+	c.flightsMu.Lock()
+	if c.flights == nil {
+		c.flights = make(map[string]*ttlFlight[V])
 	}
-	return *value, nil
+	if f, ok := c.flights[key]; ok {
+		c.flightsMu.Unlock()
+		<-f.done
+		if f.err != nil {
+			var zero V
+			return zero, f.err
+		}
+		return f.v, nil
+	}
+	f := &ttlFlight[V]{done: make(chan struct{})}
+	c.flights[key] = f
+	c.flightsMu.Unlock()
+
+	// 赢家路径。build panic 时：等待者共享为错误、赢家自身照旧向上抛
+	// （recover 后重 panic，panic 值原样传递）。
+	defer func() {
+		r := recover()
+		if r != nil {
+			f.err = fmt.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %v", r)
+		}
+		close(f.done)
+		c.flightsMu.Lock()
+		delete(c.flights, key)
+		c.flightsMu.Unlock()
+		if r != nil {
+			panic(r)
+		}
+	}()
+
+	f.v, f.err = build()
+	if f.err != nil {
+		// 回源失败不写缓存（含 null marker）：失败必须能被下一次查找重试。
+		var zero V
+		return zero, f.err
+	}
+	// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
+	_ = c.sf.Set(ctx, key, &f.v)
+	return f.v, nil
 }
 
 // remove 丢弃一个条目。
