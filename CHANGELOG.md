@@ -6,6 +6,68 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+
+### Fixed（第三批 7 连修：Page==0 双模契约 / ListMilestones State 统一 / 422-410-5xx 哨兵 / 规则一残留 / janitor 身份检查 / 契约五族补白）
+
+- fix(provider): **Page==0 分页语义双族契约钉死**（issue #60）——`NormalizePageOpts`
+  升级为全 SDK Page 契约锚点：有界集族（labels/milestones/notifications）
+  Page==0 走全页（预算封顶、撞页失败为响），Page>0 恰取该页；无界集族
+  （CR；Issue 族 #51 另批）Page==0 单请求取首页，Page>0 恰取该页。对齐面：
+  gitlab ListLabels/ListMilestones/ListNotifications/ListRepoNotifications（旧
+  归一 page 1，只回 GitLab 默认 20 条）、gitee ListNotifications/ListRepoNotifications
+  （旧 Page==0 不带分页参数 ⇒ 服务端默认页）、giteafamily ListLabels；tencentcode
+  ListCRs 的 Page==0 全页行走按 divergence 登记（caller-paged 族例外），
+  github ListCRs total=LastPage×PerPage 上界近似同批登记；契约套件补三族
+  「Page==0 走全 / Page>0 单请求」wire 计数断言。
+- fix(backends): **ListMilestones State 空值语义统一**（issue #61）——空 State
+  一律显式落 "all"（github/gitee/gitcode/giteafamily 旧透传空值 ⇒ 平台缺省
+  open-only，closed 里程碑静默漏项）；gitlab 空值本就不发过滤（= all）不变；
+  tencentcode 列表端点无 State 参数，显式 State 落 DivergenceIgnore 台账；
+  契约套件补「空值 wire ∈ {"", "all"}」「closed 显式转发（ignore 登记者豁免）」
+  双断言（ignore 判据走台账机器可读，不上手写旗标）。
+- fix(provider): **422/410/5xx 哨兵可判**（issue #64）——`classifyStatusCode`
+  补 400/422→`ErrInvalidInput`、410→`ErrGone`（新哨兵）、5xx→`ErrServerSide`
+  （新哨兵），`IsGone`/`IsServerSide` 判定助手同批；真实 wire 422 与本地构造
+  校验拒绝（gitea repo_template、github deployments/repo_extras 等
+  `provider.New(..., 422)`）现均 `errors.Is` 可判；其余状态码维持「仅文本、靠
+  IsStatus 判」口径并在 `ClassifyStatus` godoc 写明；补全量映射表测试 +
+  Wrap/New 端到端哨兵链测试。**迁移说明**：422/410/5xx 错误的 `Error()` 文本
+  形态从 `HTTP 422` 变为 `HTTP 422: invalid input` 形态，精确匹配错误字符串的
+  调用方请改用 `errors.Is`/`IsStatus`。
+- fix(pkg/credential,transport,provider): **规则一残留面三连清**（issue #68）——
+  pkg/credential sshkey 五处 `%v` 包装迁 `oekiterrors.Wrap`（cause 链恢复，
+  `ssh.PassphraseMissingError` 等类型化原因重新可判，补 cause 链保真回归）；
+  provider/errors.go `Wrapf` 与 classifyStatusCode 文本分支迁
+  `oekiterrors.Errorf`（`fmt.Errorf` 收敛回双链豁免配额 3 处）；
+  transport `AuthStrategy.Apply` 签名改返回 `error`（**breaking**，0.x minor
+  承载）——`TokenSourceAuth.Apply` 旧 `_ =` 吞掉 TokenSource 刷新错误，直呼
+  Apply 的调用方拿无凭据请求无信号；全仓实现与唯一调用点 `applyAuth` 同步，
+  刷新错误现沿 plain-Apply 路径传播（补传播回归测试）。
+- fix(provider): **janitor stopAndWait 补身份检查**（issue #69）——`j.done = nil`
+  前加 `if j.done == done` 与 goroutine 侧自复位对称；旧无条件清零会在
+  「Stop 持锁清 stop 后等待退出的窗口内并发 StartJanitor」时把新 janitor 的
+  done 一并抹掉 ⇒ 下次 Stop 不等新 goroutine 退出即返回，「阻塞至退出」契约
+  破窗；补窗口期交错回归测试（200 轮打点复现旧缺陷，红↔绿双向验证）+ 并发
+  start/stop 混跑 -race 压测。
+- feat(backends): **三处 mapping/detour 机器可读登记**（issue #62）——gitlab
+  Milestone DueOn 日期截断（ISOTime 丢时分秒）与 ListNotifications/ListRepoNotifications
+  映射 Todos API（threadID 即 todo ID、All/Since 无线路面）落 gitlab 台账；
+  gitee ListNotifications/ListRepoNotifications 裸 HTTP detour（私有
+  rawNotificationList、total_count 不外露）落 gitee 台账；`go generate ./...`
+  再生成 docs/divergence-ledger.md。
+- feat(backends/contracttest): **契约五大族补白**（issue #63）——CRSuite
+  （Get/List 解析、Page==0 caller-paged 单请求契约 + tencentcode 例外与台账
+  互检、Create wire 双词表断言、Close/Reopen state/state_event、Update title、
+  Merge 端点）、BranchSuite（list/create/delete）、CommitSuite（get/list/compare
+  解析）、DiffSuite（GetCRFiles/GetCRDiff 解析 + #44 同族全页、CreateNote wire）、
+  FileSuite（GetFileContent 解码断言，raw/base64 双形态）挂进 Run()；七后端
+  逐台配齐夹具（平台 wire 词表实锚：gitee additions 字符串、gongfeng changes
+  包裹对象、giteafamily 无 hunk 文件列表与 raw 内容端点等）；补 Run() 覆盖矩阵
+  × 方法族机器互检（TestRunCoverageMatrix 双向断言）与六个可选能力族
+  （Gists/Starred/Migrations/ReleaseAssets/Deployments/ForkSync）「仅声明检查、
+  无行为断言」缺口显式登记（TestOptionalCapabilityFamiliesUncovered）。
+
+
 ### gitbackend/gogit/credhelper 底座层
 
 - fix(gitbackend): native `IsAncestor` 按退出码分流——`git merge-base
@@ -70,6 +132,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gogit 侧经 go-git UnifiedEncoder 渲染（object.Patch 同管线），按
   index∪HEAD 选路径、index 跟踪性判定删除（rm --cached 同 git 呈现）
   （issue #110）。
+
 ### Fixed（第二批 14 连修：安全面凭据回灌 / 错误分类断链 / 读回反转 / 契约兑现）
 
 - fix(transport): 跨 host 重定向剥凭据判据改对齐**重定向链起点**——旧判据只比紧邻

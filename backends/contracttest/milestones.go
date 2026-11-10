@@ -87,6 +87,37 @@ func RunMilestonesSuite(t *testing.T, h MilestonesHarness) {
 		mm, _ := newMM(t)
 		assertMilestoneListNormalized(t, mm)
 	})
+	// Page==0 dual-mode contract (issue #60): milestones are an
+	// exhaustive-family list — zero Page walks every page, Page>0 serves
+	// exactly that page.
+	runPageZeroDualModeSuite(t, h.NewProvider, PageZeroFixture{
+		Platform:  h.Platform,
+		ListBody:  h.ListResponse,
+		EmptyBody: `[]`,
+		ListZero: func(p provider.Provider) error {
+			_, err := p.(provider.MilestoneManager).ListMilestones(context.Background(), "owner", "repo", provider.ListMilestonesOptions{})
+			return err
+		},
+		ListPageOne: func(p provider.Provider) error {
+			_, err := p.(provider.MilestoneManager).ListMilestones(context.Background(), "owner", "repo", provider.ListMilestonesOptions{Page: 1, PerPage: 10})
+			return err
+		},
+	})
+	// State contract (issue #61): empty State must ASK for all — the wire
+	// carries either no state filter (platforms whose default is all, e.g.
+	// GitLab) or the platform's explicit "all" value; it must never fall
+	// through to an open-only platform default that silently drops closed
+	// milestones.
+	t.Run("List_ZeroState_WireAsksAll", func(t *testing.T) {
+		mm, requests := newMM(t)
+		assertMilestoneZeroStateWire(t, mm, requests)
+	})
+	// Explicit "closed" must reach the wire verbatim — except on backends
+	// whose ledger registers a ListMilestones State ignore (platform filter
+	// not expressible, currently Tencent Code).
+	t.Run("List_ClosedState_Forwarded", func(t *testing.T) {
+		assertMilestoneClosedStateWire(t, h)
+	})
 	t.Run("Get_ParsesAndNormalizes", func(t *testing.T) {
 		if h.GetResponse == "" {
 			t.Skipf("%s harness wires no GetResponse fixture", h.Name)
@@ -183,6 +214,15 @@ func assertMilestoneDeleteWire(t *testing.T, mm provider.MilestoneManager, reque
 	t.Errorf("expected a non-GET delete request, recorded %s", methodsOf(*requests))
 }
 
+// pathsOf summarizes the recorded request paths for failure messages.
+func pathsOf(requests []recordedRequest) []string {
+	ps := make([]string, len(requests))
+	for i, r := range requests {
+		ps[i] = r.Path
+	}
+	return ps
+}
+
 // milestoneStubServer returns the method-routed recording mock for the
 // milestones suite. Every milestone-path request is served; the GET branch
 // answers list and single fetches alike with ListResponse since the suite's
@@ -220,4 +260,55 @@ func milestoneStubServer(h MilestonesHarness) (*httptest.Server, *[]recordedRequ
 		}
 	}))
 	return srv, &requests
+}
+
+// assertMilestoneZeroStateWire pins the empty-State asks-all contract
+// (issue #61): every list GET carries either no state filter or the
+// explicit "all" value.
+func assertMilestoneZeroStateWire(t *testing.T, mm provider.MilestoneManager, requests *[]recordedRequest) {
+	t.Helper()
+	if _, err := mm.ListMilestones(context.Background(), "owner", "repo", provider.ListMilestonesOptions{Page: 1, PerPage: 10}); err != nil {
+		t.Fatalf("ListMilestones (empty State): %v", err)
+	}
+	asserted := false
+	for i := range *requests {
+		r := (*requests)[i]
+		if r.Method != http.MethodGet {
+			continue
+		}
+		asserted = true
+		if s := r.Query().Get("state"); s != "" && s != "all" {
+			t.Errorf("empty State must not send an open-only filter, got state=%q on %s", s, r.Path)
+		}
+	}
+	if !asserted {
+		t.Fatal("expected at least one GET to assert the state wire")
+	}
+}
+
+// assertMilestoneClosedStateWire pins the explicit-State forwarding contract
+// (issue #61): "closed" reaches the wire verbatim, unless the ledger
+// registers a ListMilestones State ignore.
+func assertMilestoneClosedStateWire(t *testing.T, h MilestonesHarness) {
+	t.Helper()
+	srv, requests := milestoneStubServer(h)
+	t.Cleanup(srv.Close)
+	p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+	if provider.Ignores(p.Divergences(), "ListMilestones", "State") {
+		t.Skipf("%s registers a ListMilestones State ignore", h.Name)
+	}
+	mm := p.(provider.MilestoneManager)
+	if _, err := mm.ListMilestones(context.Background(), "owner", "repo", provider.ListMilestonesOptions{State: "closed", Page: 1, PerPage: 10}); err != nil {
+		t.Fatalf("ListMilestones (closed): %v", err)
+	}
+	for i := range *requests {
+		r := (*requests)[i]
+		if r.Method != http.MethodGet {
+			continue
+		}
+		if s := r.Query().Get("state"); s == "closed" {
+			return // forwarded verbatim
+		}
+	}
+	t.Fatalf("State=%q never reached the wire as state=closed; requests: %v", "closed", pathsOf(*requests))
 }

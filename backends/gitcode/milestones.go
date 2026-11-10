@@ -33,10 +33,16 @@ import (
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
+	// State contract (issue #61): empty State sends the explicit "all"
+	// (GitCode also accepts it) instead of relying on the platform default.
+	state := opts.State
+	if state == "" {
+		state = "all"
+	}
 	buildOpts := func(page, perPage int) gitcode.ListMilestonesOptions {
 		return gitcode.ListMilestonesOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
-			State:       opts.State,
+			State:       state,
 		}
 	}
 	var milestones []*gitcode.Milestone

@@ -39,43 +39,51 @@ import (
 const DefaultTimeout = 30 * time.Second
 
 // AuthStrategy applies authentication credentials to an outbound request.
-// Implementations must be safe to call concurrently from multiple goroutines.
+// Apply returns an error when the credential cannot be produced (e.g. a
+// TokenSource refresh failure) so the request fails loudly instead of going
+// out unauthenticated (issue #68). Implementations must be safe to call
+// concurrently from multiple goroutines.
 type AuthStrategy interface {
-	Apply(req *http.Request)
+	Apply(req *http.Request) error
 }
 
 // AuthFunc adapts a plain function into an AuthStrategy.
 type AuthFunc func(req *http.Request)
 
 // Apply implements AuthStrategy.
-func (f AuthFunc) Apply(req *http.Request) { f(req) }
+func (f AuthFunc) Apply(req *http.Request) error {
+	f(req)
+	return nil
+}
 
 // None is the no-op auth strategy.
 type None struct{}
 
 // Apply implements AuthStrategy.
-func (None) Apply(*http.Request) {}
+func (None) Apply(*http.Request) error { return nil }
 
 // BearerToken sets the standard "Authorization: Bearer <token>" header.
 type BearerToken struct{ Token string }
 
 // Apply implements AuthStrategy.
-func (b BearerToken) Apply(req *http.Request) {
+func (b BearerToken) Apply(req *http.Request) error {
 	if b.Token == "" {
-		return
+		return nil
 	}
 	req.Header.Set("Authorization", "Bearer "+b.Token)
+	return nil
 }
 
 // PrivateToken sets the GitLab-style "PRIVATE-TOKEN" header.
 type PrivateToken struct{ Token string }
 
 // Apply implements AuthStrategy.
-func (p PrivateToken) Apply(req *http.Request) {
+func (p PrivateToken) Apply(req *http.Request) error {
 	if p.Token == "" {
-		return
+		return nil
 	}
 	req.Header.Set("PRIVATE-TOKEN", p.Token)
+	return nil
 }
 
 // TokenHeader sets the older "Authorization: token <token>" header used by
@@ -83,11 +91,12 @@ func (p PrivateToken) Apply(req *http.Request) {
 type TokenHeader struct{ Token string }
 
 // Apply implements AuthStrategy.
-func (t TokenHeader) Apply(req *http.Request) {
+func (t TokenHeader) Apply(req *http.Request) error {
 	if t.Token == "" {
-		return
+		return nil
 	}
 	req.Header.Set("Authorization", "token "+t.Token)
+	return nil
 }
 
 // StaticAuth lets callers inject an arbitrary header value.
@@ -97,11 +106,12 @@ type StaticAuth struct {
 }
 
 // Apply implements AuthStrategy.
-func (s StaticAuth) Apply(req *http.Request) {
+func (s StaticAuth) Apply(req *http.Request) error {
 	if s.Header == "" {
-		return
+		return nil
 	}
 	req.Header.Set(s.Header, s.Value)
+	return nil
 }
 
 // Request describes a single HTTP call. It is intentionally a plain value type

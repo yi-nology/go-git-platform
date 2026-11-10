@@ -32,6 +32,10 @@ var divergences = []provider.Divergence{
 		Reason: "See CreateIssue: the issue wire takes a single assignee field; multiple logins are comma-joined into it."},
 	{Capability: "DiffManager", Method: "CreateDiscussion", Field: "opts.BaseSHA, opts.StartSHA, opts.StartNewLine, side distinction of opts.NewLine/OldLine", Kind: provider.DivergenceMapping,
 		Reason: "Gitee's inline-comment wire takes path + a single position (diff line number) + commit_id: NewLine wins when both line anchors are set (no side channel), HeadSHA rides commit_id, and the base/start SHA pair and multi-line ranges have no fields and are dropped."},
+	{Capability: "NotificationManager", Method: "ListNotifications", Field: "", Kind: provider.DivergenceDetour,
+		Reason: "Driven over the raw transport (NewRequest/Do) against a private rawNotificationList shape instead of go-gitee's typed SDK: the notifications wire is non-standard (unread is a \"true\"/\"false\" string the typed model cannot parse). The payload shape has no SDK contract backing, so an SDK upgrade brings no regression net for it (issue #62; pre-fix this lived only in file comments). The platform's total_count field is parsed but not surfaced — the list methods return no total. ListRepoNotifications detours the same way."},
+	{Capability: "NotificationManager", Method: "ListRepoNotifications", Field: "", Kind: provider.DivergenceDetour,
+		Reason: "Same raw-transport detour as ListNotifications, scoped to /repos/{owner}/{repo}/notifications (issue #62)."},
 }
 
 // Divergences returns the registered divergence ledger for the Gitee backend.

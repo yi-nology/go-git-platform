@@ -100,6 +100,17 @@ type Harness struct {
 	// capability-declaration drift to check — the config is mandatory and
 	// the suite fails the run when it is missing.
 	Releases *ReleasesHarnessConfig
+	// CRs auto-mounts the change-request suite inside Run (issue #63).
+	// ChangeRequestManager is a core interface: the config is mandatory and
+	// the suite fails the run when it is missing.
+	CRs *CRHarnessConfig
+	// Branches / Commits / Diffs / Files auto-mount the remaining core
+	// manager suites (issue #63). Configs are mandatory; individual fixture
+	// fields may be empty (their subtest then skips with a named message).
+	Branches *BranchHarnessConfig
+	Commits  *CommitHarnessConfig
+	Diffs    *DiffHarnessConfig
+	Files    *FileHarnessConfig
 }
 
 // Run executes the full contract suite against h. Each subtest is independent.
@@ -122,6 +133,11 @@ func Run(t *testing.T, h Harness) {
 	t.Run("MilestonesSuite", func(t *testing.T) { testMilestonesSuite(t, h) })
 	t.Run("SearchSuite", func(t *testing.T) { testSearchSuite(t, h) })
 	t.Run("ReleaseSuite", func(t *testing.T) { testReleaseSuite(t, h) })
+	t.Run("CRSuite", func(t *testing.T) { testCRSuite(t, h) })
+	t.Run("BranchSuite", func(t *testing.T) { testBranchSuite(t, h) })
+	t.Run("CommitSuite", func(t *testing.T) { testCommitSuite(t, h) })
+	t.Run("DiffSuite", func(t *testing.T) { testDiffSuite(t, h) })
+	t.Run("FileSuite", func(t *testing.T) { testFileSuite(t, h) })
 	t.Run("CommitStatusSuite", func(t *testing.T) { testCommitStatusSuite(t, h) })
 	t.Run("NotificationsSuite", func(t *testing.T) { testNotificationsSuite(t, h) })
 	t.Run("ReactionsSuite", func(t *testing.T) { testReactionsSuite(t, h) })

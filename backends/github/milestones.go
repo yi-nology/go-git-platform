@@ -16,8 +16,10 @@ import (
 // per-repo number — the same value MilestoneRef.Number and Milestone.Number
 // carry.
 
-// ListMilestones implements provider.MilestoneManager. State filters by
-// "open"/"closed" (GitHub also accepts "all"); GitHub defaults to open.
+// ListMilestones implements provider.MilestoneManager. State contract
+// (issue #61): "open"/"closed" filter; an empty State sends GitHub's
+// explicit "all" — GitHub's own default (open) silently dropped closed
+// milestones, which the unified contract forbids.
 //
 // Dual pagination mode: opts.Page > 0 means the caller manages paging
 // explicitly and receives exactly that one page (opts.Page/opts.PerPage
@@ -25,7 +27,11 @@ import (
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every matching milestone is returned.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	baseOpts := github.MilestoneListOptions{State: opts.State}
+	state := opts.State
+	if state == "" {
+		state = "all" // unified empty-State contract (issue #61)
+	}
+	baseOpts := github.MilestoneListOptions{State: state}
 	var milestones []*github.Milestone
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)

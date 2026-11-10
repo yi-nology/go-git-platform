@@ -18,6 +18,16 @@ import "time"
 //     platform default".
 
 // --- Listing / pagination ---
+//
+// Page semantics across the list managers (issue #60): every Page option
+// field follows one of two families — the "exhaustive" family (bounded
+// sets: Page == 0 walks every page and returns all items; Page > 0 returns
+// exactly that page) and the "caller-paged" family (unbounded sets:
+// Page == 0 returns the platform's first page, one request, no walk;
+// Page > 0 returns exactly that page). The full contract is documented on
+// NormalizePageOpts in pagination.go — the single anchor every Page field
+// points at. Per-backend departures are machine-readable in the backends'
+// divergence ledgers (Provider.Divergences / docs/divergence-ledger.md).
 
 // ListRepoOptions contains options for listing repositories on a platform.
 type ListRepoOptions struct {
@@ -70,8 +80,13 @@ type ListCROptions struct {
 	// backends the same string filters server-side by branch name.
 	SourceBranch string `json:"source_branch,omitempty"`
 	TargetBranch string `json:"target_branch,omitempty"`
-	Page         int    `json:"page,omitempty"`
-	PerPage      int    `json:"per_page,omitempty"`
+	// Page semantics: caller-paged family (issue #60 — see
+	// NormalizePageOpts). Page == 0 returns the platform's first page in a
+	// single request; Page > 0 returns exactly that page. Tencent Code is
+	// the registered departure: its Page == 0 walks every page (divergence
+	// ledger).
+	Page    int `json:"page,omitempty"`
+	PerPage int `json:"per_page,omitempty"`
 }
 
 // MergeCROptions contains options for merging a change request.
@@ -403,6 +418,10 @@ type Label struct {
 }
 
 // ListLabelsOptions contains options for listing repository labels.
+//
+// Page semantics: exhaustive family (issue #60 — see NormalizePageOpts).
+// Page == 0 walks every page and returns all labels; Page > 0 returns
+// exactly that page.
 type ListLabelsOptions struct {
 	Page    int `json:"page,omitempty"`
 	PerPage int `json:"per_page,omitempty"`
@@ -449,10 +468,20 @@ type Milestone struct {
 }
 
 // ListMilestonesOptions contains options for listing repository
-// milestones. State filters by "open" or "closed"; an empty State lists
-// whatever the platform defaults to (GitHub/Gitea/Forgejo/Gitee default to
-// open, GitLab to all). Tencent Code ignores State entirely — gongfeng's
-// list options expose pagination only, so all states are listed.
+// milestones.
+//
+// State contract (issue #61): "open" and "closed" filter; an empty State
+// lists ALL milestones. Every backend that can express the "all" value on
+// the wire sends it explicitly — the pre-contract behavior (forward the
+// zero value, let the platform default) silently dropped closed milestones
+// on the platforms whose own default is open-only. Tencent Code's list
+// endpoint exposes no state filter at all: explicit states are dropped
+// there (registered divergence), and its unfiltered output already matches
+// the empty-State contract.
+//
+// Page semantics: exhaustive family (issue #60 — see NormalizePageOpts).
+// Page == 0 walks every page and returns all milestones; Page > 0 returns
+// exactly that page.
 type ListMilestonesOptions struct {
 	State   string `json:"state,omitempty"`
 	Page    int    `json:"page,omitempty"`
@@ -569,6 +598,11 @@ type NotificationSubject struct {
 }
 
 // ListNotificationsOptions contains options for listing notifications.
+//
+// Page semantics: exhaustive family (issue #60 — see NormalizePageOpts).
+// Page == 0 walks every page and returns all notifications — matching the
+// interface's "exhausting the platform's pagination" promise; Page > 0
+// returns exactly that page.
 type ListNotificationsOptions struct {
 	All     bool   `json:"all,omitempty"`   // include already-read notifications
 	Since   string `json:"since,omitempty"` // RFC3339 timestamp

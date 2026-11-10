@@ -18,10 +18,13 @@ import (
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every milestone is returned.
 func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
-	baseOpts := gitee.MilestoneListOptions{}
-	if opts.State != "" {
-		baseOpts.State = gitee.String(opts.State)
+	// State contract (issue #61): empty State sends the explicit "all" —
+	// relying on the platform default silently dropped closed milestones.
+	state := opts.State
+	if state == "" {
+		state = "all"
 	}
+	baseOpts := gitee.MilestoneListOptions{State: gitee.String(state)}
 	var milestones []*gitee.Milestone
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)

@@ -61,6 +61,29 @@ func TestGitHub_Contract(t *testing.T) {
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
 		},
+		// Family suites (issue #63): GitHub wire shapes.
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"sha":"abc123"}}]`,
+			MutateResponse: `{"ref":"refs/heads/feature-y","object":{"sha":"abc123"}}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}`,
+			ListResponse:    `[{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}]`,
+			CompareResponse: `{"total_commits":1,"commits":[{"sha":"abc123","commit":{"message":"commit msg"}}],"files":[{"filename":"a.txt","additions":1,"deletions":0}],"ahead_by":1,"behind_by":0}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse: `[{"filename":"a.txt","status":"modified","additions":1,"deletions":0,"patch":"@@ -1,1 +1,1 @@\n+hello"}]`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+		},
+		// CR suite fixtures (issue #63): GitHub PR shape — number-addressed,
+		// head/base branch keys, closed+merged folds to CRStateMerged.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

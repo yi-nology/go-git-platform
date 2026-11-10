@@ -60,6 +60,10 @@ var divergences = []provider.Divergence{
 		Reason: "TencentCode's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves)."},
 	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.Assignees", Kind: provider.DivergenceMapping,
 		Reason: "The MR update endpoint takes a single assignee_id; a non-empty opts.Assignees applies the first login (resolved to a user ID via the users API) and drops the rest."},
+	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "opts.Page (zero value)", Kind: provider.DivergenceMapping,
+		Reason: "Page==0 walks every page of the MR list and reports total as the merged size (exact by construction), while the caller-paged family contract for CR lists (issue #60, see provider.NormalizePageOpts) keeps Page==0 a single first-page request — this backend exhausts instead, matching its other list managers."},
+	{Capability: "MilestoneManager", Method: "ListMilestones", Field: "State", Kind: provider.DivergenceIgnore,
+		Reason: "Gongfeng's milestone-list endpoint exposes pagination only, so explicit open/closed filters are dropped and the unfiltered output is served (which itself matches the empty-State all contract, issue #61)."},
 }
 
 // Divergences returns the registered divergence ledger for the Tencent Code backend.

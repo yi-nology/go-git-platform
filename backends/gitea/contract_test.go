@@ -69,6 +69,34 @@ func TestGitea_Contract(t *testing.T) {
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"path":".gitea/workflows/ci.yml","head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
 		},
+		// Family suites (issue #63): gitea-family wire shapes. The files
+		// endpoint carries no hunk text (filename/status/additions only) and
+		// the content endpoint returns raw bytes.
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"id":"abc123"}}]`,
+			MutateResponse: `{"name":"feature-y","commit":{"id":"abc123"}}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}`,
+			ListResponse:    `[{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}]`,
+			CompareResponse: `{"total_commits":1,"commits":[{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}]}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse:     `[{"filename":"a.txt","status":"changed","additions":1,"deletions":0}]`,
+			DiffRaw:           "diff --git a/a.txt b/a.txt\n@@ -1,1 +1,1 @@\n+hello",
+			FilesWithoutHunks: true,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse:  "hello world",
+			ContentIsRaw: true,
+		},
+		// CR suite fixtures (issue #63): Gitea PR shape — index-addressed,
+		// head/base branch info objects.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
 			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"url":"https://gitea.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

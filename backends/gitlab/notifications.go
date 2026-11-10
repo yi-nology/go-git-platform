@@ -6,6 +6,7 @@ import (
 
 	oekiterrors "github.com/oekit/pkg/errors"
 
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
@@ -13,9 +14,24 @@ import (
 // ListNotifications implements provider.NotificationManager.
 // GitLab has no GitHub-style notification inbox; the SDK maps this to the
 // Todos API, which provides the same "unread items that need attention"
-// semantics.
+// semantics (registered mapping divergence: thread IDs are todo IDs, and
+// All/Since have no todos equivalent).
+//
+// Dual-mode pagination is handled by backendutil.PageList (issue #60 — the
+// exhaustive family): opts.Page == 0 walks every page (budget-capped, fails
+// loud); opts.Page > 0 returns exactly that single caller-driven page. The
+// pre-fix shape issued one ListTodos call with empty options — both
+// ignoring Page/PerPage entirely and truncating at GitLab's default 20
+// todos, violating the interface's "exhausting the platform's pagination"
+// contract.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	todos, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{}, gitlab.WithContext(ctx))
+	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitlab.Todo, error) {
+			list, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{
+				ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
+			}, gitlab.WithContext(ctx))
+			return list, err
+		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotifications", err)
 	}
@@ -27,14 +43,22 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 }
 
 // ListRepoNotifications implements provider.NotificationManager.
-// Filters todos by project ID (resolved from owner/repo via the project API).
+// Filters todos by project ID (resolved from owner/repo via the project
+// API) with the same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	pid, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
 	}
 	projectID := pid.ID
-	todos, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{ProjectID: &projectID}, gitlab.WithContext(ctx))
+	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]*gitlab.Todo, error) {
+			list, _, err := p.client.Todos.ListTodos(&gitlab.ListTodosOptions{
+				ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
+				ProjectID:   &projectID,
+			}, gitlab.WithContext(ctx))
+			return list, err
+		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
 	}

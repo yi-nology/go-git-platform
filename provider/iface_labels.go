@@ -15,7 +15,9 @@ import "context"
 // RemoveIssueLabel) remain on IssueManager because they operate on an issue,
 // not on the repository's label set.
 type LabelManager interface {
-	// ListLabels lists the repository's labels.
+	// ListLabels lists the repository's labels. Page semantics: exhaustive
+	// family (issue #60, see NormalizePageOpts) — Page == 0 walks every
+	// page and returns all labels; Page > 0 returns exactly that page.
 	ListLabels(ctx context.Context, owner, repo string, opts ListLabelsOptions) ([]*Label, error)
 	// CreateLabel creates a repository label.
 	CreateLabel(ctx context.Context, owner, repo string, opts CreateLabelOptions) (*Label, error)

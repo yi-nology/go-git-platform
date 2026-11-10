@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -301,12 +302,109 @@ func TestWrap_AlreadyWrapped(t *testing.T) {
 	}
 }
 
+// TestClassifyStatus pins the full status→sentinel mapping (issue #64):
+// 400/422 → ErrInvalidInput, 410 → ErrGone, 5xx → ErrServerSide, and the
+// pre-existing 401/403/404/409/429 entries. Statuses outside the mapping
+// must stay text-only (non-sentinel) so callers classify via IsStatus.
 func TestClassifyStatus(t *testing.T) {
-	if !errors.Is(ClassifyStatus(404), ErrNotFound) {
-		t.Error("expected 404 to be ErrNotFound")
+	allSentinels := []error{ErrInvalidInput, ErrGone, ErrServerSide, ErrNotFound, ErrAuthentication, ErrForbidden, ErrRateLimited, ErrConflict}
+	tests := []struct {
+		name   string
+		status int
+		want   error // sentinel expected via errors.Is; nil = plain text error
+	}{
+		{"400 bad request", http.StatusBadRequest, ErrInvalidInput},
+		{"401 unauthorized", http.StatusUnauthorized, ErrAuthentication},
+		{"403 forbidden", http.StatusForbidden, ErrForbidden},
+		{"404 not found", http.StatusNotFound, ErrNotFound},
+		{"409 conflict", http.StatusConflict, ErrConflict},
+		{"410 gone", http.StatusGone, ErrGone},
+		{"422 unprocessable", http.StatusUnprocessableEntity, ErrInvalidInput},
+		{"429 rate limited", http.StatusTooManyRequests, ErrRateLimited},
+		{"500 internal", http.StatusInternalServerError, ErrServerSide},
+		{"502 bad gateway", http.StatusBadGateway, ErrServerSide},
+		{"503 unavailable", http.StatusServiceUnavailable, ErrServerSide},
+		{"599 edge of range", 599, ErrServerSide},
+		{"418 teapot unmapped", http.StatusTeapot, nil},
+		{"451 unmapped", http.StatusUnavailableForLegalReasons, nil},
 	}
-	// 5xx returns a non-sentinel error; just verify no panic.
-	_ = ClassifyStatus(502)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ClassifyStatus(tc.status)
+			if tc.want == nil {
+				if got == nil {
+					t.Fatalf("status %d: expected a plain text error, got nil", tc.status)
+				}
+				for _, s := range allSentinels {
+					if errors.Is(got, s) {
+						t.Fatalf("status %d: expected a plain text error, got sentinel %v", tc.status, got)
+					}
+				}
+				return
+			}
+			if !errors.Is(got, tc.want) {
+				t.Fatalf("status %d: errors.Is(got=%v, want=%v) = false", tc.status, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestWrap_SentinelForValidationRejections pins issue #64's end-to-end
+// contract: an HTTP 400/422 arriving from the wire (statusCoder cause) is
+// classified as ErrInvalidInput by Wrap, and both IsInvalidInput and
+// IsStatus report it — so callers can distinguish "fix the request" from
+// "retry the server" with errors.Is alone.
+func TestWrap_SentinelForValidationRejections(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity} {
+		err := Wrap(PlatformGitLab, "CreateLabel", &fakeStatusError{code: status})
+		var pe *ProviderError
+		if !errors.As(err, &pe) {
+			t.Fatalf("status %d: expected a *ProviderError, got %T", status, err)
+		}
+		if !IsInvalidInput(err) {
+			t.Errorf("status %d: IsInvalidInput = false, want true", status)
+		}
+		if !pe.IsStatus(status) {
+			t.Errorf("status %d: IsStatus lost the code", status)
+		}
+	}
+	// 410 and 5xx carry their sentinels through Wrap the same way.
+	if !IsGone(Wrap(PlatformGitHub, "GetRepo", &fakeStatusError{code: http.StatusGone})) {
+		t.Error("410: IsGone = false, want true")
+	}
+	if !IsServerSide(Wrap(PlatformGitHub, "ListRepos", &fakeStatusError{code: http.StatusBadGateway})) {
+		t.Error("502: IsServerSide = false, want true")
+	}
+}
+
+// TestNew_ValidationShapes pins the locally-constructed "unified 422 shape"
+// path (provider.New with a validation status): the sentinel must surface
+// through errors.Is there too — gitea repo_template, github deployments and
+// repo_extras all reject invalid local input via provider.New(..., 422/400).
+func TestNew_ValidationShapes(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  int
+		body    string
+		wantErr error
+	}{
+		{"422 with body", http.StatusUnprocessableEntity, "name is invalid", ErrInvalidInput},
+		{"422 no body", http.StatusUnprocessableEntity, "", ErrInvalidInput},
+		{"400 with body", http.StatusBadRequest, `{"message":"bad"}`, ErrInvalidInput},
+		{"410 no body", http.StatusGone, "", ErrGone},
+		{"500 no body", http.StatusInternalServerError, "", ErrServerSide},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := New(PlatformGitHub, "CreateRepo", tc.status, tc.body)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("errors.Is(err, %v) = false, err=%v", tc.wantErr, err)
+			}
+			if tc.body != "" && !strings.Contains(err.Error(), tc.body) {
+				t.Errorf("Error() must retain the platform body, got %q", err.Error())
+			}
+		})
+	}
 }
 
 // fakeStatusError is a test double for the statusCoder interface.

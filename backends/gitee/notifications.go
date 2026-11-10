@@ -43,45 +43,61 @@ type rawNotificationList struct {
 }
 
 // ListNotifications implements provider.NotificationManager.
+//
+// Dual-mode pagination is handled by backendutil.PageList (issue #60 — the
+// exhaustive family): opts.Page == 0 walks every page (budget-capped, fails
+// loud); opts.Page > 0 returns exactly that single caller-driven page. The
+// pre-fix shape attached pagination query parameters only when opts.Page > 0
+// — a zero-value call sent none at all and silently returned just the
+// platform's default page, violating the interface's "exhausting the
+// platform's pagination" contract.
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	u := fmt.Sprintf("%s/notifications", p.baseURL)
-	q := url.Values{}
-	if opts.Since != "" {
-		q.Set("since", opts.Since)
+	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]rawNotification, error) {
+			return p.fetchNotificationPage(ctx, u, opts.Since, page, perPage)
+		})
+	if err != nil {
+		return nil, err
 	}
-	if opts.Page > 0 {
-		q.Set("page", strconv.Itoa(opts.Page))
+	result := make([]*provider.Notification, 0, len(nots))
+	for i := range nots {
+		result = append(result, convertRawNotification(&nots[i]))
 	}
-	if opts.PerPage > 0 {
-		q.Set("per_page", strconv.Itoa(opts.PerPage))
-	}
-	if len(q) > 0 {
-		u += "?" + q.Encode()
-	}
-	return p.listNotificationsURL(ctx, u)
+	return result, nil
 }
 
 // ListRepoNotifications implements provider.NotificationManager.
+// Same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
 	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, backendutil.Esc(owner), backendutil.Esc(repo))
-	q := url.Values{}
-	if opts.Since != "" {
-		q.Set("since", opts.Since)
+	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
+		func(page, perPage int) ([]rawNotification, error) {
+			return p.fetchNotificationPage(ctx, u, opts.Since, page, perPage)
+		})
+	if err != nil {
+		return nil, err
 	}
-	if opts.Page > 0 {
-		q.Set("page", strconv.Itoa(opts.Page))
+	result := make([]*provider.Notification, 0, len(nots))
+	for i := range nots {
+		result = append(result, convertRawNotification(&nots[i]))
 	}
-	if opts.PerPage > 0 {
-		q.Set("per_page", strconv.Itoa(opts.PerPage))
-	}
-	if len(q) > 0 {
-		u += "?" + q.Encode()
-	}
-	return p.listNotificationsURL(ctx, u)
+	return result, nil
 }
 
-func (p *Provider) listNotificationsURL(ctx context.Context, u string) ([]*provider.Notification, error) {
-	req, err := p.client.NewRequest(ctx, "GET", u, nil)
+// fetchNotificationPage fetches one raw notification page (backendutil's
+// walkPageSize/caller sizes already normalized). Kept on the raw transport
+// detour because go-gitee's typed notifications surface does not model this
+// endpoint's non-standard payload shape (unread as a string; see the
+// registered detour divergence).
+func (p *Provider) fetchNotificationPage(ctx context.Context, u, since string, page, perPage int) ([]rawNotification, error) {
+	q := url.Values{}
+	if since != "" {
+		q.Set("since", since)
+	}
+	q.Set("page", strconv.Itoa(page))
+	q.Set("per_page", strconv.Itoa(perPage))
+	req, err := p.client.NewRequest(ctx, "GET", u+"?"+q.Encode(), nil)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
 	}
@@ -89,11 +105,7 @@ func (p *Provider) listNotificationsURL(ctx context.Context, u string) ([]*provi
 	if _, err := p.client.Do(req, &nl); err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(nl.List))
-	for i := range nl.List {
-		result = append(result, convertRawNotification(&nl.List[i]))
-	}
-	return result, nil
+	return nl.List, nil
 }
 
 // MarkNotificationRead implements provider.NotificationManager.

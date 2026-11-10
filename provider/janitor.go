@@ -97,7 +97,15 @@ func (j *janitor) stopAndWait() {
 	if done != nil {
 		<-done
 	}
+	// Identity check, symmetric with the goroutine-side reset above (issue
+	// #69): while this call was blocked on <-done, a concurrent start may
+	// have launched a replacement janitor and stored its own done channel.
+	// Clearing j.done unconditionally would wipe the replacement's state,
+	// so the next Stop would return without waiting for it to exit —
+	// breaking the "blocks until exited" contract.
 	j.mu.Lock()
-	j.done = nil
+	if j.done == done {
+		j.done = nil
+	}
 	j.mu.Unlock()
 }

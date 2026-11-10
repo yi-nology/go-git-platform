@@ -132,10 +132,17 @@ func convertLabel(l *Label) *provider.Label {
 // ListLabels lists the repository's labels (one caller-driven page; the
 // provider surface is the normalized single-page contract).
 func ListLabels(ctx context.Context, f Family, c LabelPort, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
-	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
-	labels, err := c.ListRepoLabels(ctx, owner, repo, ListLabelsOptions{
-		ListOptions: ListOptions{Page: page, PageSize: perPage},
-	})
+	// Dual-mode pagination is handled by backendutil.PageList (issue #60 —
+	// the exhaustive family): opts.Page == 0 walks every page
+	// (budget-capped, fails loud); opts.Page > 0 returns exactly that
+	// single caller-driven page. The pre-fix shape normalized Page==0 to
+	// page 1 and returned only the first page.
+	labels, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
+		func(page, perPage int) ([]*Label, error) {
+			return c.ListRepoLabels(ctx, owner, repo, ListLabelsOptions{
+				ListOptions: ListOptions{Page: page, PageSize: perPage},
+			})
+		})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListLabels", err)
 	}

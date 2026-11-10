@@ -26,6 +26,12 @@ var divergences = []provider.Divergence{
 		Reason: "GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored."},
 	{Capability: "SearchManager", Method: "SearchUsers", Field: "sort, order, state", Kind: provider.DivergenceIgnore,
 		Reason: "GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored."},
+	{Capability: "MilestoneManager", Method: "CreateMilestone", Field: "opts.DueOn (time of day)", Kind: provider.DivergenceMapping,
+		Reason: "GitLab exchanges a date-only ISO8601 string (the SDK's ISOTime) for milestone due dates, so DueOn's time-of-day is truncated on write and reads come back at 00:00:00 — the date component round-trips, the clock does not (issue #62; pre-fix this lived only in a file comment). UpdateMilestone truncates the same way."},
+	{Capability: "NotificationManager", Method: "ListNotifications", Field: "", Kind: provider.DivergenceMapping,
+		Reason: "GitLab has no GitHub-style notification inbox; the method maps onto the Todos API — Notification.ID/threadID is the todo ID (mark-read is todo done), Reason is the todo action name, and opts.All/opts.Since have no todos equivalent and are dropped (issue #62; pre-fix this lived only in file comments). ListRepoNotifications maps the same way with a project filter."},
+	{Capability: "NotificationManager", Method: "ListRepoNotifications", Field: "", Kind: provider.DivergenceMapping,
+		Reason: "Maps onto the Todos API filtered by project ID; see ListNotifications for the data-source semantics (issue #62)."},
 	{Capability: "NotificationManager", Method: "MarkRepoNotificationsRead", Kind: provider.DivergenceStub,
 		Reason: "The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread."},
 }
