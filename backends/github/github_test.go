@@ -1024,7 +1024,7 @@ func TestListDeployments_WireTest(t *testing.T) {
 			if len(deps) != tt.wantItems {
 				t.Fatalf("want %d deployments, got %d", tt.wantItems, len(deps))
 			}
-			if deps != nil && len(deps) > 0 && (deps[0].ID != 55 || deps[0].Environment != "prod") {
+			if len(deps) > 0 && (deps[0].ID != 55 || deps[0].Environment != "prod") {
 				t.Errorf("deployment mapping: %+v", deps[0])
 			}
 			if total != tt.wantTotal {
