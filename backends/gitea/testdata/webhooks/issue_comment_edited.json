@@ -1,0 +1,40 @@
+{
+  "headers": {
+    "X-Gitea-Event": "issue_comment"
+  },
+  "body": {
+    "action": "edited",
+    "issue": {
+      "number": 12,
+      "title": "bug",
+      "body": "b",
+      "state": "open",
+      "user": {
+        "id": 1,
+        "login": "dev"
+      },
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z",
+      "html_url": "https://example.com/owner/repo/issues/12",
+      "id": 88001
+    },
+    "repository": {
+      "id": 99,
+      "full_name": "owner/repo"
+    },
+    "sender": {
+      "id": 1,
+      "login": "dev"
+    },
+    "comment": {
+      "id": 555,
+      "body": "a review comment",
+      "user": {
+        "id": 1,
+        "login": "dev"
+      },
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  }
+}

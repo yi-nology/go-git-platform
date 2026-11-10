@@ -41,9 +41,16 @@ type Family struct {
 	// EventIDPrefix prefixes generated webhook event IDs ("gt-" for both
 	// platforms today, kept explicit so the dialect stays declarative).
 	EventIDPrefix string
-	// EventHeader is the event-type header of the family webhook dialect
-	// ("X-Gitea-Event"; Forgejo brands it "X-Forgejo-Event").
-	EventHeader string
+	// EventHeaders are the event-type headers of the family webhook dialect,
+	// checked in order; the first non-empty value wins (the envelope lists
+	// fallbacks the same way the signature validator does). Gitea sends
+	// "X-Gitea-Event"; Forgejo brands it "X-Forgejo-Event" — but releases
+	// forked from older Gitea keep sending the old-brand headers, so Forgejo
+	// lists "X-Gitea-Event" as fallback (issue #99: the signature validator
+	// already tolerates both brands; the event/delivery reads must not be
+	// stricter than the verifier, or old-brand deliveries verify fine and
+	// then parse into empty-Type events with unusable delivery IDs).
+	EventHeaders []string
 	// EventDeliveryHeaders are the delivery-ID headers of the family dialect
 	// ("X-Gitea-Delivery" / "X-Forgejo-Delivery"): the platform repeats the
 	// same value when it redelivers an event ⇒ a true idempotency key.
@@ -226,7 +233,7 @@ func convertHook(h *Hook) *provider.PlatformWebhook {
 func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.NormalizedEvent, error) {
 	env := provider.WebhookEnvelope{
 		Platform:     f.Platform,
-		EventHeaders: []string{f.EventHeader},
+		EventHeaders: f.EventHeaders,
 		IDPrefix:     f.EventIDPrefix,
 		IDHeaders:    f.EventDeliveryHeaders,
 	}
@@ -270,6 +277,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		} `json:"pull_request"`
 		Number int    `json:"number"`
 		Ref    string `json:"ref"`
+		Before string `json:"before"`
 		After  string `json:"after"`
 		// create/delete hooks carry the ref kind ("branch" or "tag").
 		RefType string `json:"ref_type"`
@@ -278,6 +286,9 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		// hooks carry the comment itself.
 		Issue   *webhookIssuePayload   `json:"issue"`
 		Comment *webhookCommentPayload `json:"comment"`
+		// Note: the issue payload's own id field is parsed inside
+		// webhookIssuePayload (issue #96: the global ID must not be dropped).
+
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
 		return nil, provider.Wrap(f.Platform, "ParseWebhookEvent", err)
@@ -298,8 +309,11 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		event.Action = action
 		if pl.PullRequest != nil {
 			event.CommitSHA = pl.PullRequest.Head.SHA
+			// ID 用 payload 的平台全局 id（issue #96，对齐 API 流 crs.go 的
+			// ID: pr.ID）——旧实现塞 Number，事件流与 API 流对同一 CR 给出
+			// 两个不同 ID，按 ID 关联/去重的消费方错配，跨仓还撞号。
 			event.CR = &provider.ChangeRequest{
-				ID:           int64(pl.PullRequest.Number),
+				ID:           int64(pl.PullRequest.ID),
 				Number:       strconv.Itoa(pl.PullRequest.Number),
 				Title:        pl.PullRequest.Title,
 				Description:  pl.PullRequest.Body,
@@ -319,14 +333,30 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 			}
 		}
 	case "push":
-		event.Type = "push"
-		event.Action = "push"
-		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
-		event.CommitSHA = pl.After
-	case "tag_push":
-		event.Type = "tag.created"
-		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
-		event.CommitSHA = pl.After
+		// tag push 归一（issue #98，同族 #76 的 github 面 / #47 的 gitee
+		// tag_push 形）：Gitea/Forgejo 对 tag ref 照发 push 钩子
+		// （ref=refs/tags/...），两个平台的 wire 都没有 tag_push 事件名
+		// （SDK 全文零命中，原 case 是死分支）——ref 前缀才是判定面。旧实现
+		// 产出 Type="push" 且 Branch 带出 "refs/tags/v1.0" 全 ref 伪分支，
+		// 按 Branch 路由的消费方被污染。删除形复用全零 after 标记
+		// （IsWebhookDeletionSHA），commit_sha 不带（tag 事件的定位键是
+		// Tag，与 github/gitee 的 tag.created/tag.deleted 形态一致）。
+		if strings.HasPrefix(pl.Ref, "refs/tags/") {
+			if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+				event.Type = provider.EventTypeTag + "deleted"
+				event.Action = "deleted"
+			} else {
+				event.Type = provider.EventTypeTag + "created"
+				event.Action = "created"
+				event.CommitSHA = pl.After
+			}
+			event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+		} else {
+			event.Type = "push"
+			event.Action = "push"
+			event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
+			event.CommitSHA = pl.After
+		}
 	case "create":
 		if pl.RefType == "tag" {
 			event.Type = provider.EventTypeTag + "created"
@@ -353,8 +383,14 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		event.Action = action
 		attachWebhookIssue(event, pl.Issue)
 	case "issue_comment":
-		event.Type = provider.EventTypeComment + provider.CommentActionCreated
-		event.Action = provider.CommentActionCreated
+		// 动作派生（issue #95，同 github 侧 normalizeCommentAction 的先例）：
+		// Gitea/Forgejo 的 comment hook 带 action=created|edited|deleted——
+		// 旧实现无视 payload 的 action 硬归 created，删除被当新增重放、编辑
+		// 被当新评论。未知值透传（与 NormalizeIssueAction 的兜底一致），
+		// 空值落 created（老 wire 无 action 字段时保持既有形态）。
+		action := normalizeCommentAction(pl.Action)
+		event.Type = provider.EventTypeComment + action
+		event.Action = action
 		if pl.Comment != nil {
 			author := &provider.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
 			if author.ID == 0 && author.Username == "" {
@@ -376,6 +412,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 // webhookIssuePayload is the issue object carried by issues and
 // issue_comment hooks.
 type webhookIssuePayload struct {
+	ID      int64  `json:"id"`
 	Number  int    `json:"number"`
 	Title   string `json:"title"`
 	Body    string `json:"body"`
@@ -416,7 +453,10 @@ func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayl
 		state = provider.IssueStateClosed
 	}
 	event.Issue = &provider.Issue{
-		ID:        int64(issue.Number),
+		// 全局 id 上 ID、number 上 Number（issue #96）：解析到的平台全局
+		// id 此前被丢弃、Number 顶替 ID——与 API 流（issues.go ID: i.ID）
+		// 语义分叉。
+		ID:        issue.ID,
 		Number:    strconv.Itoa(issue.Number),
 		Title:     issue.Title,
 		Body:      issue.Body,
@@ -428,7 +468,7 @@ func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayl
 	}
 	if issue.PullRequest != nil {
 		event.CR = &provider.ChangeRequest{
-			ID: int64(issue.Number), Number: strconv.Itoa(issue.Number), Title: issue.Title,
+			ID: issue.ID, Number: strconv.Itoa(issue.Number), Title: issue.Title,
 		}
 	}
 }
@@ -437,4 +477,20 @@ func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayl
 // exported because the family backends' converters share it.
 func MapState(state string, merged bool) provider.CRState {
 	return provider.MapBoolStateToCR(state, merged)
+}
+
+// normalizeCommentAction maps the family's comment hook action onto the
+// canonical comment vocabulary (created/edited/deleted). Empty falls to
+// created; unknown values pass through unchanged — mirroring the GitHub
+// backend's derivation so a consumer sees the same action vocabulary on
+// every platform.
+func normalizeCommentAction(action string) string {
+	switch action {
+	case provider.CommentActionCreated, provider.CommentActionEdited, provider.CommentActionDeleted:
+		return action
+	case "":
+		return provider.CommentActionCreated
+	default:
+		return action
+	}
 }

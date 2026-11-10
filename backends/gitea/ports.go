@@ -59,11 +59,16 @@ func (s sdkPorts) ListRepoHooks(ctx context.Context, owner, repo string, opt git
 
 func (s sdkPorts) GetRepoHook(ctx context.Context, owner, repo string, id int64) (*giteafamily.Hook, int, error) {
 	h, resp, err := s.c.Hooks.GetRepoHook(ctx, owner, repo, id)
-	status := 0
-	if resp != nil && resp.Response != nil {
-		status = resp.Response.StatusCode
+	return familyHook(h), responseStatus(resp), err
+}
+
+// responseStatus threads the HTTP status out of the family SDK response for
+// the ports that classify on it (404 fallbacks, familyError).
+func responseStatus(resp *gitea.Response) int {
+	if resp == nil || resp.Response == nil {
+		return 0
 	}
-	return familyHook(h), status, err
+	return resp.Response.StatusCode
 }
 
 func (s sdkPorts) EditRepoHook(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditHookOption) (*giteafamily.Hook, error) {
@@ -762,6 +767,20 @@ func (s sdkPorts) ListMyRepos(ctx context.Context, opt giteafamily.FamilyListRep
 	return familyRepos(list), withStatus(err, resp)
 }
 
+func (s sdkPorts) ListOrgRepos(ctx context.Context, org string, opt giteafamily.FamilyListReposOptions) ([]*giteafamily.Repo, int, error) {
+	list, resp, err := s.c.Repositories.ListOrgRepos(ctx, org, gitea.ListOrgReposOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	return familyRepos(list), responseStatus(resp), err
+}
+
+func (s sdkPorts) ListUserRepos(ctx context.Context, user string, opt giteafamily.FamilyListReposOptions) ([]*giteafamily.Repo, int, error) {
+	list, resp, err := s.c.Repositories.ListUserRepos(ctx, user, gitea.ListReposOptions{
+		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
+	})
+	return familyRepos(list), responseStatus(resp), err
+}
+
 func (s sdkPorts) GetRepo(ctx context.Context, owner, repo string) (*giteafamily.Repo, int, error) {
 	r, resp, err := s.c.Repositories.GetRepo(ctx, owner, repo)
 	status := 0
@@ -1179,10 +1198,11 @@ func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch s
 
 func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
 	bp, resp, err := s.c.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
-		BranchName:        opt.BranchName,
-		RequiredApprovals: opt.RequiredApprovals,
-		EnableStatusCheck: opt.EnableStatusCheck,
-		EnablePush:        opt.EnablePush,
+		BranchName:             opt.BranchName,
+		RequiredApprovals:      opt.RequiredApprovals,
+		EnableStatusCheck:      opt.EnableStatusCheck,
+		EnablePush:             opt.EnablePush,
+		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
 	})
 	return familyBranchProtection(bp), withStatus(err, resp)
 }

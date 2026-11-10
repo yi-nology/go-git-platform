@@ -15,7 +15,8 @@
       },
       "created_at": "2024-01-01T00:00:00Z",
       "updated_at": "2024-01-01T00:00:00Z",
-      "html_url": "https://example.com/owner/repo/issues/12"
+      "html_url": "https://example.com/owner/repo/issues/12",
+      "id": 88001
     },
     "repository": {
       "id": 99,

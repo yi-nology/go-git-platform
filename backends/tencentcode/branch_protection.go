@@ -43,8 +43,13 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 		return nil, provider.Wrap(provider.PlatformTencentCode, "GetBranchProtection", err)
 	}
 	if pb == nil || !pb.Protected {
+		// 未保护分支是「资源不存在」而非普通失败：哨兵必须进错误链
+		// （issue #90，#56/#83 的 NotFound 同族面）——裸 Wrapf 的 cause 是纯
+		// 文本，IsNotFound 恒 false，provider/ensure.go 创建分支的
+		// !IsNotFound 分支在 tencentcode 上永远判不出「未保护」。%w 走
+		// oekiterrors.Errorf 的 cause 链，errors.Is 照常命中。
 		return nil, provider.Wrapf(provider.PlatformTencentCode, "GetBranchProtection",
-			"branch protection %q not found", branch)
+			"%w: branch protection %q not found", provider.ErrNotFound, branch)
 	}
 	return convertProtectedBranch(pb), nil
 }

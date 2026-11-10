@@ -264,7 +264,7 @@ func RemoveIssueReaction(ctx context.Context, f Family, c ReactionPort, owner, r
 			return provider.Wrap(f.Platform, "RemoveIssueReaction", c.DeleteIssueReaction(ctx, owner, repo, n, r.Reaction))
 		}
 	}
-	return provider.Wrapf(f.Platform, "RemoveIssueReaction", "reaction %d not found", reactionID)
+	return provider.Wrapf(f.Platform, "RemoveIssueReaction", "%w: reaction %d not found", provider.ErrNotFound, reactionID)
 }
 
 // ListCRReactions lists every reaction on a change request. The family has
@@ -315,7 +315,7 @@ func RemoveIssueCommentReaction(ctx context.Context, f Family, c ReactionPort, o
 			return provider.Wrap(f.Platform, "RemoveIssueCommentReaction", c.DeleteIssueCommentReaction(ctx, owner, repo, commentID, r.Reaction))
 		}
 	}
-	return provider.Wrapf(f.Platform, "RemoveIssueCommentReaction", "reaction %d not found", reactionID)
+	return provider.Wrapf(f.Platform, "RemoveIssueCommentReaction", "%w: reaction %d not found", provider.ErrNotFound, reactionID)
 }
 
 // ListCRCommentReactions lists every reaction on a change-request comment.
@@ -354,7 +354,7 @@ func RemoveCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owne
 			return provider.Wrap(f.Platform, "RemoveCRCommentReaction", c.DeleteIssueCommentReaction(ctx, owner, repo, commentID, r.Reaction))
 		}
 	}
-	return provider.Wrapf(f.Platform, "RemoveCRCommentReaction", "reaction %d not found", reactionID)
+	return provider.Wrapf(f.Platform, "RemoveCRCommentReaction", "%w: reaction %d not found", provider.ErrNotFound, reactionID)
 }
 
 func convertReactions(in []*FamilyReaction) []*provider.Reaction {
@@ -391,10 +391,11 @@ type FamilyBranchProtection struct {
 // FamilyCreateBranchProtectionOption mirrors the family's protection create
 // body.
 type FamilyCreateBranchProtectionOption struct {
-	BranchName        string
-	RequiredApprovals int64
-	EnableStatusCheck bool
-	EnablePush        bool
+	BranchName             string
+	RequiredApprovals      int64
+	EnableStatusCheck      bool
+	EnablePush             bool
+	BlockOnRejectedReviews bool
 }
 
 // FamilyEditBranchProtectionOption mirrors the family's protection edit body
@@ -441,13 +442,20 @@ func GetBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, 
 	return convertBranchProtection(bp), nil
 }
 
-// CreateBranchProtection creates a protection rule.
+// CreateBranchProtection creates a protection rule. AllowDeletions maps
+// inversely onto the family's BlockOnRejectedReviews (issue #93, aligned
+// with the read side below): the create body carries the field on both
+// family SDKs, so the round trip Create(AllowDeletions=false) → read back
+// AllowDeletions=false now holds — the old create dropped the field
+// entirely while the read inverted it, so EnsureBranchProtection compared
+// false (requested) against true (read) and updated forever.
 func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	bp, err := c.CreateBranchProtection(ctx, owner, repo, FamilyCreateBranchProtectionOption{
-		BranchName:        opts.BranchName,
-		RequiredApprovals: int64(opts.RequiredApprovingReviews),
-		EnableStatusCheck: opts.RequiredStatusChecks,
-		EnablePush:        opts.AllowForcePushes,
+		BranchName:             opts.BranchName,
+		RequiredApprovals:      int64(opts.RequiredApprovingReviews),
+		EnableStatusCheck:      opts.RequiredStatusChecks,
+		EnablePush:             opts.AllowForcePushes,
+		BlockOnRejectedReviews: !opts.AllowDeletions,
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "CreateBranchProtection", err)
@@ -456,9 +464,10 @@ func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 }
 
 // UpdateBranchProtection edits a protection rule; nil option fields pass
-// through untouched. AllowDeletions has no direct family field (the family's
-// delete toggle rides BlockOnRejectedReviews inversely), so it maps to an
-// explicit no-op — mirroring the backends' historical behavior.
+// through untouched. AllowDeletions maps inversely onto the family's
+// BlockOnRejectedReviews (issue #93): the inverse is written, not dropped —
+// symmetric with the read conversion so writes are observable and Ensure
+// converges.
 func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	edit := FamilyEditBranchProtectionOption{}
 	if opts.RequiredApprovingReviews != nil {
@@ -472,7 +481,8 @@ func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 		edit.EnablePush = opts.AllowForcePushes
 	}
 	if opts.AllowDeletions != nil {
-		edit.BlockOnRejectedReviews = nil // not directly mapped
+		v := !*opts.AllowDeletions
+		edit.BlockOnRejectedReviews = &v
 	}
 	bp, err := c.EditBranchProtection(ctx, owner, repo, branch, edit)
 	if err != nil {

@@ -1,7 +1,7 @@
 {
   "id": "",
-  "type": "tag.created",
-  "source": "forgejo",
+  "type": "tag.deleted",
+  "source": "gitea",
   "timestamp": "0001-01-01T00:00:00Z",
   "actor": {
     "id": 1,
@@ -16,6 +16,6 @@
     "name": "repo"
   },
   "tag": "v1.0.0",
-  "commit_sha": "abc123",
+  "action": "deleted",
   "raw_payload": null
 }

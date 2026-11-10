@@ -516,6 +516,11 @@ type FamilyEditRepoOption struct {
 type RepoPort interface {
 	SearchRepos(ctx context.Context, opt SearchRepoOptions) ([]*Repo, error)
 	ListMyRepos(ctx context.Context, opt FamilyListReposOptions) ([]*Repo, error)
+	// ListOrgRepos / ListUserRepos are the per-namespace listings (issue
+	// #92). The int return carries the response's HTTP status so the engine
+	// can drive the org→user fallback (404 = the name is not an org).
+	ListOrgRepos(ctx context.Context, org string, opt FamilyListReposOptions) ([]*Repo, int, error)
+	ListUserRepos(ctx context.Context, user string, opt FamilyListReposOptions) ([]*Repo, int, error)
 	GetRepo(ctx context.Context, owner, repo string) (*Repo, int, error)
 	CreateRepo(ctx context.Context, opt FamilyCreateRepoOption) (*Repo, error)
 	CreateOrgRepo(ctx context.Context, org string, opt FamilyCreateRepoOption) (*Repo, error)
@@ -524,28 +529,33 @@ type RepoPort interface {
 	EditRepo(ctx context.Context, owner, repo string, opt FamilyEditRepoOption) (*Repo, error)
 }
 
-// ListRepos lists the authenticated user's repos. When Owner is set the
-// family has no per-owner listing, so the engine searches and filters
-// client-side (registered divergence).
+// ListRepos lists repositories. An Owner targets the org endpoint first; a
+// 404 falls back to the user-namespace listing — both namespace kinds are
+// listable without the caller knowing which one the login is (issue #92,
+// aligned with the github backend's #80 precedent: org endpoint first,
+// 404 → user). The previous shape "searched one global page with an empty
+// keyword and filtered client-side": an owner's repos silently vanished
+// whenever they didn't happen to sit on the globally-Nth page, and the page
+// semantics were wrong (Page=2 was the global page, not the owner's).
 func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	if opts.Owner != "" {
-		// The family has no per-owner repo listing; the engine searches one
-		// normalized page and filters client-side (registered divergence).
-		results, err := c.SearchRepos(ctx, SearchRepoOptions{
-			ListOptions: ListOptions{Page: opts.Page, PageSize: opts.PerPage},
-		})
+		orgOpts := FamilyListReposOptions{ListOptions: ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
+		repos, status, err := c.ListOrgRepos(ctx, opts.Owner, orgOpts)
 		if err != nil {
-			return nil, provider.Wrap(f.Platform, "ListRepos", err)
-		}
-		filtered := make([]*provider.PlatformRepo, 0)
-		for _, r := range results {
-			pr := ConvertRepo(r, f.Platform)
-			if pr != nil && strings.EqualFold(pr.Owner, opts.Owner) {
-				filtered = append(filtered, pr)
+			if status == 404 {
+				// Not an org (or no such namespace): retry as a user login.
+				repos, status, err = c.ListUserRepos(ctx, opts.Owner, orgOpts)
+			}
+			if err != nil {
+				return nil, familyError(f, "ListRepos", status, err)
 			}
 		}
-		return filtered, nil
+		result := make([]*provider.PlatformRepo, 0, len(repos))
+		for _, r := range repos {
+			result = append(result, ConvertRepo(r, f.Platform))
+		}
+		return result, nil
 	}
 	repos, err := c.ListMyRepos(ctx, FamilyListReposOptions{
 		ListOptions: ListOptions{Page: opts.Page, PageSize: opts.PerPage},

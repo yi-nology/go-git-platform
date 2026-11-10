@@ -7,6 +7,83 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 
+### Fixed（第五批 10 连修：tencentcode NotFound/事件词表/MergeCR 幂等 / giteafamily AllowDeletions 对称 / ListRepos 双端点 / comment action 派生 / 事件全局 ID / LastReadAt 解析报错 / tag push 归一 / forgejo 双头回退）
+
+- fix(backends/tencentcode): **GetBranchProtection 未保护分支补 ErrNotFound 哨兵**（issue #90）——
+  工蜂对未保护分支的 protect GET 返回 200+`protected:false`，旧实现裸
+  Wrapf 无哨兵 ⇒ `IsNotFound` 恒 false，`EnsureBranchProtection` 的创建
+  分支（`!IsNotFound`）在 tencentcode 上判不出「未保护」、静默走错编排。
+  `%w` 进 cause 链（oekiterrors.Errorf），200+false / 空 payload / 404 三
+  线路统一归 ErrNotFound；顺带按 issue 的收尾要求 grep 全仓，把
+  giteafamily 三处 `reaction %d not found` 裸 Wrapf 一并补哨兵。
+- fix(backends/tencentcode): **CreateWebhook/UpdateWebhook 事件词表读写对称**（issue #91）——
+  旧 create 路径 `PushEvents` 默认 true 且仅显式含 push 才覆盖 ⇒
+  `Events=["merge_request"]` 建出 push-only 假订阅；IssuesEvents/NoteEvents
+  全程不落线（SDK 两字段俱在，写侧词表小于读侧）⇒ EnsureWebhook
+  desired≠listed 永不收敛（#40 同类抖动，钩子翻动+删建窗口丢投递）。
+  现在 create/update 共用一个映射：五 flag 全部显式（true=请求、false=移
+  除），push 仅在事件集含 push 时 true；issues/note（含 issue_comment/
+  comment 别名）纳入；空 Events 保持既有「push 订阅」缺省。表驱动 wire
+  测试钉死「无 push 泄漏 + 全 flag 显式」。
+- fix(backends/gitea,backends/forgejo): **ListRepos(Owner) 接 org/user 双端点**（issue #92）——
+  旧实现「空关键词全局搜索一页+客户端 owner 过滤」伪造按 owner 列举：
+  owner 的仓库不落在全局第 N 页就整批静默缺失、Page 语义错位（全局第 N
+  页≠owner 的第 N 页）；代码注释宣称的「registered divergence」在
+  Divergences 与台账中均无条目（虚假背书）。现在走两个 SDK 都有的
+  `ListOrgRepos`/`ListUserRepos`：org 端点优先、404 回退 user 命名空间
+  （对齐 github 后端 #80 的 user/org 先例），caller-paged 契约与
+  `NormalizePageOpts` 对齐；引擎测试钉 org 命中/回退/非 404 硬失败三面。
+- fix(backends/internal/giteafamily): **AllowDeletions 读写对称（反号写
+  BlockOnRejectedReviews）**（issue #93）——旧 create/update 丢弃写侧
+  （no-op）而读侧按反号报告 ⇒ `Create(AllowDeletions=false)` 读回 true、
+  `EnsureBranchProtection` requested=false vs current=true 恒不等、永不
+  EnsureUnchanged（#34/#40 同类抖动）。现在 create/update 按注释宣称的
+  反号语义落线（false ⇒ block=true），两端适配器补 create 字段传递，
+  读写对称；引擎测试钉「写落线+往返保持+Ensure 比较收敛」。
+- fix(backends/tencentcode): **MergeCR 已合并幂等恢复 + 选项丢弃登记**（issue #94）——
+  旧实现对已合并 MR 重试 MergeCR 硬失败（gitea/forgejo 同操作经 405-
+  merged 恢复返回成功，跨后端不一致）；`Squash/RemoveSourceBranch` 在
+  gongfeng SDK 的 Accept 线面上无字段、静默丢弃（未登记）。现在
+  pre-flight merged ⇒ 返回当前 CR（幂等成功）、closed 仍硬失败、accept
+  竞态失败后 re-read merged 同样恢复；两选项按 DivergenceIgnore 登记，
+  `go generate` 再生成台账。
+- fix(backends/internal/giteafamily): **issue_comment 的 edited/deleted 按
+  payload.action 派生**（issue #95）——旧实现把 action 硬归 created：删除
+  被当新增重放、编辑被当新评论。新增 normalizeCommentAction
+  （created/edited/deleted，空值落 created，未知值透传，对齐 github 侧
+  先例）；corpus 补 edited/deleted 夹具+金片（gitea/forgejo 两目录对称）。
+- fix(backends/internal/giteafamily): **webhook 事件 CR.ID/Issue.ID 改用
+  平台全局 ID**（issue #96）——旧实现把解析到的 payload 全局 id 丢弃、
+  Number 顶替 ID（PR 的 `id` 字段解析了从未用）⇒ 事件流 `ID==Number`
+  与 API 流（`ID: pr.ID`/`i.ID`）语义分叉，按 ID 关联/去重错配、跨仓撞
+  号。三处（PR、issue、PR-shaped issue 的 CR）改用真实 id；corpus 夹具
+  补真实 id、金片同步更新。
+- fix(backends/internal/giteafamily): **Mark*NotificationsRead 的
+  LastReadAt 拒绝非法时间戳**（issue #97）——旧实现 `_ =` 丢弃解析错误、
+  零值上 wire（标记范围被拉到异常区间、错误输入静默生效）。两处统一走
+  `provider.ParseTimestamp`（#52/#75 同族第三处收口），解析失败
+  ErrInvalidInput 且 0 wire；表驱动钉「空=mark-all / 合法落线 / 非法双
+  拒绝」。
+- fix(backends/internal/giteafamily): **push 钩子的 tag ref 归一
+  tag.created/tag.deleted**（issue #98，#76 的 gitea/forgejo 面）——
+  Gitea/Forgejo 对 tag ref 照发 push 钩子且 wire 无 tag_push 事件名（SDK
+  全文零命中，旧 case 是死分支、金片喂的是合成 wire 形态）⇒ 真实投递产
+  出 `Branch="refs/tags/v1.0"` 的假分支事件。push case 按 ref 前缀分派：
+  refs/tags 归 tag.created/tag.deleted（删除形复用 IsWebhookDeletionSHA
+  全零 after 标记，created 带 commit_sha、deleted 不带）；死分支删除，
+  corpus 以真实 wire 形态（push+refs/tags）替换合成 tag_push 夹具并补删
+  除形。
+- fix(backends/forgejo): **事件头/投递 ID 头补 X-Gitea-* 回退**（issue #99）——
+  签名验证器对旧 Gitea 品牌头已双头容忍（ForgejoWebhookValidator 的
+  X-Gitea-Signature fallback），但事件头只读 X-Forgejo-Event、投递 ID 只
+  读 X-Forgejo-Delivery ⇒ 旧 fork 投递「验签通过但事件名读不到」：Type=""
+  空事件（#41 同型静默）+ 投递 ID 合成不可去重（#48 同型）。Family 的
+  EventHeader 单值升级为 EventHeaders 序列（envelope 本就按序多头取值），
+  forgejo 配 `["X-Forgejo-Event","X-Gitea-Event"]` 与
+  `["X-Forgejo-Delivery","X-Gitea-Delivery"]`；corpus 补旧品牌头夹具
+  （仅 X-Gitea-* 也能解析出完整事件）。
+
+
 ### Fixed（第四批 9 连修：SDK 限流分类 / ListIssues 分页统一 / Since-Until 显式报错 / projection 集合并 / branchfilter 逗号 / Reaction 桩三态 / State=merged / tag push 归一 / compare 截断）
 
 - fix(provider,backends/github): **SDK 错误路的限流分类接通**（issue #50）——

@@ -1,7 +1,7 @@
 {
   "id": "",
   "type": "tag.created",
-  "source": "gitea",
+  "source": "forgejo",
   "timestamp": "0001-01-01T00:00:00Z",
   "actor": {
     "id": 1,
@@ -17,5 +17,6 @@
   },
   "tag": "v1.0.0",
   "commit_sha": "abc123",
+  "action": "created",
   "raw_payload": null
 }

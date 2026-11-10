@@ -128,21 +128,41 @@ func MarkNotificationRead(ctx context.Context, f Family, c NotificationPort, thr
 }
 
 // MarkNotificationsRead marks every notification read.
+//
+// LastReadAt 走 provider.ParseTimestamp（issue #97，#52/#75 同族第三处）：
+// 非法时间戳此前被 `_ =` 吞成零值上 wire——标记范围被拉到异常区间、错误
+// 输入静默生效。解析失败一律 ErrInvalidInput，与全后端时间字段口径一致。
 func MarkNotificationsRead(ctx context.Context, f Family, c NotificationPort, opts provider.MarkNotificationsOptions) error {
-	markOpts := MarkNotificationOptions{}
-	if opts.LastReadAt != "" {
-		markOpts.LastReadAt, _ = time.Parse(time.RFC3339, opts.LastReadAt)
+	markOpts, err := buildMarkOptions("MarkNotificationsRead", f, opts)
+	if err != nil {
+		return err
 	}
 	return provider.Wrap(f.Platform, "MarkNotificationsRead", c.MarkNotificationsRead(ctx, markOpts))
 }
 
-// MarkRepoNotificationsRead marks one repository's notifications read.
+// MarkRepoNotificationsRead marks one repository's notifications read
+// (LastReadAt validation as MarkNotificationsRead, issue #97).
 func MarkRepoNotificationsRead(ctx context.Context, f Family, c NotificationPort, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	markOpts := MarkNotificationOptions{}
-	if opts.LastReadAt != "" {
-		markOpts.LastReadAt, _ = time.Parse(time.RFC3339, opts.LastReadAt)
+	markOpts, err := buildMarkOptions("MarkRepoNotificationsRead", f, opts)
+	if err != nil {
+		return err
 	}
 	return provider.Wrap(f.Platform, "MarkRepoNotificationsRead", c.MarkRepoNotificationsRead(ctx, owner, repo, markOpts))
+}
+
+// buildMarkOptions resolves the shared MarkNotificationOptions: an empty
+// LastReadAt stays zero ("mark all"), anything else must be RFC3339 or the
+// call fails before touching the wire.
+func buildMarkOptions(op string, f Family, opts provider.MarkNotificationsOptions) (MarkNotificationOptions, error) {
+	markOpts := MarkNotificationOptions{}
+	if opts.LastReadAt != "" {
+		t, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt)
+		if err != nil {
+			return MarkNotificationOptions{}, provider.Wrap(f.Platform, op, err)
+		}
+		markOpts.LastReadAt = t
+	}
+	return markOpts, nil
 }
 
 // convertNotification maps a family notification thread to the provider

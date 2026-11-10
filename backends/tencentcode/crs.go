@@ -105,16 +105,28 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
+//
+// 选项面（issue #94）：Squash/RemoveSourceBranch 在 gongfeng SDK 的 Accept
+// 线面上没有对应字段（AcceptMergeRequestOptions 只有 merge_commit_message）
+// ——两个意图静默丢弃（平台默认：普通合并、保留源分支）按 DivergenceIgnore
+// 登记进台账。幂等面与家族对齐（giteafamily crs.go 的 405-merged 恢复）：
+// 已合并 MR 重试 MergeCR 返回当前 CR 而非硬失败——重试/幂等场景跨后端一致。
 func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pid := owner + "/" + repo
-	// Pre-flight: check MR state.
+	// Pre-flight: check MR state. merged = idempotent success (retries of a
+	// completed merge must not surface as errors); closed = a genuine hard
+	// failure (merging a closed MR is caller error, not convergence).
 	existingMR, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err == nil {
-		if mapState(existingMR.State) != provider.CRStateOpened {
+		state := mapState(existingMR.State)
+		if state == provider.CRStateMerged {
+			return convertMR(existingMR), nil
+		}
+		if state != provider.CRStateOpened {
 			return nil, provider.Wrapf(provider.PlatformTencentCode, "MergeCR",
 				"MR is not in 'opened' state (current: %s)", existingMR.State)
 		}
@@ -125,6 +137,12 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(ctx, pid, n, acceptOpts)
 	if err != nil {
+		// Race recovery: the MR can complete between the pre-flight and the
+		// accept — a re-read showing merged is still an idempotent success.
+		if latest, _, getErr := p.client.MergeRequests.GetMergeRequest(ctx, pid, n); getErr == nil &&
+			mapState(latest.State) == provider.CRStateMerged {
+			return convertMR(latest), nil
+		}
 		return nil, provider.Wrap(provider.PlatformTencentCode, "MergeCR", err)
 	}
 	return convertMR(mr), nil

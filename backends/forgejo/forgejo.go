@@ -75,8 +75,15 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client:   client,
 		logger:   logger,
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
-		family:   giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt", EventHeader: "X-Forgejo-Event", EventDeliveryHeaders: []string{"X-Forgejo-Delivery"}, PageSize: listPageSize},
-		ports:    sdkPorts{c: client},
+		family: giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt",
+			// 双头回退（issue #99）：签名验证器对旧 Gitea 品牌头已双头容忍
+			// （ForgejoWebhookValidator 的 X-Gitea-Signature fallback）——事件
+			// 头与投递 ID 头若不接受同品牌回退，旧 fork 投递会出现「验签通过
+			// 但事件名/投递 ID 读不到」的静默空事件（Type="" + 不可去重）。
+			EventHeaders:         []string{"X-Forgejo-Event", "X-Gitea-Event"},
+			EventDeliveryHeaders: []string{"X-Forgejo-Delivery", "X-Gitea-Delivery"},
+			PageSize:             listPageSize},
+		ports: sdkPorts{c: client},
 	}, nil
 }
 
