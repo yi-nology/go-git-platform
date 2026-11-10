@@ -4,6 +4,28 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.123.0] - 2026-11-10
+
+### Changed（oekit 三件套 patch/minor 线拉齐：pkg v0.41.1 / concurrency v0.31.2 / logx v0.9.1）
+
+- **deps: pkg v0.41.0→v0.41.1、concurrency v0.31.0→v0.31.2、logx
+  v0.8.12→v0.9.1**（根 go.mod 与 mcp go.mod 双升）。收益为被动
+  bugfix 线：
+  - pkg v0.41.1 七连修复（#317–#323：mathx 溢出/pagination 伪翻页
+    误判/httpjson 304 空体当驱逐/procx/jsonrepair/urlguard）——两条
+    与本仓面相邻的特别复核：pageiter 的 `prev = batch` 无快照拷贝
+    无缓冲复用，与 #318 的内部快照复用坑不同类，**不受影响**；
+    本仓不走 httpjson WithETag 的 Do 路径（只收 CanonicalETagKey
+    纯函数），#319 **不受影响**。
+  - concurrency v0.31.1 四连（#226–#229）——retry/httpx 的 #228
+    （HTTPError 显式 0 秒 Retry-After 与 ParseRetryAfter 口径统一）
+    经本仓 `ParseRetryAfter` 委托线被动受益。
+  - logx v0.9.0 `ErrAttrs`（pkg/errors KVCarrier → slog.Attr 结构化
+    出口）——经 provider/transport NewLogxLogger 桥对接 logx 的
+    消费方被动受益；#136/#137 slog 序列化与 Error() panic 隔离。
+- docs(AGENTS.md): v0.41.1/v0.31.1–2/v0.9.x 增量审计存档（含两条
+  「相邻面不受影响」的复核结论）。
+
 ## [0.122.0] - 2026-11-10
 
 ### Changed（上游提案八连全量回流：三件套拉齐 v0.41.0/v0.31.0/v0.8.12 + 三处收编）

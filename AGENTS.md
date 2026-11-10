@@ -227,6 +227,21 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   ——transport truncateForLog/truncate 两处现场，httpjson 内部已有
   未导出先例）。上游落地后收编路径：contracttest signRequest 五处
   手写块删成调用；transport 两处截断委托（顺带修字节切缺陷）。
+- **pkg v0.41.1 / concurrency v0.31.1–2 / logx v0.9.x 增量审计（2026-11-10
+  ，随 patch 线升级，零新增引入；本条即结论存档）**。pkg v0.41.1 七连
+  bugfix（#317 mathx 溢出/#318 pagination 伪翻页误判丢页/#319 httpjson
+  304 空体当驱逐+#319 204/HEAD 双请求/#320 procx/#321/#323 jsonrepair/
+  #322 urlguard）——两条特别复核：**#318 本仓 pageiter 不受影响**
+  （`prev = batch` 直接持有 fetch 独立分配切片，无快照拷贝无缓冲复用
+  ，与上游内部快照复用坑不同类）；**#319 不走 WithETag 的 Do 路径**
+  （本仓只收 CanonicalETagKey 纯函数）。其余被动受益。concurrency
+  v0.31.1 四连（#226 poll RunCursor 毒丸紧循环门/#227 budget
+  WithClock(nil) panic/#228 httpx HTTPError 显式 0 秒 Retry-After 与
+  ParseRetryAfter 口径统一——**本仓 ParseRetryAfter 委托线被动受益**
+  /#229 poll doc）。logx v0.9.0 feat `ErrAttrs`（pkg/errors KVCarrier
+  →slog.Attr 结构化出口）经 provider/transport NewLogxLogger 桥对
+  接 logx 的消费方被动受益；#136/#137 slog 序列化与 Error() panic
+  隔离；v0.9.1 floor sync。
 
 ## 规则二：公共契约红线
 
