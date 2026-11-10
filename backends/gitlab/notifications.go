@@ -4,6 +4,8 @@ import (
 	"context"
 	"strconv"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 )
@@ -62,10 +64,12 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
-// GitLab's Todos API has no per-project mark-all-as-done; this returns
-// ErrNotImplemented. Callers should use MarkNotificationsRead instead.
+// GitLab's Todos API has no per-project mark-all-as-done; this fails with
+// ErrNotImplemented (registered divergence). Callers should use
+// MarkNotificationsRead (global) or MarkNotificationRead per thread.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	return provider.Wrapf(provider.PlatformGitLab, "MarkRepoNotificationsRead", "gitlab todos API has no per-project mark-all-as-done; use MarkNotificationsRead")
+	return provider.Wrap(provider.PlatformGitLab, "MarkRepoNotificationsRead",
+		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab todos API has no per-project mark-all-as-done; use MarkNotificationsRead or MarkNotificationRead"))
 }
 
 func convertTodo(t *gitlab.Todo) *provider.Notification {

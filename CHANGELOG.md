@@ -4,6 +4,45 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed（后端语义面 11 连修：wire 静默丢参 / 幂等破窗 / 跨后端口径错位）
+
+- fix(github): `ListDeployments` 的 int 返回值从 `Response.LastPage`（页码，
+  单页恒 0）改为本页条数——对齐 #51/#60 选定的 IssueManager total 口径并在
+  接口文档写明（issue #89）。
+- fix(gitee): `UpdateCR`/`UpdateRepo` 空串字段不再照发 wire——`*string`+omitempty
+  只省略 nil 指针，`gitee.String("")` 非 nil ⇒ 单字段更新会清空对侧字段或
+  422；改条件落线（非空才 `gitee.String`），与同后端 `UpdateIssue` 对齐（issue #88）。
+- fix(gitcode): `ForkRepo` 不再整体吞掉 `ForkRepoOptions`——`opts.Name` 落
+  fork body 的 name 字段（改名 fork 生效）；`opts.Organization` 无线路面登记
+  DivergenceIgnore（issue #87）。
+- fix(gitcode/gitee): `CreateDiscussion` 行内锚点落线——gitcode 切
+  `CreatePullRequestInlineComment`（path/line/side/commit_id，reviews.go 同款
+  先例），gitee 落 PR 评论 wire 的 path/position/commit_id；base/start SHA 对
+  与多行区间无线路面，双侧登记 divergence（issue #86）。
+- fix(gitcode/provider): webhook 事件幂等双修——`gitcodeHookEventFlags` 一
+  flag 一名（note_events 只读回 `note`，不再 `["comment","note"]`）+
+  `canonicalWebhookEvents` 排序后 `slices.Compact` 去重；含 note 事件的
+  `EnsureWebhook` 不再每次 delete+recreate（issue #85）。
+- fix(gitee/gitcode): 路径段转义纪律补全——gitee `RemoveIssueLabel` 标签名
+  裸传修正；gitcode 全量 SDK 调用点（约 25 处 owner/repo，另含 branch/tag/
+  sha/username/label 名与多段 file path 的逐段转义）过 `backendutil.Esc`
+  （新增 `escPath` 助手，镜像 gitee methods.go），补 escape 同款回归测试
+  （issue #84）。
+- fix(gitlab): `MarkRepoNotificationsRead` 桩改带 `ErrNotImplemented` 哨兵
+  （裸 `Wrapf` 使 `IsNotImplemented` 恒 false）并登记台账；DivergenceSuite
+  dispatch 表补 `NotificationManager.MarkRepoNotificationsRead` 案（issue #83）。
+- fix(gitlab): `ListCRCommits` 的 SHA 落全 SHA（`c.ID`）——原取 `ShortID`
+  （7 位）与六家后端及本后端 commits.go 的 40 位口径自相矛盾，join/去重键
+  漂移；补 40-hex 形状断言（issue #82）。
+- fix(gitcode): `ListCRComments` 走 `ListIssueCommentsWithOptions +
+  AllPages` 全页——原单发裸 helper 被 SDK 缺省 page=1/per_page=20 截断，
+  CR 侧对齐 issue 侧「exhausts the platform's pagination」契约（issue #81）。
+- fix(github): `ListRepos(Owner=…)` 在 `/orgs` 端点 404 时回退
+  `ListByUser`——个人命名空间不再被误判「无仓库/不存在」，mapping 登记台账
+  （issue #80）。
+
 ## [0.124.0] - 2026-11-10
 
 ### Added（契约套件三扩展：milestone Get / release List+Tags / BP Get+Update 全矩阵接线）

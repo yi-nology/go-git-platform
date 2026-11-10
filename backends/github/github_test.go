@@ -79,6 +79,86 @@ func TestListRepos(t *testing.T) {
 	}
 }
 
+// TestListRepos_PersonalOwnerFallsBackToUserEndpoint pins issue #80: an
+// Owner listing tries /orgs/{owner}/repos first; GitHub 404s that endpoint
+// for personal accounts (a namespace fact, not "no repos"), so the backend
+// must fall back to /users/{owner}/repos instead of surfacing ErrNotFound.
+func TestListRepos_PersonalOwnerFallsBackToUserEndpoint(t *testing.T) {
+	repoList := func() []byte {
+		b, _ := json.Marshal([]*sdkgithub.Repository{
+			{ID: new(int64(1)), FullName: new("some-user/r1"), Name: new("r1"),
+				Owner: &sdkgithub.User{Login: new("some-user")}, DefaultBranch: new("main")},
+		})
+		return b
+	}
+	tests := []struct {
+		name        string
+		orgStatus   int  // HTTP status the /orgs endpoint returns
+		userStatus  int  // HTTP status the /users endpoint returns (fallback)
+		wantRepos   int  // repos the call must return
+		wantErr     bool // whether the call must fail
+		wantUserHit bool // whether the fallback endpoint must be hit
+	}{
+		{name: "org owner lists from the org endpoint without fallback", orgStatus: http.StatusOK, wantRepos: 1},
+		{name: "personal owner falls back to the user endpoint on 404", orgStatus: http.StatusNotFound, userStatus: http.StatusOK, wantRepos: 1, wantUserHit: true},
+		{name: "nonexistent owner surfaces the fallback's 404", orgStatus: http.StatusNotFound, userStatus: http.StatusNotFound, wantErr: true, wantUserHit: true},
+		{name: "org endpoint 5xx propagates without fallback", orgStatus: http.StatusInternalServerError, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var paths []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				paths = append(paths, r.URL.Path)
+				mu.Unlock()
+				switch {
+				case strings.Contains(r.URL.Path, "/orgs/"):
+					w.WriteHeader(tt.orgStatus)
+					if tt.orgStatus == http.StatusOK {
+						_, _ = w.Write(repoList())
+					} else {
+						_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+					}
+				case strings.Contains(r.URL.Path, "/users/"):
+					w.WriteHeader(tt.userStatus)
+					if tt.userStatus == http.StatusOK {
+						_, _ = w.Write(repoList())
+					} else {
+						_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+					}
+				}
+			}))
+			defer srv.Close()
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			repos, err := p.ListRepos(context.Background(), provider.ListRepoOptions{Owner: "some-user"})
+			mu.Lock()
+			defer mu.Unlock()
+			userHit := false
+			for _, path := range paths {
+				if strings.Contains(path, "/users/some-user/repos") {
+					userHit = true
+				}
+			}
+			if userHit != tt.wantUserHit {
+				t.Errorf("user-endpoint hit = %v, want %v (paths: %v)", userHit, tt.wantUserHit, paths)
+			}
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got %d repos", len(repos))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ListRepos: %v", err)
+			}
+			if len(repos) != tt.wantRepos {
+				t.Fatalf("expected %d repos, got %d", tt.wantRepos, len(repos))
+			}
+		})
+	}
+}
+
 func TestGetRepo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&sdkgithub.Repository{
@@ -893,30 +973,67 @@ func TestRepoExtras_WireTest(t *testing.T) {
 }
 
 // TestListDeployments_WireTest locks the GitHub deployments listing: the
-// environment filter is sent, and the response converts to []provider.Deployment.
+// environment filter is sent, the response converts to []provider.Deployment,
+// and the int return carries the page item count — never Response.LastPage,
+// which is a page index (0 on single-page responses) rather than a count
+// (issue #89).
 func TestListDeployments_WireTest(t *testing.T) {
-	var gotQuery string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.RawQuery
-		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{"id": 55, "sha": "abc", "ref": "main", "environment": "prod"},
-			{"id": 56, "sha": "def", "ref": "dev", "environment": "staging"},
+	tests := []struct {
+		name      string
+		body      string
+		linkCell  string // Link response header, if any
+		wantItems int
+		wantTotal int
+	}{
+		{
+			name:      "single page reports item count",
+			body:      `[{"id":55,"sha":"abc","ref":"main","environment":"prod"},{"id":56,"sha":"def","ref":"dev","environment":"staging"}]`,
+			wantItems: 2,
+			wantTotal: 2,
+		},
+		{
+			name:      "multi-page response total is page items not page index",
+			body:      `[{"id":55,"sha":"abc","ref":"main","environment":"prod"}]`,
+			linkCell:  `<https://api.example.test/repos/o/r/deployments?page=5>; rel="last"`,
+			wantItems: 1,
+			wantTotal: 1,
+		},
+		{
+			name:      "empty page totals zero",
+			body:      `[]`,
+			wantItems: 0,
+			wantTotal: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotQuery string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotQuery = r.URL.RawQuery
+				if tt.linkCell != "" {
+					w.Header().Set("Link", tt.linkCell)
+				}
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+			p := newTestProvider(t, srv.URL)
+			deps, total, err := p.ListDeployments(context.Background(), "owner", "repo", "prod", 1, 30)
+			if err != nil {
+				t.Fatalf("ListDeployments: %v", err)
+			}
+			if len(deps) != tt.wantItems {
+				t.Fatalf("want %d deployments, got %d", tt.wantItems, len(deps))
+			}
+			if len(deps) > 0 && (deps[0].ID != 55 || deps[0].Environment != "prod") {
+				t.Errorf("deployment mapping: %+v", deps[0])
+			}
+			if total != tt.wantTotal {
+				t.Errorf("total = %d, want %d (page item count, never LastPage)", total, tt.wantTotal)
+			}
+			if !strings.Contains(gotQuery, "environment=prod") {
+				t.Errorf("environment filter not sent: %s", gotQuery)
+			}
 		})
-	}))
-	defer srv.Close()
-	p := newTestProvider(t, srv.URL)
-	deps, _, err := p.ListDeployments(context.Background(), "owner", "repo", "prod", 1, 30)
-	if err != nil {
-		t.Fatalf("ListDeployments: %v", err)
-	}
-	if len(deps) != 2 {
-		t.Fatalf("want 2 deployments, got %d", len(deps))
-	}
-	if deps[0].ID != 55 || deps[0].Environment != "prod" {
-		t.Errorf("deployment mapping: %+v", deps[0])
-	}
-	if !strings.Contains(gotQuery, "environment=prod") {
-		t.Errorf("environment filter not sent: %s", gotQuery)
 	}
 }
 

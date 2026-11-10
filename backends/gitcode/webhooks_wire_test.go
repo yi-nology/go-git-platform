@@ -150,3 +150,53 @@ func TestWebhooks_CreateWire(t *testing.T) {
 		}
 	}
 }
+
+// TestWebhooks_ReadBackOneNamePerFlag pins issue #85's convertHook half:
+// each flag family reads back as exactly one canonical event name. The
+// note_events flag used to emit both "comment" and "note", which made
+// provider.EnsureWebhook's event-set comparison fail and every ensure call
+// delete+recreate the hook.
+func TestWebhooks_ReadBackOneNamePerFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		hook map[string]any
+		want []string
+	}{
+		{
+			name: "note flag reads back as note only",
+			hook: map[string]any{"id": 1, "url": "u", "note_events": true},
+			want: []string{"note"},
+		},
+		{
+			name: "all flags read back as five distinct names",
+			hook: map[string]any{"id": 2, "url": "u", "push_events": 1, "tag_push_events": 1, "issues_events": 1, "note_events": 1, "merge_requests_events": 1},
+			want: []string{"issues", "note", "pull_request", "push", "tag_push"},
+		},
+		{
+			name: "no flags read back empty",
+			hook: map[string]any{"id": 3, "url": "u"},
+			want: []string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSON(w, tt.hook)
+			}))
+			defer srv.Close()
+			p := newTestProvider(t, srv)
+			hook, err := p.GetWebhook(context.Background(), "owner", "repo", 1)
+			if err != nil {
+				t.Fatalf("GetWebhook: %v", err)
+			}
+			if len(hook.Events) != len(tt.want) {
+				t.Fatalf("Events = %v, want %v (one canonical name per flag)", hook.Events, tt.want)
+			}
+			for i, name := range tt.want {
+				if hook.Events[i] != name {
+					t.Errorf("Events[%d] = %q, want %q", i, hook.Events[i], name)
+				}
+			}
+		})
+	}
+}

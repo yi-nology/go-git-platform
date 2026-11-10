@@ -33,7 +33,7 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	var issues []*gitcode.Issue
 	issues, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitcode.Issue, error) {
-			return p.client.ListIssues(ctx, opts.Owner, opts.Repo, buildOpts(page, perPage))
+			return p.client.ListIssues(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), buildOpts(page, perPage))
 		})
 	if err != nil {
 		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
@@ -51,7 +51,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 	if err != nil {
 		return nil, err
 	}
-	issue, err := p.client.GetIssue(ctx, owner, repo, n)
+	issue, err := p.client.GetIssue(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetIssue", err)
 	}
@@ -73,7 +73,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		}
 		createOpts.Milestone = m
 	}
-	issue, err := p.client.CreateIssue(ctx, opts.Owner, opts.Repo, createOpts)
+	issue, err := p.client.CreateIssue(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateIssue", err)
 	}
@@ -102,7 +102,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if opts.State != "" {
 		updateOpts.State = gitcode.IssueState(opts.State)
 	}
-	issue, err := p.client.UpdateIssue(ctx, owner, repo, n, updateOpts)
+	issue, err := p.client.UpdateIssue(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
 	}
@@ -115,7 +115,7 @@ func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (
 	if err != nil {
 		return nil, err
 	}
-	issue, err := p.client.CloseIssue(ctx, owner, repo, n)
+	issue, err := p.client.CloseIssue(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CloseIssue", err)
 	}
@@ -128,7 +128,7 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 	if err != nil {
 		return nil, err
 	}
-	issue, err := p.client.ReopenIssue(ctx, owner, repo, n)
+	issue, err := p.client.ReopenIssue(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ReopenIssue", err)
 	}
@@ -165,7 +165,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 	if err != nil {
 		return nil, err
 	}
-	comment, err := p.client.CreateIssueComment(ctx, owner, repo, n, body)
+	comment, err := p.client.CreateIssueComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateIssueComment", err)
 	}
@@ -176,7 +176,7 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // addresses the comment directly, so number is unused. The platform only
 // lets the comment's author perform the edit.
 func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	comment, err := p.client.UpdateIssueComment(ctx, owner, repo, commentID, body)
+	comment, err := p.client.UpdateIssueComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), commentID, body)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssueComment", err)
 	}
@@ -187,7 +187,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // addresses the comment directly, so number is unused. Deletion is
 // permanent; the platform only lets the comment's author perform it.
 func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
-	if err := p.client.DeleteIssueComment(ctx, owner, repo, commentID); err != nil {
+	if err := p.client.DeleteIssueComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), commentID); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteIssueComment", err)
 	}
 	return nil
@@ -226,7 +226,7 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return err
 	}
-	if err := p.client.AddIssueLabels(ctx, owner, repo, n, labels); err != nil {
+	if err := p.client.AddIssueLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, labels); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "AddIssueLabels", err)
 	}
 	return nil
@@ -238,7 +238,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	if err != nil {
 		return err
 	}
-	if err := p.client.RemoveIssueLabel(ctx, owner, repo, n, name); err != nil {
+	if err := p.client.RemoveIssueLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, backendutil.Esc(name)); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "RemoveIssueLabel", err)
 	}
 	return nil

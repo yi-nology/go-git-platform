@@ -79,12 +79,20 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	return nil
 }
 
-// UpdateRepo implements provider.RepoManager.
+// UpdateRepo implements provider.RepoManager. 「"" = 不变」逐字段兑现
+// (issue #88)：go-gitee 的选项字段是 *string+omitempty，空串指针照上
+// wire 会清空对侧字段（或 422）——非空才落线，与 UpdateIssue/UpdateCR
+// 同做法。
 func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
-	updateOpts := &gitee.UpdateRepositoryOptions{
-		Name:          gitee.String(opts.Name),
-		Description:   gitee.String(opts.Description),
-		DefaultBranch: gitee.String(opts.DefaultBranch),
+	updateOpts := &gitee.UpdateRepositoryOptions{}
+	if opts.Name != "" {
+		updateOpts.Name = gitee.String(opts.Name)
+	}
+	if opts.Description != "" {
+		updateOpts.Description = gitee.String(opts.Description)
+	}
+	if opts.DefaultBranch != "" {
+		updateOpts.DefaultBranch = gitee.String(opts.DefaultBranch)
 	}
 	if opts.Private != nil {
 		updateOpts.Private = gitee.Bool(*opts.Private)

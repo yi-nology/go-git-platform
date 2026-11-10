@@ -204,9 +204,11 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 	return nil
 }
 
-// RemoveIssueLabel implements provider.IssueManager via the SDK.
+// RemoveIssueLabel implements provider.IssueManager via the SDK. The label
+// name is a path segment on the delete endpoint (issues #84: a name like
+// "C#" truncated the URL at the fragment and deleted the wrong label).
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	_, err := p.client.Issues.RemoveLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, name)
+	_, err := p.client.Issues.RemoveLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), number, backendutil.Esc(name))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitee, "RemoveIssueLabel", err)
 	}

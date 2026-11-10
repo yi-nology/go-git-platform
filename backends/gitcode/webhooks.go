@@ -20,12 +20,17 @@ import (
 // "events" array (docs: PATCH /repos/{owner}/{repo}/hooks/{id} carries
 // push_events / tag_push_events / issues_events / note_events /
 // merge_requests_events) — the same shape the gitee backend maps onto.
+//
+// One canonical name per flag (issue #85): the table drives both the write
+// side (via the em lookup below, where "comment" is an accepted alias of
+// "note") and the read side (convertHook iterates it in reverse), so a
+// flag with two names here made convertHook emit ["comment","note"] for a
+// single note_events flag and EnsureWebhook never converged on "unchanged".
 var gitcodeHookEventFlags = map[string]string{
 	"push":         "push_events",
 	"tag_push":     "tag_push_events",
 	"issues":       "issues_events",
 	"note":         "note_events",
-	"comment":      "note_events",
 	"pull_request": "merge_requests_events",
 }
 

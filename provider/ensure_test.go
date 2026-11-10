@@ -210,6 +210,58 @@ func TestEnsureWebhookReplacesOnEventDrift(t *testing.T) {
 	}
 }
 
+// TestCanonicalWebhookEventsDedupes pins issue #85's canonicalization half:
+// aliases ("note" and "comment") collapse onto one canonical name, so a
+// backend that reads one flag back under both names canonicalizes to a
+// single-element set instead of a duplicated one.
+func TestCanonicalWebhookEventsDedupes(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{name: "alias pair collapses", in: []string{"comment", "note"}, want: []string{"note"}},
+		{name: "alias pair mixed with others stays sorted and single", in: []string{"note", "push", "comment"}, want: []string{"note", "push"}},
+		{name: "unregistered platform names pass through deduped", in: []string{"deployment", "deployment"}, want: []string{"deployment"}},
+		{name: "empty stays empty", in: nil, want: []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := canonicalWebhookEvents(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("canonicalWebhookEvents(%v) = %v, want %v", tt.in, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("canonicalWebhookEvents(%v) = %v, want %v", tt.in, got, tt.want)
+				}
+			}
+		})
+	}
+}
+
+// TestEnsureWebhookUnchangedDespiteAliasDuplication pins issue #85's
+// convergence half: an existing hook whose read-back event list carries the
+// same canonical family twice (["comment","note"] for one note_events flag)
+// is unchanged against a desired ["note"], not delete+recreated.
+func TestEnsureWebhookUnchangedDespiteAliasDuplication(t *testing.T) {
+	f := &fakeWebhookManager{}
+	if _, _, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"note"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a backend reading one flag back under two names (the
+	// pre-#85 gitcode convertHook shape).
+	f.hooks[0].Events = []string{"comment", "note"}
+	before := f.hooks[0].ID
+	action, hook, err := EnsureWebhook(t.Context(), f, CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://cb.example/hook", Events: []string{"note"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if action != EnsureUnchanged || hook.ID != before {
+		t.Fatalf("action = %q id = %d, want unchanged/%d (aliases must collapse before comparison)", action, hook.ID, before)
+	}
+}
+
 // EnsureSecretAlwaysUpdate converges a rotated secret on a matching hook:
 // in-place patch (hook ID unchanged), reported as updated.
 func TestEnsureWebhookSecretAlwaysUpdatePatchesOnMatch(t *testing.T) {

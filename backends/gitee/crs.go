@@ -121,10 +121,18 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 			return nil, err
 		}
 	}
-	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
-		Title: gitee.String(opts.Title),
-		Body:  gitee.String(opts.Description),
-	}, "UpdateCR")
+	// 「"" = 不变」逐字段兑现（issue #88）：go-gitee 的选项字段是
+	// *string+omitempty，omitempty 只省略 nil 指针——gitee.String("") 非
+	// nil ⇒ 空串照上 wire，单字段更新会清空对侧字段（或 422）。与同文件
+	// UpdateIssue 的条件落线对齐。
+	patchOpts := &gitee.UpdatePullRequestOptions{}
+	if opts.Title != "" {
+		patchOpts.Title = gitee.String(opts.Title)
+	}
+	if opts.Description != "" {
+		patchOpts.Body = gitee.String(opts.Description)
+	}
+	return p.patchCR(ctx, owner, repo, number, patchOpts, "UpdateCR")
 }
 
 // setCRAssignees converges the CR's assignee set to target via the platform's

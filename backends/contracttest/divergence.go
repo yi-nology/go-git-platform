@@ -121,7 +121,8 @@ func dispatchDivergenceCall(p provider.Provider, capability, method string) (boo
 		return true, err
 	case "NotificationManager.ListNotifications",
 		"NotificationManager.MarkNotificationRead",
-		"NotificationManager.MarkNotificationsRead":
+		"NotificationManager.MarkNotificationsRead",
+		"NotificationManager.MarkRepoNotificationsRead":
 		return dispatchNotificationDivergenceCall(p, capability, method, ctx)
 	default:
 		return false, nil
@@ -143,6 +144,8 @@ func dispatchNotificationDivergenceCall(p provider.Provider, capability, method 
 		return true, nm.MarkNotificationRead(ctx, "1")
 	case "NotificationManager.MarkNotificationsRead":
 		return true, nm.MarkNotificationsRead(ctx, provider.MarkNotificationsOptions{})
+	case "NotificationManager.MarkRepoNotificationsRead":
+		return true, nm.MarkRepoNotificationsRead(ctx, "owner", "repo", provider.MarkNotificationsOptions{})
 	}
 	return false, nil
 }

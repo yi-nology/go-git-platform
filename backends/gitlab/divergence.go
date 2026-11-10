@@ -24,6 +24,8 @@ var divergences = []provider.Divergence{
 		Reason: "GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored."},
 	{Capability: "SearchManager", Method: "SearchUsers", Field: "sort, order, state", Kind: provider.DivergenceIgnore,
 		Reason: "GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored."},
+	{Capability: "NotificationManager", Method: "MarkRepoNotificationsRead", Kind: provider.DivergenceStub,
+		Reason: "The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread."},
 }
 
 // Divergences returns the registered divergence ledger for the GitLab backend.

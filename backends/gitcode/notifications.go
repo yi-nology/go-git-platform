@@ -36,7 +36,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 	var threads []*gitcode.NotificationThread
 	threads, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitcode.NotificationThread, error) {
-			return p.client.ListRepoNotifications(ctx, owner, repo, buildOpts(page, perPage))
+			return p.client.ListRepoNotifications(ctx, backendutil.Esc(owner), backendutil.Esc(repo), buildOpts(page, perPage))
 		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
@@ -66,7 +66,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, owner, repo, gitcode.MarkNotificationsOptions{
+	return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.MarkNotificationsOptions{
 		LastReadAt: opts.LastReadAt,
 	}))
 }

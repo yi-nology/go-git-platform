@@ -17,7 +17,7 @@ import (
 // ListTags helper.
 func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*gitcode.Tag, error) {
-		return p.client.ListTagsWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
+		return p.client.ListTagsWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: 100})
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListTags", err)
@@ -35,7 +35,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 // call stays single-shot; GitCode's page-size ceiling bounds what one call
 // can return.
 func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
-	releases, err := p.client.ListReleases(ctx, owner, repo)
+	releases, err := p.client.ListReleases(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListReleases", err)
 	}
@@ -48,7 +48,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 
 // CreateRelease implements provider.ReleaseManager.
 func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
-	r, err := p.client.CreateRelease(ctx, owner, repo, gitcode.CreateReleaseOptions{
+	r, err := p.client.CreateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.CreateReleaseOptions{
 		TagName: opts.TagName, Target: opts.Target, Title: opts.Title,
 		Body: opts.Body, Draft: opts.Draft, Prerelease: opts.Prerelease,
 	})
@@ -61,7 +61,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 // GetReleaseByTag implements provider.ReleaseManager. GitCode exposes a
 // dedicated tag-addressed endpoint.
 func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
-	r, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	r, err := p.client.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetReleaseByTag", err)
 	}
@@ -76,7 +76,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // option the caller left nil; draft/prerelease are pointers that pass
 // through untouched.
 func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
-	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	cur, err := p.client.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRelease", err)
 	}
@@ -87,7 +87,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	if opts.Body != nil {
 		body = *opts.Body
 	}
-	r, err := p.client.UpdateRelease(ctx, owner, repo, cur.ID, gitcode.UpdateReleaseOptions{
+	r, err := p.client.UpdateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), cur.ID, gitcode.UpdateReleaseOptions{
 		TagName:    cur.TagName,
 		Name:       name,
 		Body:       body,
@@ -108,11 +108,11 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 // 500/401/429 included — which would silently destroy the git tag; the
 // release-object-only semantics every other platform honors rule that out.
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
-	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
+	cur, err := p.client.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
 	}
-	if err := p.client.DeleteReleaseByID(ctx, owner, repo, cur.ID); err != nil {
+	if err := p.client.DeleteReleaseByID(ctx, backendutil.Esc(owner), backendutil.Esc(repo), cur.ID); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
 	}
 	return nil

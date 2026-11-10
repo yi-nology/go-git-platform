@@ -38,6 +38,7 @@ This document is generated from the backends' registered divergence ledgers
 | SearchManager | SearchRepos | sort, order, state | ignore | GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored. |
 | SearchManager | SearchIssues | sort, order, state | ignore | GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored. |
 | SearchManager | SearchUsers | sort, order, state | ignore | GitLab's search endpoints take no sort, order, or state; the filters are accepted but ignored. |
+| NotificationManager | MarkRepoNotificationsRead |  | stub | The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread. |
 
 ## github
 
@@ -49,6 +50,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReleaseManager | GetArchive |  | detour | Archive downloads stream through the raw transport client rather than go-github. |
 | WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline. |
+| RepoManager | ListRepos | opts.Owner | mapping | GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (mirrors the search-based fallback the gitea family registers). |
 
 ## gitee
 
@@ -66,6 +68,7 @@ This document is generated from the backends' registered divergence ledgers
 | ChangeRequestManager | UpdateCR | opts.Assignees | mapping | Gitee has no assignee field on the pull-update endpoint; a non-empty opts.Assignees converges via read-modify-write over the pull assignee add/remove endpoints. Concurrent editors can lose updates in the window. |
 | IssueManager | CreateIssue | opts.Assignees | mapping | Gitee's issue wire takes a single assignee field; multiple logins are comma-joined into it, which only round-trips if the platform re-splits the joined value (undocumented platform behavior; single-assignee use is the verified shape). |
 | IssueManager | UpdateIssue | opts.Assignees | mapping | See CreateIssue: the issue wire takes a single assignee field; multiple logins are comma-joined into it. |
+| DiffManager | CreateDiscussion | opts.BaseSHA, opts.StartSHA, opts.StartNewLine, side distinction of opts.NewLine/OldLine | mapping | Gitee's inline-comment wire takes path + a single position (diff line number) + commit_id: NewLine wins when both line anchors are set (no side channel), HeadSHA rides commit_id, and the base/start SHA pair and multi-line ranges have no fields and are dropped. |
 
 ## gitea
 
@@ -95,6 +98,8 @@ This document is generated from the backends' registered divergence ledgers
 | NotificationManager | ListNotifications |  | stub | GitCode serves no global notification inbox — /notifications 404s live (probe round 2026-11-03); only the repo-scoped endpoints exist, so the method fails with ErrNotImplemented. |
 | NotificationManager | MarkNotificationRead |  | stub | The thread-read route hangs off the global inbox GitCode does not serve (live 404, probe round 2026-11-03); the method fails with ErrNotImplemented. |
 | NotificationManager | MarkNotificationsRead |  | stub | The global mark-all route 404s live (probe round 2026-11-03); the method fails with ErrNotImplemented. |
+| RepoManager | ForkRepo | opts.Organization | ignore | GitCode's fork endpoint (POST /repos/{owner}/{repo}/forks) takes no organization: forks always land under the authenticated user's namespace; a non-empty opts.Organization is accepted and dropped (opts.Name is honored as the fork's new name). |
+| DiffManager | CreateDiscussion | opts.BaseSHA, opts.StartSHA, opts.StartNewLine | ignore | GitCode's inline-comment wire takes path/line/side/commit_id only: FilePath/NewLine/OldLine/HeadSHA anchor the comment, but the base/start SHA pair and multi-line ranges have no fields and are dropped. |
 | ChangeRequestManager | UpdateCR | opts.Assignees | ignore | GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped. |
 | CILogManager | ListFailedJobLogs |  | mapping | The v8 wire has no head_sha filter on the runs list; the SDK's FindActionRunByHeadSHA scans newest-first and returns only the single newest run matching the SHA, so failed jobs in other workflows' runs for the same commit are not attributed (GitHub/Gitea collect the latest run per workflow). Job status vocabulary is asserted case-insensitively (SDK fixtures show UPPERCASE COMPLETED/RUNNING; the failure word is inferred as FAILED); live validation of the vocabulary and the download-log route is pending. |
 
