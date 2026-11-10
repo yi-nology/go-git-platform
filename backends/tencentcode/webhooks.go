@@ -12,26 +12,45 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 )
 
+// applyWebhookEvents maps the unified event vocabulary onto 工蜂's boolean
+// webhook flags (issue #91). Every flag is set explicitly — true only for
+// the families the caller asked for, false for the rest: the edit endpoint
+// treats omitted flags as "unchanged", so a partial flag set can neither
+// express removal nor shrink a subscription. The vocabulary mirrors
+// convertWebhook's read side exactly (push / merge_request / tag_push /
+// issues / note) — a smaller write side made EnsureWebhook diverge forever
+// (listed "issues" vs desired "push"-only leak). issue_comment/comment ride
+// the platform's note family.
+func applyWebhookEvents(em map[string]bool, push, issues, mrs, tags, notes **bool) {
+	*push = gongfeng.Ptr(em["push"])
+	*issues = gongfeng.Ptr(em["issues"] || em["issue"])
+	*mrs = gongfeng.Ptr(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
+	*tags = gongfeng.Ptr(em["tag_push"] || em["tag"])
+	*notes = gongfeng.Ptr(em["note"] || em["issue_comment"] || em["comment"])
+}
+
+func webhookEventSet(events []string) map[string]bool {
+	em := make(map[string]bool, len(events))
+	for _, e := range events {
+		em[e] = true
+	}
+	return em
+}
+
 // CreateWebhook implements provider.WebhookManager.
 func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
 	pid := opts.Owner + "/" + opts.Repo
 	addOpts := &gongfeng.AddWebhookOptions{
-		URL:        gongfeng.Ptr(opts.URL),
-		PushEvents: gongfeng.Ptr(true),
+		URL: gongfeng.Ptr(opts.URL),
 	}
-	if len(opts.Events) > 0 {
-		em := map[string]bool{}
-		for _, e := range opts.Events {
-			em[e] = true
-		}
-		if v, ok := em["push"]; ok {
-			addOpts.PushEvents = gongfeng.Ptr(v)
-		}
-		mrEvents := em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"]
-		addOpts.MergeRequestsEvents = gongfeng.Ptr(mrEvents)
-		tagEvents := em["tag_push"] || em["tag"]
-		addOpts.TagPushEvents = gongfeng.Ptr(tagEvents)
+	events := opts.Events
+	if len(events) == 0 {
+		// historical default: a push subscription
+		events = []string{"push"}
 	}
+	applyWebhookEvents(webhookEventSet(events),
+		&addOpts.PushEvents, &addOpts.IssuesEvents, &addOpts.MergeRequestsEvents,
+		&addOpts.TagPushEvents, &addOpts.NoteEvents)
 	hook, _, err := p.client.Webhooks.AddWebhook(ctx, pid, addOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateWebhook", err)
@@ -52,7 +71,8 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // endpoint is boolean-flag based: omitted flags mean "unchanged", so a
 // non-nil Events slice must set every derived flag explicitly (true for
 // members, false for the rest) to express removal — mirroring the create
-// mapping's scope (push / merge-request / tag-push families).
+// mapping's full scope (issue #91: issues/note included, or hooks created
+// for them keep their stale flags through every update).
 func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
 	editOpts := &gongfeng.EditWebhookOptions{}
 	if opts.URL != nil {
@@ -62,13 +82,9 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 		editOpts.Token = opts.Secret
 	}
 	if opts.Events != nil {
-		em := map[string]bool{}
-		for _, e := range opts.Events {
-			em[e] = true
-		}
-		editOpts.PushEvents = gongfeng.Ptr(em["push"])
-		editOpts.MergeRequestsEvents = gongfeng.Ptr(em["merge_request"] || em["merge_requests"] || em["pull_request"] || em["cr"])
-		editOpts.TagPushEvents = gongfeng.Ptr(em["tag_push"] || em["tag"])
+		applyWebhookEvents(webhookEventSet(opts.Events),
+			&editOpts.PushEvents, &editOpts.IssuesEvents, &editOpts.MergeRequestsEvents,
+			&editOpts.TagPushEvents, &editOpts.NoteEvents)
 	}
 	hook, _, err := p.client.Webhooks.EditWebhook(ctx, owner+"/"+repo, int(webhookID), editOpts)
 	if err != nil {

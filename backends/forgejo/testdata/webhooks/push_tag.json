@@ -1,9 +1,10 @@
 {
   "headers": {
-    "X-Forgejo-Event": "tag_push"
+    "X-Forgejo-Event": "push"
   },
   "body": {
     "ref": "refs/tags/v1.0.0",
+    "before": "0000000000000000000000000000000000000000",
     "after": "abc123",
     "repository": {
       "id": 99,

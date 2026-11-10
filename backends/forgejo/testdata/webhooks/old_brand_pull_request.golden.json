@@ -1,0 +1,46 @@
+{
+  "id": "",
+  "type": "cr.opened",
+  "source": "forgejo",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "cr": {
+    "id": 98123,
+    "number": "7",
+    "title": "t",
+    "description": "d",
+    "state": "opened",
+    "source_branch": "f",
+    "target_branch": "main",
+    "head_sha": "abc123",
+    "base_sha": "def456",
+    "start_sha": "def456",
+    "draft": false,
+    "author": {
+      "id": 1,
+      "username": "dev",
+      "name": "",
+      "avatar_url": ""
+    },
+    "reviewers": null,
+    "labels": null,
+    "merge_status": "",
+    "web_url": "https://example.com/owner/repo/pulls/7",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  "commit_sha": "abc123",
+  "action": "opened",
+  "raw_payload": null
+}

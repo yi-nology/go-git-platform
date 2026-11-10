@@ -1,0 +1,22 @@
+{
+  "id": "",
+  "type": "tag.created",
+  "source": "gitea",
+  "timestamp": "0001-01-01T00:00:00Z",
+  "actor": {
+    "id": 1,
+    "username": "dev",
+    "name": "",
+    "avatar_url": ""
+  },
+  "repo": {
+    "id": 99,
+    "full_name": "owner/repo",
+    "owner": "owner",
+    "name": "repo"
+  },
+  "tag": "v1.0.0",
+  "commit_sha": "abc123",
+  "action": "created",
+  "raw_payload": null
+}
