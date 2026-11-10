@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "X-GitCode-Event": "push"
+  },
+  "body": {
+    "ref": "refs/heads/feature",
+    "repository": {
+      "id": 99,
+      "full_name": "owner/repo"
+    },
+    "sender": {
+      "id": 1,
+      "login": "dev"
+    },
+    "before": "def4567890abcdef4567890abcdef4567890abcd",
+    "after": "0000000000000000000000000000000000000000"
+  }
+}

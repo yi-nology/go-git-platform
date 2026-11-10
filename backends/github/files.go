@@ -11,9 +11,15 @@ import (
 )
 
 // GetFileContent implements provider.FileManager.
+//
+// DownloadContents 是两跳(contents 元数据 + download_url 取字节),go-github
+// 的契约明示第二跳可能"失败却不报错":非 2xx 时返回 (错误页 body, nil err)
+// (issue #71)——所以除了 err 之外**必须**检查 resp.StatusCode,429/5xx/404
+// 的错误页文本不得当归档内容返回。非 2xx 经 provider.New 归类
+// (404→ErrNotFound、429→ErrRateLimited……)。
 func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	opts := &github.RepositoryContentGetOptions{Ref: ref}
-	rc, _, err := p.client.Repositories.DownloadContents(ctx, owner, repo, path, opts)
+	rc, resp, err := p.client.Repositories.DownloadContents(ctx, owner, repo, path, opts)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "GetFileContent", err)
 	}
@@ -21,6 +27,11 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 		return "", oekiterrors.Errorf("github: file not found: %s", path)
 	}
 	defer func() { _ = rc.Close() }()
+	if resp != nil && resp.StatusCode >= 400 {
+		// 错误体只截前 4KB 进错误信息,避免把超大错误页整个吞进内存。
+		body, _ := io.ReadAll(io.LimitReader(rc, 4096))
+		return "", provider.New(provider.PlatformGitHub, "GetFileContent", resp.StatusCode, string(body))
+	}
 	data, err := io.ReadAll(rc)
 	if err != nil {
 		return "", provider.Wrap(provider.PlatformGitHub, "GetFileContent", err)

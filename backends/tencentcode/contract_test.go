@@ -118,7 +118,7 @@ func TestTencentCode_Contract(t *testing.T) {
 		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:      `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
-			StargazersResponse: `[{"id":1,"login":"star"}]`,
+			StargazersResponse: `[{"project_id":1,"user":{"id":1,"username":"star","name":"Star"}}]`,
 		},
 		Users: &contracttest.UsersHarnessConfig{
 			GetUserResponse: `{"id":1,"username":"dev","name":"Dev","avatar_url":"https://tencentcode.com/avatars/1"}`,

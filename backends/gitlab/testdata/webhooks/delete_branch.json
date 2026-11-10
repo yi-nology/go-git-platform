@@ -1,0 +1,18 @@
+{
+  "headers": {},
+  "body": {
+    "object_kind": "push",
+    "user": {
+      "id": 1,
+      "username": "dev",
+      "name": "Dev"
+    },
+    "project": {
+      "id": 99,
+      "path_with_namespace": "owner/repo"
+    },
+    "ref": "refs/heads/feature",
+    "before": "def4567890abcdef4567890abcdef4567890abcd",
+    "after": "0000000000000000000000000000000000000000"
+  }
+}

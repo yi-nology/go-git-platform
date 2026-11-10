@@ -12,6 +12,19 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
+// withStatus threads the HTTP status the SDK response carries into err so
+// the family engine's provider.Wrap can classify sentinels
+// (IsNotFound/IsRateLimited/IsConflict...). The gitea SDK flattens every
+// non-2xx into a plain-text error (client.go statusCodeToErr), so the
+// response object is the only status source; adapters must not discard it
+// (issue #55). A nil resp / nil err passes through unchanged.
+func withStatus(err error, resp *gitea.Response) error {
+	if err == nil || resp == nil || resp.Response == nil {
+		return err
+	}
+	return provider.WrapStatusError(err, resp.Response.StatusCode)
+}
+
 // sdkPorts adapts the gitea SDK to the family engine's ports. The gitea SDK
 // is the family's upstream vocabulary, so the adapters are direct
 // delegation apart from trimming the unused *Response returns and projecting
@@ -23,25 +36,25 @@ type sdkPorts struct {
 // --- giteafamily.HookPort ---
 
 func (s sdkPorts) CreateRepoHook(ctx context.Context, owner, repo string, opt giteafamily.CreateHookOption) (*giteafamily.Hook, error) {
-	h, _, err := s.c.Hooks.CreateRepoHook(ctx, owner, repo, gitea.CreateHookOption{
+	h, resp, err := s.c.Hooks.CreateRepoHook(ctx, owner, repo, gitea.CreateHookOption{
 		Type:   gitea.HookType(opt.Type),
 		Config: opt.Config,
 		Events: opt.Events,
 		Active: opt.Active,
 	})
-	return familyHook(h), err
+	return familyHook(h), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteRepoHook(ctx context.Context, owner, repo string, id int64) error {
-	_, err := s.c.Hooks.DeleteRepoHook(ctx, owner, repo, id)
-	return err
+	resp, err := s.c.Hooks.DeleteRepoHook(ctx, owner, repo, id)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) ListRepoHooks(ctx context.Context, owner, repo string, opt giteafamily.ListHooksOptions) ([]*giteafamily.Hook, error) {
-	list, _, err := s.c.Hooks.ListRepoHooks(ctx, owner, repo, gitea.ListHooksOptions{
+	list, resp, err := s.c.Hooks.ListRepoHooks(ctx, owner, repo, gitea.ListHooksOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyHooks(list), err
+	return familyHooks(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetRepoHook(ctx context.Context, owner, repo string, id int64) (*giteafamily.Hook, int, error) {
@@ -56,11 +69,11 @@ func (s sdkPorts) GetRepoHook(ctx context.Context, owner, repo string, id int64)
 func (s sdkPorts) EditRepoHook(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditHookOption) (*giteafamily.Hook, error) {
 	// The gitea SDK's edit returns no body either; the engine hydrates the
 	// updated hook with a follow-up GetRepoHook.
-	_, err := s.c.Hooks.EditRepoHook(ctx, owner, repo, id, gitea.EditHookOption{
+	resp, err := s.c.Hooks.EditRepoHook(ctx, owner, repo, id, gitea.EditHookOption{
 		Config: opt.Config,
 		Events: opt.Events,
 	})
-	return nil, err
+	return nil, withStatus(err, resp)
 }
 
 func familyHook(h *gitea.Hook) *giteafamily.Hook {
@@ -81,24 +94,24 @@ func familyHooks(list []*gitea.Hook) []*giteafamily.Hook {
 // --- giteafamily.DeployKeyPort ---
 
 func (s sdkPorts) ListDeployKeys(ctx context.Context, owner, repo string, opt giteafamily.ListDeployKeysOptions) ([]*giteafamily.DeployKey, error) {
-	list, _, err := s.c.Repositories.ListDeployKeys(ctx, owner, repo, gitea.ListDeployKeysOptions{
+	list, resp, err := s.c.Repositories.ListDeployKeys(ctx, owner, repo, gitea.ListDeployKeysOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyDeployKeys(list), err
+	return familyDeployKeys(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateDeployKey(ctx context.Context, owner, repo string, opt giteafamily.CreateKeyOption) (*giteafamily.DeployKey, error) {
-	k, _, err := s.c.Repositories.CreateDeployKey(ctx, owner, repo, gitea.CreateKeyOption{
+	k, resp, err := s.c.Repositories.CreateDeployKey(ctx, owner, repo, gitea.CreateKeyOption{
 		Title:    opt.Title,
 		Key:      opt.Key,
 		ReadOnly: opt.ReadOnly,
 	})
-	return familyDeployKey(k), err
+	return familyDeployKey(k), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
-	_, err := s.c.Repositories.DeleteDeployKey(ctx, owner, repo, keyID)
-	return err
+	resp, err := s.c.Repositories.DeleteDeployKey(ctx, owner, repo, keyID)
+	return withStatus(err, resp)
 }
 
 func familyDeployKey(k *gitea.DeployKey) *giteafamily.DeployKey {
@@ -123,22 +136,22 @@ func (s sdkPorts) ListMilestones(ctx context.Context, owner, repo string, opt gi
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 		State:       gitea.StateType(opt.State),
 	}
-	list, _, err := s.c.Repositories.ListMilestones(ctx, owner, repo, listOpts)
-	return familyMilestones(list), err
+	list, resp, err := s.c.Repositories.ListMilestones(ctx, owner, repo, listOpts)
+	return familyMilestones(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetMilestone(ctx context.Context, owner, repo string, id int64) (*giteafamily.Milestone, error) {
-	m, _, err := s.c.Repositories.GetMilestone(ctx, owner, repo, id)
-	return familyMilestone(m), err
+	m, resp, err := s.c.Repositories.GetMilestone(ctx, owner, repo, id)
+	return familyMilestone(m), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateMilestone(ctx context.Context, owner, repo string, opt giteafamily.CreateMilestoneOption) (*giteafamily.Milestone, error) {
-	m, _, err := s.c.Repositories.CreateMilestone(ctx, owner, repo, gitea.CreateMilestoneOption{
+	m, resp, err := s.c.Repositories.CreateMilestone(ctx, owner, repo, gitea.CreateMilestoneOption{
 		Title:       opt.Title,
 		Description: opt.Description,
 		Deadline:    opt.Deadline,
 	})
-	return familyMilestone(m), err
+	return familyMilestone(m), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditMilestone(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditMilestoneOption) (*giteafamily.Milestone, error) {
@@ -151,13 +164,13 @@ func (s sdkPorts) EditMilestone(ctx context.Context, owner, repo string, id int6
 		state := gitea.StateType(*opt.State)
 		editOpts.State = &state
 	}
-	m, _, err := s.c.Repositories.EditMilestone(ctx, owner, repo, id, editOpts)
-	return familyMilestone(m), err
+	m, resp, err := s.c.Repositories.EditMilestone(ctx, owner, repo, id, editOpts)
+	return familyMilestone(m), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteMilestone(ctx context.Context, owner, repo string, id int64) error {
-	_, err := s.c.Repositories.DeleteMilestone(ctx, owner, repo, id)
-	return err
+	resp, err := s.c.Repositories.DeleteMilestone(ctx, owner, repo, id)
+	return withStatus(err, resp)
 }
 
 func familyMilestone(m *gitea.Milestone) *giteafamily.Milestone {
@@ -184,33 +197,33 @@ func familyMilestones(list []*gitea.Milestone) []*giteafamily.Milestone {
 // --- giteafamily.LabelPort ---
 
 func (s sdkPorts) ListRepoLabels(ctx context.Context, owner, repo string, opt giteafamily.ListLabelsOptions) ([]*giteafamily.Label, error) {
-	list, _, err := s.c.Repositories.ListRepoLabels(ctx, owner, repo, gitea.ListLabelsOptions{
+	list, resp, err := s.c.Repositories.ListRepoLabels(ctx, owner, repo, gitea.ListLabelsOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyLabels(list), err
+	return familyLabels(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateLabel(ctx context.Context, owner, repo string, opt giteafamily.CreateLabelOption) (*giteafamily.Label, error) {
-	l, _, err := s.c.Repositories.CreateLabel(ctx, owner, repo, gitea.CreateLabelOption{
+	l, resp, err := s.c.Repositories.CreateLabel(ctx, owner, repo, gitea.CreateLabelOption{
 		Name:        opt.Name,
 		Color:       opt.Color,
 		Description: opt.Description,
 	})
-	return familyLabel(l), err
+	return familyLabel(l), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditLabel(ctx context.Context, owner, repo string, id int64, opt giteafamily.EditLabelOption) (*giteafamily.Label, error) {
-	l, _, err := s.c.Repositories.EditLabel(ctx, owner, repo, id, gitea.EditLabelOption{
+	l, resp, err := s.c.Repositories.EditLabel(ctx, owner, repo, id, gitea.EditLabelOption{
 		Name:        opt.Name,
 		Color:       opt.Color,
 		Description: opt.Description,
 	})
-	return familyLabel(l), err
+	return familyLabel(l), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteLabel(ctx context.Context, owner, repo string, id int64) error {
-	_, err := s.c.Repositories.DeleteLabel(ctx, owner, repo, id)
-	return err
+	resp, err := s.c.Repositories.DeleteLabel(ctx, owner, repo, id)
+	return withStatus(err, resp)
 }
 
 func familyLabel(l *gitea.Label) *giteafamily.Label {
@@ -231,7 +244,7 @@ func familyLabels(list []*gitea.Label) []*giteafamily.Label {
 // --- giteafamily.BranchPort ---
 
 func (s sdkPorts) ListRepoBranches(ctx context.Context, owner, repo string, opt giteafamily.ListRepoBranchesOptions) ([]*giteafamily.Branch, error) {
-	list, _, err := s.c.Repositories.ListRepoBranches(ctx, owner, repo, gitea.ListRepoBranchesOptions{
+	list, resp, err := s.c.Repositories.ListRepoBranches(ctx, owner, repo, gitea.ListRepoBranchesOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
 	out := make([]*giteafamily.Branch, 0, len(list))
@@ -240,40 +253,40 @@ func (s sdkPorts) ListRepoBranches(ctx context.Context, owner, repo string, opt 
 			out = append(out, &giteafamily.Branch{Name: b.Name})
 		}
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateBranch(ctx context.Context, owner, repo string, opt giteafamily.CreateBranchOption) (*giteafamily.Branch, error) {
-	b, _, err := s.c.Repositories.CreateBranch(ctx, owner, repo, gitea.CreateBranchOption{
+	b, resp, err := s.c.Repositories.CreateBranch(ctx, owner, repo, gitea.CreateBranchOption{
 		BranchName:    opt.BranchName,
 		OldBranchName: opt.OldBranchName,
 	})
 	if b == nil {
-		return nil, err
+		return nil, withStatus(err, resp)
 	}
-	return &giteafamily.Branch{Name: b.Name}, err
+	return &giteafamily.Branch{Name: b.Name}, withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteRepoBranch(ctx context.Context, owner, repo, branch string) error {
-	_, _, err := s.c.Repositories.DeleteRepoBranch(ctx, owner, repo, branch)
-	return err
+	_, resp, err := s.c.Repositories.DeleteRepoBranch(ctx, owner, repo, branch)
+	return withStatus(err, resp)
 }
 
 // --- giteafamily.CollaboratorPort ---
 
 func (s sdkPorts) ListCollaborators(ctx context.Context, owner, repo string, opt giteafamily.ListCollaboratorsOptions) ([]*giteafamily.User, error) {
-	list, _, err := s.c.Repositories.ListCollaborators(ctx, owner, repo, gitea.ListCollaboratorsOptions{
+	list, resp, err := s.c.Repositories.ListCollaborators(ctx, owner, repo, gitea.ListCollaboratorsOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyUsers(list), err
+	return familyUsers(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) CollaboratorPermission(ctx context.Context, owner, repo, username string) (string, error) {
-	perm, _, err := s.c.Repositories.CollaboratorPermission(ctx, owner, repo, username)
+	perm, resp, err := s.c.Repositories.CollaboratorPermission(ctx, owner, repo, username)
 	if perm == nil {
-		return "", err
+		return "", withStatus(err, resp)
 	}
-	return string(perm.Permission), err
+	return string(perm.Permission), withStatus(err, resp)
 }
 
 func (s sdkPorts) AddCollaborator(ctx context.Context, owner, repo, username string, opt giteafamily.AddCollaboratorOption) error {
@@ -282,13 +295,13 @@ func (s sdkPorts) AddCollaborator(ctx context.Context, owner, repo, username str
 		perm := gitea.AccessMode(*opt.Permission)
 		aco.Permission = &perm
 	}
-	_, err := s.c.Repositories.AddCollaborator(ctx, owner, repo, username, aco)
-	return err
+	resp, err := s.c.Repositories.AddCollaborator(ctx, owner, repo, username, aco)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteCollaborator(ctx context.Context, owner, repo, username string) error {
-	_, err := s.c.Repositories.DeleteCollaborator(ctx, owner, repo, username)
-	return err
+	resp, err := s.c.Repositories.DeleteCollaborator(ctx, owner, repo, username)
+	return withStatus(err, resp)
 }
 
 func familyUsers(list []*gitea.User) []*giteafamily.User {
@@ -311,17 +324,17 @@ func familyUser(u *gitea.User) *giteafamily.User {
 // --- giteafamily.RepoStatsPort ---
 
 func (s sdkPorts) ListForks(ctx context.Context, owner, repo string, opt giteafamily.ListForksOptions) ([]*giteafamily.Repo, error) {
-	list, _, err := s.c.Repositories.ListForks(ctx, owner, repo, gitea.ListForksOptions{
+	list, resp, err := s.c.Repositories.ListForks(ctx, owner, repo, gitea.ListForksOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyRepos(list), err
+	return familyRepos(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) ListRepoStargazers(ctx context.Context, owner, repo string, opt giteafamily.ListStargazersOptions) ([]*giteafamily.User, error) {
-	list, _, err := s.c.Repositories.ListRepoStargazers(ctx, owner, repo, gitea.ListStargazersOptions{
+	list, resp, err := s.c.Repositories.ListRepoStargazers(ctx, owner, repo, gitea.ListStargazersOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyUsers(list), err
+	return familyUsers(list), withStatus(err, resp)
 }
 
 func familyRepo(r *gitea.Repository) *giteafamily.Repo {
@@ -362,28 +375,28 @@ func familyRepos(list []*gitea.Repository) []*giteafamily.Repo {
 // --- giteafamily.NotificationPort ---
 
 func (s sdkPorts) ListNotifications(ctx context.Context, opt giteafamily.ListNotificationOptions) ([]*giteafamily.NotificationThread, error) {
-	list, _, err := s.c.Notifications.List(ctx, giteaNotificationListOpt(opt))
-	return familyThreads(list), err
+	list, resp, err := s.c.Notifications.List(ctx, giteaNotificationListOpt(opt))
+	return familyThreads(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) ListRepoNotifications(ctx context.Context, owner, repo string, opt giteafamily.ListNotificationOptions) ([]*giteafamily.NotificationThread, error) {
-	list, _, err := s.c.Notifications.ListByRepo(ctx, owner, repo, giteaNotificationListOpt(opt))
-	return familyThreads(list), err
+	list, resp, err := s.c.Notifications.ListByRepo(ctx, owner, repo, giteaNotificationListOpt(opt))
+	return familyThreads(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) MarkNotificationReadByID(ctx context.Context, id int64) error {
-	_, _, err := s.c.Notifications.MarkReadByID(ctx, id)
-	return err
+	_, resp, err := s.c.Notifications.MarkReadByID(ctx, id)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) MarkNotificationsRead(ctx context.Context, opt giteafamily.MarkNotificationOptions) error {
-	_, _, err := s.c.Notifications.MarkRead(ctx, gitea.MarkNotificationOptions{LastReadAt: opt.LastReadAt})
-	return err
+	_, resp, err := s.c.Notifications.MarkRead(ctx, gitea.MarkNotificationOptions{LastReadAt: opt.LastReadAt})
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opt giteafamily.MarkNotificationOptions) error {
-	_, _, err := s.c.Notifications.MarkReadByRepo(ctx, owner, repo, gitea.MarkNotificationOptions{LastReadAt: opt.LastReadAt})
-	return err
+	_, resp, err := s.c.Notifications.MarkReadByRepo(ctx, owner, repo, gitea.MarkNotificationOptions{LastReadAt: opt.LastReadAt})
+	return withStatus(err, resp)
 }
 
 func giteaNotificationListOpt(opt giteafamily.ListNotificationOptions) gitea.ListNotificationOptions {
@@ -428,41 +441,41 @@ func familyThreads(list []*gitea.NotificationThread) []*giteafamily.Notification
 // --- giteafamily.CommitPort ---
 
 func (s sdkPorts) GetSingleCommit(ctx context.Context, owner, repo, sha string) (*giteafamily.Commit, error) {
-	c, _, err := s.c.Repositories.GetSingleCommit(ctx, owner, repo, sha)
-	return familyCommit(c), err
+	c, resp, err := s.c.Repositories.GetSingleCommit(ctx, owner, repo, sha)
+	return familyCommit(c), withStatus(err, resp)
 }
 
 func (s sdkPorts) ListRepoCommits(ctx context.Context, owner, repo string, opt giteafamily.ListCommitOptions) ([]*giteafamily.Commit, error) {
-	list, _, err := s.c.Repositories.ListRepoCommits(ctx, owner, repo, gitea.ListCommitOptions{
+	list, resp, err := s.c.Repositories.ListRepoCommits(ctx, owner, repo, gitea.ListCommitOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
 	out := make([]*giteafamily.Commit, 0, len(list))
 	for _, c := range list {
 		out = append(out, familyCommit(c))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) CompareCommits(ctx context.Context, owner, repo, base, head string) (*giteafamily.CompareResult, error) {
-	cmp, _, err := s.c.Repositories.CompareCommits(ctx, owner, repo, base, head)
+	cmp, resp, err := s.c.Repositories.CompareCommits(ctx, owner, repo, base, head)
 	if cmp == nil {
-		return nil, err
+		return nil, withStatus(err, resp)
 	}
 	out := &giteafamily.CompareResult{TotalCommits: cmp.TotalCommits}
 	for _, c := range cmp.Commits {
 		out.Commits = append(out.Commits, familyCommit(c))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateStatus(ctx context.Context, owner, repo, sha string, opt giteafamily.CreateStatusOption) error {
-	_, _, err := s.c.Repositories.CreateStatus(ctx, owner, repo, sha, gitea.CreateStatusOption{
+	_, resp, err := s.c.Repositories.CreateStatus(ctx, owner, repo, sha, gitea.CreateStatusOption{
 		State:       gitea.StatusState(opt.State),
 		Context:     opt.Context,
 		Description: opt.Description,
 		TargetURL:   opt.TargetURL,
 	})
-	return err
+	return withStatus(err, resp)
 }
 
 func familyCommit(c *gitea.Commit) *giteafamily.Commit {
@@ -486,7 +499,7 @@ func familyCommit(c *gitea.Commit) *giteafamily.Commit {
 // --- giteafamily.SearchPort ---
 
 func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
-	list, _, err := s.c.Issues.ListIssues(ctx, gitea.ListIssueOption{
+	list, resp, err := s.c.Issues.ListIssues(ctx, gitea.ListIssueOption{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 		KeyWord:     opt.KeyWord,
 		State:       gitea.StateType(opt.State),
@@ -494,15 +507,15 @@ func (s sdkPorts) ListIssues(ctx context.Context, opt giteafamily.FamilyIssueLis
 		Labels:      stringx.SplitCSVNonEmpty(opt.Labels),
 		Type:        gitea.IssueType(opt.Type),
 	})
-	return familyIssues(list), err
+	return familyIssues(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) SearchUsers(ctx context.Context, opt giteafamily.SearchUserOptions) ([]*giteafamily.User, error) {
-	list, _, err := s.c.Users.SearchUsers(ctx, gitea.SearchUsersOption{
+	list, resp, err := s.c.Users.SearchUsers(ctx, gitea.SearchUsersOption{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 		KeyWord:     opt.Keyword,
 	})
-	return familyUsers(list), err
+	return familyUsers(list), withStatus(err, resp)
 }
 
 func familyIssue(i *gitea.Issue) *giteafamily.Issue {
@@ -545,32 +558,32 @@ func familyIssues(list []*gitea.Issue) []*giteafamily.Issue {
 }
 
 func (s sdkPorts) ListStatuses(ctx context.Context, owner, repo, sha string, opt giteafamily.ListStatusesOption) ([]*giteafamily.Status, error) {
-	list, _, err := s.c.Repositories.ListStatuses(ctx, owner, repo, sha, gitea.ListStatusesOption{ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize}})
+	list, resp, err := s.c.Repositories.ListStatuses(ctx, owner, repo, sha, gitea.ListStatusesOption{ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize}})
 	out := make([]*giteafamily.Status, 0, len(list))
 	for _, st := range list {
 		if st != nil {
 			out = append(out, &giteafamily.Status{State: string(st.State), Context: st.Context, Description: st.Description, TargetURL: st.TargetURL})
 		}
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 // --- giteafamily.ReviewPort ---
 
 func (s sdkPorts) ListPullReviews(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullReviewsOptions) ([]*giteafamily.PullReview, error) {
-	list, _, err := s.c.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{
+	list, resp, err := s.c.PullRequests.ListPullReviews(ctx, owner, repo, index, gitea.ListPullReviewsOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
 	out := make([]*giteafamily.PullReview, 0, len(list))
 	for _, r := range list {
 		out = append(out, familyReview(r))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) GetPullReview(ctx context.Context, owner, repo string, index, reviewID int64) (*giteafamily.PullReview, error) {
-	r, _, err := s.c.PullRequests.GetPullReview(ctx, owner, repo, index, reviewID)
-	return familyReview(r), err
+	r, resp, err := s.c.PullRequests.GetPullReview(ctx, owner, repo, index, reviewID)
+	return familyReview(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreatePullReview(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreatePullReviewOption) (*giteafamily.PullReview, error) {
@@ -587,18 +600,18 @@ func (s sdkPorts) CreatePullReview(ctx context.Context, owner, repo string, inde
 			NewLineNum: c.NewLineNum,
 		})
 	}
-	r, _, err := s.c.PullRequests.CreatePullReview(ctx, owner, repo, index, rc)
-	return familyReview(r), err
+	r, resp, err := s.c.PullRequests.CreatePullReview(ctx, owner, repo, index, rc)
+	return familyReview(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateReviewRequests(ctx context.Context, owner, repo string, index int64, opt giteafamily.PullReviewRequestOptions) error {
-	_, err := s.c.PullRequests.CreateReviewRequests(ctx, owner, repo, index, gitea.PullReviewRequestOptions{Reviewers: opt.Reviewers})
-	return err
+	resp, err := s.c.PullRequests.CreateReviewRequests(ctx, owner, repo, index, gitea.PullReviewRequestOptions{Reviewers: opt.Reviewers, TeamReviewers: opt.TeamReviewers})
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) DismissPullReview(ctx context.Context, owner, repo string, index, reviewID int64, opt giteafamily.DismissPullReviewOptions) error {
-	_, err := s.c.PullRequests.DismissPullReview(ctx, owner, repo, index, reviewID, gitea.DismissPullReviewOptions{Message: opt.Message})
-	return err
+	resp, err := s.c.PullRequests.DismissPullReview(ctx, owner, repo, index, reviewID, gitea.DismissPullReviewOptions{Message: opt.Message})
+	return withStatus(err, resp)
 }
 
 func familyReview(r *gitea.PullReview) *giteafamily.PullReview {
@@ -621,19 +634,19 @@ func familyReview(r *gitea.PullReview) *giteafamily.PullReview {
 // --- giteafamily.DiffPort ---
 
 func (s sdkPorts) GetPullRequestDiff(ctx context.Context, owner, repo string, index int64) ([]byte, error) {
-	data, _, err := s.c.PullRequests.GetPullRequestDiff(ctx, owner, repo, index, gitea.PullRequestDiffOptions{})
-	return data, err
+	data, resp, err := s.c.PullRequests.GetPullRequestDiff(ctx, owner, repo, index, gitea.PullRequestDiffOptions{})
+	return data, withStatus(err, resp)
 }
 
 func (s sdkPorts) ListPullRequestFiles(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListPullRequestFilesOptions) ([]*giteafamily.FamilyChangedFile, error) {
-	list, _, err := s.c.PullRequests.ListPullRequestFiles(ctx, owner, repo, index, gitea.ListPullRequestFilesOptions{
+	list, resp, err := s.c.PullRequests.ListPullRequestFiles(ctx, owner, repo, index, gitea.ListPullRequestFilesOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
 	out := make([]*giteafamily.FamilyChangedFile, 0, len(list))
 	for _, cf := range list {
 		out = append(out, familyChangedFile(cf))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateIssueComment(ctx context.Context, owner, repo string, index int64, opt giteafamily.CreateIssueCommentOption) (*giteafamily.FamilyComment, int, error) {
@@ -733,20 +746,20 @@ func familyFileResult(resp *gitea.FileResponse, err error) (*giteafamily.FamilyF
 // --- giteafamily.RepoPort ---
 
 func (s sdkPorts) SearchRepos(ctx context.Context, opt giteafamily.SearchRepoOptions) ([]*giteafamily.Repo, error) {
-	list, _, err := s.c.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
+	list, resp, err := s.c.Repositories.SearchRepos(ctx, gitea.SearchRepoOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 		Keyword:     opt.Keyword,
 		Sort:        opt.Sort,
 		Order:       opt.Order,
 	})
-	return familyRepos(list), err
+	return familyRepos(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) ListMyRepos(ctx context.Context, opt giteafamily.FamilyListReposOptions) ([]*giteafamily.Repo, error) {
-	list, _, err := s.c.Repositories.ListMyRepos(ctx, gitea.ListReposOptions{
+	list, resp, err := s.c.Repositories.ListMyRepos(ctx, gitea.ListReposOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
-	return familyRepos(list), err
+	return familyRepos(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetRepo(ctx context.Context, owner, repo string) (*giteafamily.Repo, int, error) {
@@ -759,54 +772,54 @@ func (s sdkPorts) GetRepo(ctx context.Context, owner, repo string) (*giteafamily
 }
 
 func (s sdkPorts) CreateRepo(ctx context.Context, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
-	r, _, err := s.c.Repositories.CreateRepo(ctx, gitea.CreateRepoOption{
+	r, resp, err := s.c.Repositories.CreateRepo(ctx, gitea.CreateRepoOption{
 		Name:          opt.Name,
 		Description:   opt.Description,
 		Private:       opt.Private,
 		AutoInit:      opt.AutoInit,
 		DefaultBranch: opt.DefaultBranch,
 	})
-	return familyRepo(r), err
+	return familyRepo(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateOrgRepo(ctx context.Context, org string, opt giteafamily.FamilyCreateRepoOption) (*giteafamily.Repo, error) {
-	r, _, err := s.c.Repositories.CreateOrgRepo(ctx, org, gitea.CreateRepoOption{
+	r, resp, err := s.c.Repositories.CreateOrgRepo(ctx, org, gitea.CreateRepoOption{
 		Name:          opt.Name,
 		Description:   opt.Description,
 		Private:       opt.Private,
 		AutoInit:      opt.AutoInit,
 		DefaultBranch: opt.DefaultBranch,
 	})
-	return familyRepo(r), err
+	return familyRepo(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateFork(ctx context.Context, owner, repo string, opt giteafamily.FamilyForkRepoOption) (*giteafamily.Repo, error) {
-	r, _, err := s.c.Repositories.CreateFork(ctx, owner, repo, gitea.CreateForkOption{
+	r, resp, err := s.c.Repositories.CreateFork(ctx, owner, repo, gitea.CreateForkOption{
 		Organization: opt.Organization,
 		Name:         opt.Name,
 	})
-	return familyRepo(r), err
+	return familyRepo(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteRepo(ctx context.Context, owner, repo string) error {
-	_, err := s.c.Repositories.DeleteRepo(ctx, owner, repo)
-	return err
+	resp, err := s.c.Repositories.DeleteRepo(ctx, owner, repo)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) EditRepo(ctx context.Context, owner, repo string, opt giteafamily.FamilyEditRepoOption) (*giteafamily.Repo, error) {
-	r, _, err := s.c.Repositories.EditRepo(ctx, owner, repo, gitea.EditRepoOption{
+	r, resp, err := s.c.Repositories.EditRepo(ctx, owner, repo, gitea.EditRepoOption{
 		Name:          opt.Name,
 		Description:   opt.Description,
 		DefaultBranch: opt.DefaultBranch,
 		Private:       opt.Private,
 	})
-	return familyRepo(r), err
+	return familyRepo(r), withStatus(err, resp)
 }
 
 // --- giteafamily.IssuePort ---
 
 func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt giteafamily.FamilyIssueListOption) ([]*giteafamily.Issue, error) {
-	list, _, err := s.c.Issues.ListRepoIssues(ctx, owner, repo, gitea.ListIssueOption{
+	list, resp, err := s.c.Issues.ListRepoIssues(ctx, owner, repo, gitea.ListIssueOption{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 		KeyWord:     opt.KeyWord,
 		State:       gitea.StateType(opt.State),
@@ -814,23 +827,23 @@ func (s sdkPorts) ListRepoIssues(ctx context.Context, owner, repo string, opt gi
 		Labels:      stringx.SplitCSVNonEmpty(opt.Labels),
 		Type:        gitea.IssueType(opt.Type),
 	})
-	return familyIssues(list), err
+	return familyIssues(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetIssue(ctx context.Context, owner, repo string, index int64) (*giteafamily.Issue, error) {
-	i, _, err := s.c.Issues.GetIssue(ctx, owner, repo, index)
-	return familyIssue(i), err
+	i, resp, err := s.c.Issues.GetIssue(ctx, owner, repo, index)
+	return familyIssue(i), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateIssue(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateIssueOption) (*giteafamily.Issue, error) {
-	i, _, err := s.c.Issues.CreateIssue(ctx, owner, repo, gitea.CreateIssueOption{
+	i, resp, err := s.c.Issues.CreateIssue(ctx, owner, repo, gitea.CreateIssueOption{
 		Title:     opt.Title,
 		Body:      opt.Body,
 		Assignees: opt.Assignees,
 		Milestone: opt.Milestone,
 		Labels:    opt.Labels,
 	})
-	return familyIssue(i), err
+	return familyIssue(i), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditIssue(ctx context.Context, owner, repo string, index int64, opt giteafamily.FamilyEditIssueOption) (*giteafamily.Issue, error) {
@@ -846,56 +859,56 @@ func (s sdkPorts) EditIssue(ctx context.Context, owner, repo string, index int64
 	if opt.Milestone != nil {
 		edit.Milestone = opt.Milestone
 	}
-	i, _, err := s.c.Issues.EditIssue(ctx, owner, repo, index, edit)
-	return familyIssue(i), err
+	i, resp, err := s.c.Issues.EditIssue(ctx, owner, repo, index, edit)
+	return familyIssue(i), withStatus(err, resp)
 }
 
 func (s sdkPorts) ReplaceIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
-	_, _, err := s.c.Issues.ReplaceIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
-	return err
+	_, resp, err := s.c.Issues.ReplaceIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) AddIssueLabels(ctx context.Context, owner, repo string, index int64, opt giteafamily.IssueLabelsOption) error {
-	_, _, err := s.c.Issues.AddIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
-	return err
+	_, resp, err := s.c.Issues.AddIssueLabels(ctx, owner, repo, index, gitea.IssueLabelsOption{Labels: opt.Labels})
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteIssueLabel(ctx context.Context, owner, repo string, index, labelID int64) error {
-	_, err := s.c.Issues.DeleteIssueLabel(ctx, owner, repo, index, labelID)
-	return err
+	resp, err := s.c.Issues.DeleteIssueLabel(ctx, owner, repo, index, labelID)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) ListIssueComments(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListIssueCommentsOptions) ([]*giteafamily.FamilyComment, error) {
-	list, _, err := s.c.Issues.ListIssueComments(ctx, owner, repo, index, gitea.ListIssueCommentOptions{
+	list, resp, err := s.c.Issues.ListIssueComments(ctx, owner, repo, index, gitea.ListIssueCommentOptions{
 		ListOptions: gitea.ListOptions{Page: opt.ListOptions.Page, PageSize: opt.ListOptions.PageSize},
 	})
 	out := make([]*giteafamily.FamilyComment, 0, len(list))
 	for _, c := range list {
 		out = append(out, familyComment(c))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) EditIssueComment(ctx context.Context, owner, repo string, commentID int64, opt giteafamily.EditIssueCommentOption) (*giteafamily.FamilyComment, error) {
-	c, _, err := s.c.Issues.EditIssueComment(ctx, owner, repo, commentID, gitea.EditIssueCommentOption{Body: opt.Body})
-	return familyComment(c), err
+	c, resp, err := s.c.Issues.EditIssueComment(ctx, owner, repo, commentID, gitea.EditIssueCommentOption{Body: opt.Body})
+	return familyComment(c), withStatus(err, resp)
 }
 
 // --- giteafamily.PRPort ---
 
 func (s sdkPorts) CreatePullRequest(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreatePullRequestOption) (*giteafamily.FamilyPullRequest, error) {
-	pr, _, err := s.c.PullRequests.CreatePullRequest(ctx, owner, repo, gitea.CreatePullRequestOption{
+	pr, resp, err := s.c.PullRequests.CreatePullRequest(ctx, owner, repo, gitea.CreatePullRequestOption{
 		Head:  opt.Head,
 		Base:  opt.Base,
 		Title: opt.Title,
 		Body:  opt.Body,
 	})
-	return familyPR(pr), err
+	return familyPR(pr), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetPullRequest(ctx context.Context, owner, repo string, index int64) (*giteafamily.FamilyPullRequest, error) {
-	pr, _, err := s.c.PullRequests.GetPullRequest(ctx, owner, repo, index)
-	return familyPR(pr), err
+	pr, resp, err := s.c.PullRequests.GetPullRequest(ctx, owner, repo, index)
+	return familyPR(pr), withStatus(err, resp)
 }
 
 func (s sdkPorts) ListPullRequests(ctx context.Context, owner, repo string, opt giteafamily.FamilyListPullRequestsOptions) ([]*giteafamily.FamilyPullRequest, int, error) {
@@ -938,8 +951,8 @@ func (s sdkPorts) EditPullRequest(ctx context.Context, owner, repo string, index
 		edit.State = &st
 	}
 	edit.Assignees = opt.Assignees
-	pr, _, err := s.c.PullRequests.EditPullRequest(ctx, owner, repo, index, edit)
-	return familyPR(pr), err
+	pr, resp, err := s.c.PullRequests.EditPullRequest(ctx, owner, repo, index, edit)
+	return familyPR(pr), withStatus(err, resp)
 }
 
 // familyPR is the field-by-field projection of the SDK's PullRequest onto
@@ -986,18 +999,18 @@ func familyPR(pr *gitea.PullRequest) *giteafamily.FamilyPullRequest {
 }
 
 func (s sdkPorts) ListPullRequestCommits(ctx context.Context, owner, repo string, index int64, opt giteafamily.ListOptions) ([]*giteafamily.Commit, error) {
-	list, _, err := s.c.PullRequests.ListPullRequestCommits(ctx, owner, repo, index, gitea.ListPullRequestCommitsOptions{ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize}})
+	list, resp, err := s.c.PullRequests.ListPullRequestCommits(ctx, owner, repo, index, gitea.ListPullRequestCommitsOptions{ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize}})
 	out := make([]*giteafamily.Commit, 0, len(list))
 	for _, c := range list {
 		out = append(out, familyCommit(c))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 // --- giteafamily.ReleasePort ---
 
 func (s sdkPorts) ListRepoTags(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyTag, error) {
-	list, _, err := s.c.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{
+	list, resp, err := s.c.Repositories.ListRepoTags(ctx, owner, repo, gitea.ListRepoTagsOptions{
 		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
 	})
 	out := make([]*giteafamily.FamilyTag, 0, len(list))
@@ -1008,18 +1021,18 @@ func (s sdkPorts) ListRepoTags(ctx context.Context, owner, repo string, opt gite
 		}
 		out = append(out, ft)
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) ListReleases(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyRelease, error) {
-	list, _, err := s.c.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{
+	list, resp, err := s.c.Releases.ListReleases(ctx, owner, repo, gitea.ListReleasesOptions{
 		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
 	})
-	return familyReleases(list), err
+	return familyReleases(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateRelease(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateReleaseOption) (*giteafamily.FamilyRelease, error) {
-	r, _, err := s.c.Releases.CreateRelease(ctx, owner, repo, gitea.CreateReleaseOption{
+	r, resp, err := s.c.Releases.CreateRelease(ctx, owner, repo, gitea.CreateReleaseOption{
 		TagName:      opt.TagName,
 		Target:       opt.Target,
 		Title:        opt.Title,
@@ -1027,28 +1040,28 @@ func (s sdkPorts) CreateRelease(ctx context.Context, owner, repo string, opt git
 		IsDraft:      opt.IsDraft,
 		IsPrerelease: opt.IsPrerelease,
 	})
-	return familyRelease(r), err
+	return familyRelease(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*giteafamily.FamilyRelease, error) {
-	r, _, err := s.c.Releases.GetReleaseByTag(ctx, owner, repo, tag)
-	return familyRelease(r), err
+	r, resp, err := s.c.Releases.GetReleaseByTag(ctx, owner, repo, tag)
+	return familyRelease(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditRelease(ctx context.Context, owner, repo string, id int64, opt giteafamily.FamilyEditReleaseOption) (*giteafamily.FamilyRelease, error) {
-	r, _, err := s.c.Releases.EditRelease(ctx, owner, repo, id, gitea.EditReleaseOption{
+	r, resp, err := s.c.Releases.EditRelease(ctx, owner, repo, id, gitea.EditReleaseOption{
 		TagName:      opt.TagName,
 		Title:        opt.Title,
 		Note:         opt.Note,
 		IsDraft:      opt.IsDraft,
 		IsPrerelease: opt.IsPrerelease,
 	})
-	return familyRelease(r), err
+	return familyRelease(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteReleaseByTag(ctx context.Context, owner, repo, tag string) error {
-	_, err := s.c.Releases.DeleteReleaseByTag(ctx, owner, repo, tag)
-	return err
+	resp, err := s.c.Releases.DeleteReleaseByTag(ctx, owner, repo, tag)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
@@ -1056,8 +1069,8 @@ func (s sdkPorts) GetArchive(ctx context.Context, owner, repo, ref, format strin
 	if format == "zip" {
 		kind = gitea.ZipArchive
 	}
-	data, _, err := s.c.Repositories.GetArchive(ctx, owner, repo, ref, kind)
-	return data, err
+	data, resp, err := s.c.Repositories.GetArchive(ctx, owner, repo, ref, kind)
+	return data, withStatus(err, resp)
 }
 
 func familyRelease(r *gitea.Release) *giteafamily.FamilyRelease {
@@ -1092,37 +1105,38 @@ func familyReleases(list []*gitea.Release) []*giteafamily.FamilyRelease {
 // serves the same list unpaginated).
 func (s sdkPorts) ListIssueReactions(ctx context.Context, owner, repo string, index int64) ([]*giteafamily.FamilyReaction, error) {
 	list, err := backendutil.AllPages(func(page int) ([]*gitea.Reaction, error) {
-		page1, _, err := s.c.Issues.ListIssueReactions(ctx, owner, repo, index, gitea.ListIssueReactionsOptions{
+		page1, resp, err := s.c.Issues.ListIssueReactions(ctx, owner, repo, index, gitea.ListIssueReactionsOptions{
 			ListOptions: gitea.ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
 		})
-		return page1, err
+		return page1, withStatus(err, resp)
 	})
+	// 错误已在闭包内过 withStatus(状态随链保留),外层不再包。
 	return familyReactions(list), err
 }
 
 func (s sdkPorts) PostIssueReaction(ctx context.Context, owner, repo string, index int64, emoji string) (*giteafamily.FamilyReaction, error) {
-	r, _, err := s.c.Issues.PostIssueReaction(ctx, owner, repo, index, emoji)
-	return familyReaction(r), err
+	r, resp, err := s.c.Issues.PostIssueReaction(ctx, owner, repo, index, emoji)
+	return familyReaction(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteIssueReaction(ctx context.Context, owner, repo string, index int64, content string) error {
-	_, err := s.c.Issues.DeleteIssueReaction(ctx, owner, repo, index, content)
-	return err
+	resp, err := s.c.Issues.DeleteIssueReaction(ctx, owner, repo, index, content)
+	return withStatus(err, resp)
 }
 
 func (s sdkPorts) GetIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*giteafamily.FamilyReaction, error) {
-	list, _, err := s.c.Issues.GetIssueCommentReactions(ctx, owner, repo, commentID)
-	return familyReactions(list), err
+	list, resp, err := s.c.Issues.GetIssueCommentReactions(ctx, owner, repo, commentID)
+	return familyReactions(list), withStatus(err, resp)
 }
 
 func (s sdkPorts) PostIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*giteafamily.FamilyReaction, error) {
-	r, _, err := s.c.Issues.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
-	return familyReaction(r), err
+	r, resp, err := s.c.Issues.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
+	return familyReaction(r), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, content string) error {
-	_, err := s.c.Issues.DeleteIssueCommentReaction(ctx, owner, repo, commentID, content)
-	return err
+	resp, err := s.c.Issues.DeleteIssueCommentReaction(ctx, owner, repo, commentID, content)
+	return withStatus(err, resp)
 }
 
 func familyReaction(r *gitea.Reaction) *giteafamily.FamilyReaction {
@@ -1148,44 +1162,44 @@ func familyReactions(list []*gitea.Reaction) []*giteafamily.FamilyReaction {
 // --- giteafamily.BranchProtectionPort ---
 
 func (s sdkPorts) ListBranchProtections(ctx context.Context, owner, repo string, opt giteafamily.ListOptions) ([]*giteafamily.FamilyBranchProtection, error) {
-	list, _, err := s.c.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{
+	list, resp, err := s.c.Repositories.ListBranchProtections(ctx, owner, repo, gitea.ListBranchProtectionsOptions{
 		ListOptions: gitea.ListOptions{Page: opt.Page, PageSize: opt.PageSize},
 	})
 	out := make([]*giteafamily.FamilyBranchProtection, 0, len(list))
 	for _, bp := range list {
 		out = append(out, familyBranchProtection(bp))
 	}
-	return out, err
+	return out, withStatus(err, resp)
 }
 
 func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*giteafamily.FamilyBranchProtection, error) {
-	bp, _, err := s.c.Repositories.GetBranchProtection(ctx, owner, repo, branch)
-	return familyBranchProtection(bp), err
+	bp, resp, err := s.c.Repositories.GetBranchProtection(ctx, owner, repo, branch)
+	return familyBranchProtection(bp), withStatus(err, resp)
 }
 
 func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
-	bp, _, err := s.c.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
+	bp, resp, err := s.c.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
 		BranchName:        opt.BranchName,
 		RequiredApprovals: opt.RequiredApprovals,
 		EnableStatusCheck: opt.EnableStatusCheck,
 		EnablePush:        opt.EnablePush,
 	})
-	return familyBranchProtection(bp), err
+	return familyBranchProtection(bp), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditBranchProtection(ctx context.Context, owner, repo, branch string, opt giteafamily.FamilyEditBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
-	bp, _, err := s.c.Repositories.EditBranchProtection(ctx, owner, repo, branch, gitea.EditBranchProtectionOption{
+	bp, resp, err := s.c.Repositories.EditBranchProtection(ctx, owner, repo, branch, gitea.EditBranchProtectionOption{
 		RequiredApprovals:      opt.RequiredApprovals,
 		EnableStatusCheck:      opt.EnableStatusCheck,
 		EnablePush:             opt.EnablePush,
 		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
 	})
-	return familyBranchProtection(bp), err
+	return familyBranchProtection(bp), withStatus(err, resp)
 }
 
 func (s sdkPorts) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
-	_, err := s.c.Repositories.DeleteBranchProtection(ctx, owner, repo, branch)
-	return err
+	resp, err := s.c.Repositories.DeleteBranchProtection(ctx, owner, repo, branch)
+	return withStatus(err, resp)
 }
 
 func familyBranchProtection(bp *gitea.BranchProtection) *giteafamily.FamilyBranchProtection {

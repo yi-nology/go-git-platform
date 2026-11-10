@@ -70,6 +70,67 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gogit 侧经 go-git UnifiedEncoder 渲染（object.Patch 同管线），按
   index∪HEAD 选路径、index 跟踪性判定删除（rm --cached 同 git 呈现）
   （issue #110）。
+### Fixed（第二批 14 连修：安全面凭据回灌 / 错误分类断链 / 读回反转 / 契约兑现）
+
+- fix(transport): 跨 host 重定向剥凭据判据改对齐**重定向链起点**——旧判据只比紧邻
+  上一跳，「平台→第三方→第三方同域再跳」链形的第二跳会把平台令牌**重新施加**到
+  第三方主机（Bearer/PRIVATE-TOKEN/query token 三通道，探针实证）；backendutil
+  `SDKHTTPClient.CheckRedirect` 同型修正（`via[len(via)-1]`→链头）；补多跳链
+  回归测试（issue #65，P0）。
+- fix(transport): 10MB 默认响应体上限**真正生效**——`NewClient` 缺省即带
+  `DefaultMaxBodySize`，`WithMaxBodySize(0)` 显式表无限制、`-1` 取默认；
+  旧缺省零值=无限制，文档宣称的 OOM 防护实际处于关闭状态（全仓 0 调用点）
+  （issue #70）。
+- fix(provider): `Manager` 缓存键补全全部影响 wire 行为的配置字段——
+  TokenStyle/ConditionalRequests/RetryConfig 内容指纹 + TokenSource/Hooks/Logger
+  指针身份（可比较值形态走 hasher 摘要，凭据不落键明文）；旧键漏字段 ⇒ 仅差
+  TokenSource 的两个 Config 命中同一 provider＝**错凭据互撞**（探针实证）；
+  补逐字段拆键回归测试 + 等值共享反断言（issue #66，P0 后果面）。
+- fix(github): `GetArchive` 下载跳三连修——`NewRequestWithContext`（ctx 传导）、
+  非 2xx 状态码门（错误页不再当归档字节返回，经 `provider.New` 归类）、下载走
+  无 30s Timeout 的 token-less `followClient`（大归档不再被全局限时截断）
+  （issue #72，P0）。
+- fix(github): `GetFileContent` 检查 `DownloadContents` 第二跳的
+  `resp.StatusCode`——go-github 契约明示两跳下载非 2xx 返回 `(错误页, nil err)`，
+  旧实现把 429/5xx 错误页文本当文件内容静默返回（issue #71，P0）。
+- fix(github): `MarkNotificationsRead`/`MarkRepoNotificationsRead` 的
+  `LastReadAt` 解析失败即报 `ErrInvalidInput` 且**零 wire 触达**——旧实现静默
+  丢错落零值，go-github 对零值的语义是「全部标已读」，一个格式笔误即不可逆
+  全量副作用（issue #75）。
+- fix(github): `CreateBranchProtection` 不再委托 Update 的 GET 前置（未保护分支
+  必然 404 ⇒ create 路径死锁、`EnsureBranchProtection` 的 EnsureCreated 不可达），
+  直落 PUT create-or-replace；`UpdateBranchProtection` 以 current 全字段回填兑现
+  「nil 字段不变」契约——enforce_admins 透传当前值（旧硬编码 true）、
+  AllowForcePushes/AllowDeletions 回填（omitempty 缺省下被复位为 false）、
+  Restrictions 逐实体回填（旧 wire 成 null 清空 push/merge 限制）；补「只改一字段
+  其余保持」契约测试（issue #73+#74 同族设计）。
+- fix(gitea/forgejo): 适配层全端口（82 处/端）以 `withStatus` 把 SDK *Response 的
+  HTTP 状态串进错误链——两 SDK 把非 2xx 拍平成纯文本错误、旧适配层整体丢弃
+  response ⇒ `IsNotFound/IsRateLimited/IsConflict/IsForbidden` 恒 false（仅 4 处
+  特判可判，「取不到就建/回退」分支静默走错）；family 层 `familyError` 统一收口
+  四处特判；补「状态码 × 哨兵」矩阵 + 多方法 404 采样回归（红↔绿双向验证）
+  （issue #55）。
+- fix(gitee): `CreateCommitStatus` 的 in-flight 态（pending/running/未知动词）改写
+  check-run 的 `in_progress` 形态（不带 conclusion）——旧写 `completed+neutral`
+  被读侧 conclusion 归一成 **Success**，「写 pending 读回 success」静默反转令
+  合并门禁提前放行；终态动词照常 completed+conclusion；补 round-trip 读写双侧
+  测试；台账同步（issue #58）。
+- fix(webhooks/gitlab 家族): 分支删除归一 `branch.deleted`——GitLab/Gitee/
+  TencentCode/GitCode 四后端的 push + 全零 after 投递此前一律落 `push`（#47 只修了
+  tag_push 案），同一物理动作在 github/gitea/forgejo 产出 `branch.deleted`，消费方
+  switch 静默漏掉全部分支删除；四后端补 #47 同款守卫（before 非零确认真删除），
+  webhookcorpus 补四份 delete_branch 夹具 + golden（issue #67）。
+- fix(repo_stats): 四处桩方法改 `provider.Wrap(platform, op, ErrNotImplemented)` 并
+  按 DivergenceStub 强制登记台账——giteafamily ListContributors、gitlab
+  ListStargazers、tencentcode ListForks/ListContributors 旧裸 `Wrapf` 使
+  `IsNotImplemented` 恒 false；契约套件改「stub ⇒ IsNotImplemented + 台账配对断言、
+  实作 ⇒ 夹具解码断言」，删除任意错误一律 skip 的空转形态；DivergenceSuite
+  dispatch 表补三案（issue #56）。
+- feat(github/gitea/forgejo): 新增可选能力接口 `TeamReviewManager`
+  （`RequestTeamReviewers`，团队 review request 落 `team_reviewers` 独立 wire 通道）
+  ——统一 ReviewManager 只收用户名，组织仓库按 CODEOWNERS 请求团队评审被迫绕开
+  SDK；`CapabilitySet.TeamReviews` 登记 + DeriveCapabilities 派生 + 契约一致性
+  断言 + 双后端 wire 测试（issue #79，按可选能力族惯例不 breaking）。
 
 ### Fixed（后端语义面 11 连修：wire 静默丢参 / 幂等破窗 / 跨后端口径错位）
 

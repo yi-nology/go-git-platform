@@ -162,7 +162,11 @@ type Client struct {
 	pipeline     http.RoundTripper
 }
 
-// DefaultMaxBodySize is the default maximum response body size (10 MB).
+// DefaultMaxBodySize is the maximum response body size applied when the
+// caller does not configure one (10 MB). The zero-value Client would
+// otherwise leave the OOM guard off (issue #70: the pre-0.125 constructor
+// defaulted to 0 = unlimited, so the "default 10 MB" the docs claimed did
+// not exist unless the caller explicitly passed -1).
 const DefaultMaxBodySize = 10 * 1024 * 1024
 
 // ClientOption configures a Client at construction time. Options make the
@@ -209,9 +213,16 @@ func WithETag(cache *ETagCache) ClientOption {
 	return func(c *Client) { c.etag = cache }
 }
 
-// WithMaxBodySize limits the response body size in bytes. 0 means no limit;
-// -1 uses the default limit (DefaultMaxBodySize). This prevents OOM from
-// malicious or misconfigured servers.
+// WithMaxBodySize overrides the response body size limit in bytes. The
+// constructor already applies the DefaultMaxBodySize cap; this option is for
+// callers that need a different bound:
+//
+//	 0 — no limit (explicit opt-out; read with care, it removes the OOM guard)
+//	-1 — the default limit (DefaultMaxBodySize)
+//	>0 — the explicit limit in bytes
+//
+// This prevents OOM from malicious or misconfigured servers on the Do path;
+// the raw RoundTripper path hands the live response to the caller uncapped.
 func WithMaxBodySize(n int64) ClientOption {
 	return func(c *Client) { c.maxBodySize = n }
 }
@@ -223,6 +234,10 @@ func NewClient(baseURL string, auth AuthStrategy, opts ...ClientOption) *Client 
 		baseURL: strings.TrimRight(baseURL, "/"),
 		auth:    auth,
 		timeout: DefaultTimeout,
+		// OOM guard on by default (issue #70): the zero value would mean
+		// unlimited bodies. WithMaxBodySize(0) explicitly opts out, -1 and
+		// >0 keep their documented meanings via effectiveMaxBodySize.
+		maxBodySize: DefaultMaxBodySize,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -426,23 +441,45 @@ func (c *Client) applyAuthFor(req *http.Request) error {
 	return applyAuth(req.Context(), c.auth, req)
 }
 
-// CrossHostRedirect 判断该请求是否是**跳到别的主机**的重定向请求。
+// CrossHostRedirect 判断该请求是否落在**认证目标之外的主机**上——即该请求
+// 已离开发起请求的原始 host。
+//
+// 为什么不能只比紧邻上一跳(issue #65):认证在 RoundTripper 内部**每一跳
+// 重新施加**,而剥凭据的判据若只看 `req.Response.Request`(紧邻上一跳),
+// 则「平台 → 第三方 → 第三方同域再跳」链形(http→https 升级、S3 尾斜杠
+// 301、签名 URL 重发都是现实形态)的第二跳会因「与上一跳同 host」而把
+// 平台令牌**重新施加**到第三方主机上。判据必须对齐**重定向链的起点**:
+// req.Response.Request 沿链回溯到第一跳(其 Response 为 nil 的那个请求)。
 //
 // Go 的 net/http 在跟随重定向时会新建请求,并把上一跳的响应挂在
 // req.Response 上(Request.Response 文档:只在客户端重定向时有值)
-// ⇒ 用它识别"这是第几跳"。
+// ⇒ 用它逐跳回溯。链是线性的(每跳的 Response.Request 指向上一跳),
+// 回溯必然终止于发起请求。
 //
 // 判据用**完整 host(含端口)**:同一台机器上的不同端口也是不同源
 // (Go 的规则只比主机名,会把 127.0.0.1:A → 127.0.0.1:B 当成同主机)。
 func CrossHostRedirect(req *http.Request) bool {
-	if req == nil || req.Response == nil || req.Response.Request == nil {
+	origin := OriginRedirectHost(req)
+	if origin == "" || req == nil || req.URL == nil {
 		return false
 	}
-	prev := req.Response.Request.URL
-	if prev == nil || req.URL == nil {
-		return false
+	return !strings.EqualFold(origin, req.URL.Host)
+}
+
+// OriginRedirectHost 回溯重定向链到发起请求,返回其 host。
+// req 不是重定向跳(或链头 URL 异常)时返回空串。
+func OriginRedirectHost(req *http.Request) string {
+	if req == nil {
+		return ""
 	}
-	return !strings.EqualFold(prev.Host, req.URL.Host)
+	cur := req
+	for cur.Response != nil && cur.Response.Request != nil {
+		cur = cur.Response.Request
+	}
+	if cur.URL == nil {
+		return ""
+	}
+	return cur.URL.Host
 }
 
 // sensitiveHeaders 可能随重定向外泄的凭据头。

@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/go-github/v93/github"
 
@@ -39,6 +40,16 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 }
 
 // ListCRs implements provider.ChangeRequestManager.
+//
+// SourceBranch 口径(issue #78):GitHub 的 head 过滤参数是
+// 「命名空间:分支名」——硬编码 opts.Owner:branch 会把 fork 来源的 PR
+// 静默漏掉(fork PR 的 head 在 fork owner 的命名空间下)。契约按两个形态分流:
+//
+//   - 带 owner("owner:branch")→ 服务端 head 精确过滤,命名空间锁定;
+//   - 纯分支名("feature-x")→ 不下发 head 过滤,当前页内按统一
+//     SourceBranch(head.ref,与命名空间无关)客户端后过滤——fork 同名
+//     分支同样命中,与 GitLab 的服务端纯分支名过滤同果(后过滤与
+//     GitLab 服务端过滤的分页语义差异登记 divergence)。
 func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.PullRequestListOptions{
@@ -47,8 +58,14 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	if opts.State != "" {
 		listOpts.State = mapCRState(opts.State)
 	}
+	// 纯分支名形态走客户端后过滤,head 过滤不下发。
+	clientSideBranchFilter := ""
 	if opts.SourceBranch != "" {
-		listOpts.Head = opts.Owner + ":" + opts.SourceBranch
+		if owner, branch, found := strings.Cut(opts.SourceBranch, ":"); found && owner != "" && branch != "" {
+			listOpts.Head = opts.SourceBranch
+		} else {
+			clientSideBranchFilter = opts.SourceBranch
+		}
 	}
 	if opts.TargetBranch != "" {
 		listOpts.Base = opts.TargetBranch
@@ -59,12 +76,17 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	crs := make([]*provider.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
-		crs = append(crs, convertPR(pr))
+		cr := convertPR(pr)
+		if clientSideBranchFilter != "" && cr.SourceBranch != clientSideBranchFilter {
+			continue
+		}
+		crs = append(crs, cr)
 	}
 	// GitHub exposes the total only through the Link header's last page;
 	// without it the count is unknown (nil) rather than guessed from the
 	// page length. LastPage*PerPage is an upper-bound approximation of the
-	// platform's own metadata.
+	// platform's own metadata. With the client-side SourceBranch post-filter
+	// the bound describes the unfiltered set (see the divergence note above).
 	var total *int
 	if resp != nil && resp.LastPage > 0 {
 		t := resp.LastPage * listOpts.PerPage

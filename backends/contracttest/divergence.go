@@ -92,20 +92,10 @@ func dispatchDivergenceCall(p provider.Provider, capability, method string) (boo
 		return true, rm.DismissReview(ctx, "owner", "repo", "1", 1, "stale review")
 	case "ChangeRequestManager.UpdateCRLabels":
 		return true, p.UpdateCRLabels(ctx, "owner", "repo", "1", []string{"bug"})
-	case "BranchProtectionManager.ListBranchProtections":
-		bpm, ok := p.(provider.BranchProtectionManager)
-		if !ok {
-			return true, nil
-		}
-		_, err := bpm.ListBranchProtections(ctx, "owner", "repo")
-		return true, err
-	case "BranchProtectionManager.GetBranchProtection":
-		bpm, ok := p.(provider.BranchProtectionManager)
-		if !ok {
-			return true, nil
-		}
-		_, err := bpm.GetBranchProtection(ctx, "owner", "repo", "main")
-		return true, err
+	case "RepoStatsManager.ListForks", "RepoStatsManager.ListStargazers", "RepoStatsManager.ListContributors":
+		return true, dispatchRepoStatsDivergence(p, ctx, method)
+	case "BranchProtectionManager.ListBranchProtections", "BranchProtectionManager.GetBranchProtection":
+		return dispatchBranchProtectionDivergenceCall(p, ctx, method)
 	case "CommitStatusManager.CreateCommitStatus":
 		csm, ok := p.(provider.CommitStatusManager)
 		if !ok {
@@ -148,4 +138,41 @@ func dispatchNotificationDivergenceCall(p provider.Provider, capability, method 
 		return true, nm.MarkRepoNotificationsRead(ctx, "owner", "repo", provider.MarkNotificationsOptions{})
 	}
 	return false, nil
+}
+
+// dispatchBranchProtectionDivergenceCall serves the BranchProtectionManager
+// stub cases; split out to keep dispatchDivergenceCall's branch budget flat
+// (same shape as the NotificationManager split).
+func dispatchBranchProtectionDivergenceCall(p provider.Provider, ctx context.Context, method string) (bool, error) {
+	bpm, ok := p.(provider.BranchProtectionManager)
+	if !ok {
+		return true, nil
+	}
+	if method == "GetBranchProtection" {
+		_, err := bpm.GetBranchProtection(ctx, "owner", "repo", "main")
+		return true, err
+	}
+	_, err := bpm.ListBranchProtections(ctx, "owner", "repo")
+	return true, err
+}
+
+// dispatchRepoStatsDivergence invokes one RepoStatsManager method for the
+// divergence suite. Split out of dispatchDivergenceCall to keep its
+// cyclomatic complexity inside the lint budget.
+func dispatchRepoStatsDivergence(p provider.Provider, ctx context.Context, method string) error {
+	rsm, ok := p.(provider.RepoStatsManager)
+	if !ok {
+		return nil
+	}
+	switch method {
+	case "ListForks":
+		_, err := rsm.ListForks(ctx, "owner", "repo")
+		return err
+	case "ListStargazers":
+		_, err := rsm.ListStargazers(ctx, "owner", "repo")
+		return err
+	default:
+		_, err := rsm.ListContributors(ctx, "owner", "repo")
+		return err
+	}
 }

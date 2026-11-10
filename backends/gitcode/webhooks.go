@@ -219,9 +219,19 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		if err != nil {
 			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		ne.Type = "push"
+		// 删除归一（issue #67，同族 #47 的 push 案）：gitcode 的分支删除以
+		// push + 全零 after 投递（其独立 delete 事件路径只覆盖部分场景）——
+		// 此前一律归一成 push，消费方 switch branch.deleted 静默漏掉。
+		// before 非零确认真删除。
+		if provider.IsWebhookDeletionSHA(pushEvent.After) && !provider.IsWebhookDeletionSHA(pushEvent.Before) {
+			ne.Type = provider.EventTypeBranch + "deleted"
+			ne.Action = "deleted"
+			// 全零 after 是删除标记而非提交,不设 commit_sha。
+		} else {
+			ne.Type = "push"
+			ne.CommitSHA = pushEvent.After
+		}
 		ne.Branch = strings.TrimPrefix(pushEvent.Ref, "refs/heads/")
-		ne.CommitSHA = pushEvent.After
 		if pushEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(pushEvent.Sender.ID)
 			ne.Actor = &provider.CRUser{

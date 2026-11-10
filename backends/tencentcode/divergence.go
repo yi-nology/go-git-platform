@@ -6,6 +6,10 @@ import "github.com/yi-nology/go-git-platform/provider"
 // where this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
+	{Capability: "RepoStatsManager", Method: "ListForks", Kind: provider.DivergenceStub,
+		Reason: "TencentCODE exposes no forks list endpoint; the stub carries ErrNotImplemented (issue #56)."},
+	{Capability: "RepoStatsManager", Method: "ListContributors", Kind: provider.DivergenceStub,
+		Reason: "TencentCODE exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56)."},
 	{Capability: "ChangeRequestManager", Method: "UpdateCRLabels", Kind: provider.DivergenceStub,
 		Reason: "The Gongfeng API no longer accepts labels via the merge-request update endpoint."},
 	{Capability: "ReviewManager", Method: "ListReviews", Kind: provider.DivergenceMapping,

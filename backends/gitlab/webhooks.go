@@ -234,10 +234,22 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			UpdatedAt:    pl.ObjectAttributes.UpdatedAt,
 		}
 	case "push":
-		event.Type = "push"
-		event.Action = "push"
+		// 删除归一（issue #67，同族 #47 的 push 案）：GitLab 家族没有独立
+		// delete 事件，分支删除以 push + 全零 after 投递——此前一律归一成
+		// push，同一物理动作在 github/gitea/forgejo 产出 branch.deleted，
+		// 消费方 switch 静默漏掉全部分支删除。before 非零确认真删除
+		// （全零 before+after 的异常形态不硬归）。
+		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = provider.EventTypeBranch + "deleted"
+			event.Action = "deleted"
+			// 全零 after 是删除标记而非提交(github delete 事件与 #47 的
+			// tag.deleted 同款不设 commit_sha)。
+		} else {
+			event.Type = "push"
+			event.Action = "push"
+			event.CommitSHA = pl.After
+		}
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
-		event.CommitSHA = pl.After
 	case "tag_push":
 		// 删除归一（issue #47）：GitLab 家族没有独立 delete 事件，tag 删除
 		// 以 tag_push + 全零 after 投递——此前一律归一成 tag.created，删除

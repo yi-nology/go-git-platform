@@ -60,11 +60,18 @@ type ListCROptions struct {
 	// —— 调用方无从察觉 closed/merged 的那部分**静默丢失**。
 	// (GitHub / GitLab / 工蜂 本来就是"空=不过滤";Gitee / Gitea / Forgejo /
 	//  GitCode 曾把空值映射成 open ⇒ 已对齐。)
-	State        CRState `json:"state,omitempty"`
-	SourceBranch string  `json:"source_branch,omitempty"`
-	TargetBranch string  `json:"target_branch,omitempty"`
-	Page         int     `json:"page,omitempty"`
-	PerPage      int     `json:"per_page,omitempty"`
+	State CRState `json:"state,omitempty"`
+	// SourceBranch filters by the source branch. The cross-backend contract
+	// (issue #78): a pure branch name ("feature-x") matches every change
+	// request whose head branch is named so - including fork-sourced ones
+	// (the unified ChangeRequest.SourceBranch is the namespace-free head
+	// ref everywhere). An "owner:branch" form is honored on GitHub's
+	// namespace-pinned server filter as an exact match; on GitLab-family
+	// backends the same string filters server-side by branch name.
+	SourceBranch string `json:"source_branch,omitempty"`
+	TargetBranch string `json:"target_branch,omitempty"`
+	Page         int    `json:"page,omitempty"`
+	PerPage      int    `json:"per_page,omitempty"`
 }
 
 // MergeCROptions contains options for merging a change request.

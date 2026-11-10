@@ -53,8 +53,13 @@ func SDKHTTPClient(tc *transport.Client, skipTLS bool) *http.Client {
 		// `access_token` query 参数里,且**每一跳都重新加**(它包在
 		// http.Client 的 Transport 外层)⇒ 平台 302 到 CDN 时令牌会外泄。
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) > 0 && via[len(via)-1].URL != nil && req.URL != nil &&
-				!strings.EqualFold(via[len(via)-1].URL.Host, req.URL.Host) {
+			// 与认证目标(链头,即发起请求)比较,不与紧邻上一跳比较(issue #65):
+			// 「平台 → 第三方 → 第三方同域再跳」链形的第二跳若只比上一跳,
+			// 会因同 host 而跳过剥除 ⇒ 平台令牌随第二跳外泄第三方主机。
+			// Go 只剥 Authorization/Cookie 家族且只比链头 host;非标准头
+			// (PRIVATE-TOKEN 等)Go 本来就不剥 ⇒ 这里按链头口径统一兜底。
+			if len(via) > 0 && via[0].URL != nil && req.URL != nil &&
+				!strings.EqualFold(via[0].URL.Host, req.URL.Host) {
 				transport.StripSensitiveCredentials(req)
 			}
 			return nil

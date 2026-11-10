@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v93/github"
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -100,27 +101,43 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 	return provider.Wrap(provider.PlatformGitHub, "MarkNotificationRead", err)
 }
 
+// parseLastReadAt resolves opts.LastReadAt per the contract ("RFC3339;
+// empty = mark all") into the go-github timestamp.
+//
+// 非空但解析失败**必须报错**(issue #75,#52 的写操作面同源缺陷):
+// go-github 对零值 lastRead 的语义是「把**全部**通知标为已读」
+// (activity_notifications.go:127)——旧的静默丢弃(err==nil 才赋值)会把
+// 一个格式笔误(如 "2026/11/11")升级成不可逆的全量副作用。拒绝语义与
+// GitLab 非法 threadID 同型:ErrInvalidInput 哨兵经 Wrap 保留可判定性。
+func parseLastReadAt(op, raw string) (github.Timestamp, error) {
+	if raw == "" {
+		return github.Timestamp{}, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return github.Timestamp{}, provider.Wrap(provider.PlatformGitHub, op,
+			oekiterrors.Errorf("%w: LastReadAt %q is not RFC3339: %v", provider.ErrInvalidInput, raw, err))
+	}
+	return github.Timestamp{Time: t}, nil
+}
+
 // MarkNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	var lastRead github.Timestamp
-	if opts.LastReadAt != "" {
-		if t, err := time.Parse(time.RFC3339, opts.LastReadAt); err == nil {
-			lastRead = github.Timestamp{Time: t}
-		}
+	lastRead, err := parseLastReadAt("MarkNotificationsRead", opts.LastReadAt)
+	if err != nil {
+		return err
 	}
-	_, err := p.client.Activity.MarkNotificationsRead(ctx, lastRead)
+	_, err = p.client.Activity.MarkNotificationsRead(ctx, lastRead)
 	return provider.Wrap(provider.PlatformGitHub, "MarkNotificationsRead", err)
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	var lastRead github.Timestamp
-	if opts.LastReadAt != "" {
-		if t, err := time.Parse(time.RFC3339, opts.LastReadAt); err == nil {
-			lastRead = github.Timestamp{Time: t}
-		}
+	lastRead, err := parseLastReadAt("MarkRepoNotificationsRead", opts.LastReadAt)
+	if err != nil {
+		return err
 	}
-	_, err := p.client.Activity.MarkRepositoryNotificationsRead(ctx, owner, repo, lastRead)
+	_, err = p.client.Activity.MarkRepositoryNotificationsRead(ctx, owner, repo, lastRead)
 	return provider.Wrap(provider.PlatformGitHub, "MarkRepoNotificationsRead", err)
 }
 

@@ -79,6 +79,7 @@ func TestGitee_Contract(t *testing.T) {
 		},
 		RepoStats: &contracttest.RepoStatsHarnessConfig{
 			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse:   `[{"id":1,"login":"star","name":"Star","avatar_url":"https://example.com/a.png"}]`,
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
 		DeployKeys: &contracttest.DeployKeysHarnessConfig{

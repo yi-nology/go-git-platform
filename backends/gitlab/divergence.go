@@ -6,6 +6,8 @@ import "github.com/yi-nology/go-git-platform/provider"
 // this backend's behavior departs from the unified provider semantics.
 // See provider.Divergence and docs/divergence-ledger.md.
 var divergences = []provider.Divergence{
+	{Capability: "RepoStatsManager", Method: "ListStargazers", Kind: provider.DivergenceStub,
+		Reason: "GitLab exposes no stargazers list endpoint; the stub carries ErrNotImplemented (issue #56)."},
 	{Capability: "CollaboratorManager", Method: "AddCollaborator", Field: "opts.Permission", Kind: provider.DivergenceMapping,
 		Reason: "The read/write/admin vocabulary maps onto GitLab access levels (read→reporter, write→developer, admin→maintainer); GitLab's add-member endpoint has no platform default and rejects a missing access_level, so empty maps to developer."},
 	{Capability: "ReviewManager", Method: "ListReviews", Kind: provider.DivergenceMapping,
