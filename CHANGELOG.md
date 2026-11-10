@@ -4,8 +4,30 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.125.0] - 2026-11-11
 
+### Changed（依赖地板全量拉升：oekit 三件套 + gitlab/gongfeng/oauth2；go-gitcode 钉 v0.15.0）
+
+- deps: **oekit 三件套拉齐** concurrency v0.31.2→v0.33.0、logx v0.9.1→v0.9.2、
+  pkg v0.41.1→v0.44.0。pkg v0.44.0 起（上游 pkg#353）`SingleFlightCache.
+  GetOrLoadWithSource` **有意不进 singleflight**：按调用注入的 source 不可比较，
+  泛化 API 按 key 合并会让等待者共享先到者的回源结果（同 key 不同凭据时
+  串扰），这是上游正确的保守。本仓 provider/ttlCache 的用法下 key 由
+  buildKey(cfg) 派生、同 key 必然同 cfg、构造结果可互换，去重安全且必要
+  （构造 Provider 会新建 http.Client 与连接池）——ttlCache 自建按 key 单飞
+  恢复「双检收敛到同一个赢家」语义，`TestTTLCache_SingleFlightOnConcurrentMiss`
+  （32 并发未命中仅 1 次构造）契约不变。
+- deps: gitlab.com/gitlab-org/api/client-go/v3 v3.43.0→v3.47.0、
+  go-gongfeng v0.3.0→v0.3.1、golang.org/x/oauth2 v0.37.0→v0.38.0，另
+  go-winio v0.6.4 / go-openapi/strfmt v0.27.4 间接杂项随动。
+- deps: **go-gitcode 钉 v0.15.0**（go get -u 抬到 v0.16.0 后钉回）——v0.16.0 起
+  SDK 内建路径段转义（其 issue #6：pathf 统一收口 383 个插值点），与本仓 #84
+  后置补丁的预转义（backendutil.Esc / escPath）叠加成**双重转义**：wire 上
+  owner/repo 变 `%2523`、ref 查询变 `%2520`，escape_wire_test 当场抓红（升级
+  前该套件全绿，双重转义系本次升级引入的真实 wire 回归，非存量）。撤预转义
+  需逐点区分 path/query 两面（gitcode 后端 84 处 Esc 调用点），属专门收编批，
+  不随依赖地板批量动；go.mod require 处已注原因与升级前置条件（先撤 Esc
+  预转义、核对 ref 等查询参数的转义口径）。
 
 ### Fixed（第五批 10 连修：tencentcode NotFound/事件词表/MergeCR 幂等 / giteafamily AllowDeletions 对称 / ListRepos 双端点 / comment action 派生 / 事件全局 ID / LastReadAt 解析报错 / tag push 归一 / forgejo 双头回退）
 
