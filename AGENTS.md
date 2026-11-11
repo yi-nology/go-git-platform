@@ -242,6 +242,61 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   →slog.Attr 结构化出口）经 provider/transport NewLogxLogger 桥对
   接 logx 的消费方被动受益；#136/#137 slog 序列化与 Error() panic
   隔离；v0.9.1 floor sync。
+- **pkg v0.42–v0.44 / concurrency v0.32–33 / logx v0.9.2 增量审计与两连
+  收编（2026-11-11，READ-ONLY 先行审计再动工；本条即结论存档）**。上轮
+  第五轮两连已闭并落地：#325 → v0.42.0（SignHMAC/SignTimestampHMAC 与验
+  签器同 HMACOption 单源）、#327 TruncRunes/TruncBytes（能力 v0.34.0 起，
+  v0.42.0 穷举测试收口）；同窗 #328 发端对偶（HMACSigner/EventEnvelope/
+  NewEventID + 五平台发↔收配对表）、#326 tarx、#329 config、#343 httpjson
+  parseRetryAfter 上界；v0.43.0 五单收口（#352 Checker inflight ctx 隔离 /
+  #353 SingleFlightCache 注入不合并+Refresh 分键 / #354 Ring 32 位回绕 /
+  #355 裸 Option 改名 CheckerOption/WriterOption/GuardOption / #356 Checker
+  构造期 fail-fast）；v0.44.0 三新面（#358 shellx.Analyze / #359 procx
+  cgroup v2 memory.max / #361 resumable 分片上传会话面）；concurrency
+  v0.32.0 #231 poll DeadLetter + v0.33.0 七连（#246–#252，Limiter.Reserve
+  收敛 (duration,error)+ErrNotReservable 哨兵属 breaking，与本仓无关）；
+  logx v0.9.2 纯 floor sync。**收编两处（issue #137/#138 在办）**：①
+  `backends/contracttest/contracttest.go` signRequest 四块手算 HMAC 删成
+  `webhook.SignHMAC` 调用（sha256= 前缀两形走 `WithSignaturePrefix`、裸
+  hex 两形走缺省，与验证器家族同选项单源；空密钥负对照夹具保留最小手算
+  分支——上游 SignHMAC 空 secret fail-closed panic 拒签，攻击者空密钥伪
+  造形态只能手算，语义即测试意图）；② `transport/errors.go` truncate 与
+  `transport/client.go` truncateForLog 委托 `stringx.TruncBytes`——按字节
+  预算取 TruncBytes 而非 TruncRunes（契约是 at most n bytes），RuneStart
+  回退顺带修字节切出非法 UTF-8 的 CJK 缺陷，ASCII 行为逐字节不变，两处
+  后缀字节原样保留。**测试夹具手写 HMAC 保留独立对照（不收编，勿再评
+  估）**：provider/webhook_test.go、webhook_gitee_test.go giteeSign、
+  backends/github signHook、giteafamily signedHookRequest 四处——手算
+  stdlib 值是对上游委托链（hmacSum/encodeSignature/选项接线）的跨实现
+  真源，全换 SignHMAC 会让 sign 与 verify 共用同一 hmacSum 自我抵消；上
+  游 sign 测试自留独立实现先例（sign_hmac_test.go signRaw/giteeSign）；
+  空密钥伪造向量上游拒签，手算是唯一形态。contracttest 是 wire 级端到端
+  夹具（HMAC 数学由 provider 单测与上游 golden 向量双钉），域不同故收编。
+  **#353 特别复核——ttlcache 自建单飞维持**：上游注入路径
+  （GetOrLoadWithSource/TTL）有意不进 singleflight（source 不可比较，合
+  并会串味）、Refresh 分键 `\x00refresh:`；本仓回源闭包捕获 per-call cfg
+  （key=buildKey(cfg)，同 key 同 cfg 构造结果可互换），同 key 去重安全且
+  必要，自建 per-key flight 仍必要、回归委托不可行；ttlcache 只消费
+  Peek/Set/Del/Stats 面，语义变化零触达，测试钉住 32 并发 1 构造。
+  **#343/#352/#356 无影响面**：#343 是 pkg/httpjson 内部 parseRetryAfter
+  （Do/重试路径），本仓只收 CanonicalETagKey 纯函数（transport/etag.go，
+  同 #319 结论）；本仓 ParseRetryAfter 走 concurrency retry/httpx 委托
+  线（transport/retry.go），乘法溢出拒绝 v0.31.0 已存档；#352/#356 及
+  #355 CheckerOption 改名均 Checker 域（无健康检查回源形态，v0.28/22 已
+  定性）。**定性不引入（无消费点，勿再评估）**：tarx 三件套（#326，维持
+  「gitbackend 零 tar 依赖」既定）；config 静态配置管线（#329，SDK 配置
+  面是构造期 cfg 结构体、mcp 是 flag+env 无 yaml 文件形态）；resumable
+  分片上传会话面（#361，上传服务端形态，release 资产是单次流式 POST）；
+  shellx.Analyze（#358，Quote 消费线已在，仓内无 shell 命令行解析形态
+  ——gitbackend argv 直 exec、credhelper 只产出脚本）；webhook 发端其余
+  面 SignTimestampHMAC/TimestampHMACSigner/HMACSigner/SignerWith*/
+  EventEnvelope/NewEventID（#328，无事件发出面）；container.Ring（#354）；
+  poll DeadLetter/HandleRetries（#231，pageiter 自有域）；ratelimit 四连
+  （#246/#248/#250/#252，无 client 侧限流器，Reserve breaking 与本仓无
+  关）；breaker/shedding/progress（#247/#249/#251，三包维持不消费）。
+  **procx 维持不引入**：#359 随之无消费点（勿重复评估）。被动受益：logx
+  v0.9.2 纯 floor sync（NewLogxLogger 桥线不动）；concurrency v0.32–33
+  既有委托线（async/syncx/loop/retry）零变更。
 
 ## 规则二：公共契约红线
 
