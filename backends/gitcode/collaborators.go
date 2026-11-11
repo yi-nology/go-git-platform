@@ -14,7 +14,7 @@ import (
 // (GitCode's page-size ceiling is 100).
 func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
 	collaborators, err := backendutil.AllPages(func(page int) ([]*gitcode.Collaborator, error) {
-		return p.client.ListCollaborators(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: 100})
+		return p.client.ListCollaborators(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListCollaborators", err)
@@ -31,7 +31,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 	gitcodeOpts := &gitcode.AddCollaboratorOptions{
 		Permission: opts.Permission,
 	}
-	if err := p.client.AddCollaborator(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(username), gitcodeOpts); err != nil {
+	if err := p.client.AddCollaborator(ctx, owner, repo, username, gitcodeOpts); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "AddCollaborator", err)
 	}
 	return nil
@@ -39,7 +39,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 
 // RemoveCollaborator implements provider.CollaboratorManager.
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
-	if err := p.client.RemoveCollaborator(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(username)); err != nil {
+	if err := p.client.RemoveCollaborator(ctx, owner, repo, username); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "RemoveCollaborator", err)
 	}
 	return nil

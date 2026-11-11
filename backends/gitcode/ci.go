@@ -19,7 +19,7 @@ import (
 // （GitHub/Gitea 是每 workflow 取最新）；job status 词表为大写（夹具实证
 // COMPLETED/RUNNING），失败判定大小写不敏感、live 词表待实证。
 func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
-	run, err := p.client.FindActionRunByHeadSHA(ctx, backendutil.Esc(owner), backendutil.Esc(repo), sha, gitcode.ListWorkflowRunsOptions{})
+	run, err := p.client.FindActionRunByHeadSHA(ctx, owner, repo, sha, gitcode.ListWorkflowRunsOptions{})
 	if errors.Is(err, gitcode.ErrActionRunNotFound) {
 		// 无 run（绿提交或无 CI）→ 空切片而非错误（接口契约）。
 		return nil, nil
@@ -27,7 +27,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListFailedJobLogs", err)
 	}
-	jobs, err := p.client.ListActionRunJobs(ctx, backendutil.Esc(owner), backendutil.Esc(repo), run.WorkflowRunID)
+	jobs, err := p.client.ListActionRunJobs(ctx, owner, repo, run.WorkflowRunID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListFailedJobLogs", err)
 	}
@@ -64,7 +64,7 @@ func isFailedGitCodeStatus(status string) bool {
 // jobLogTail downloads the job's full log and keeps the tail; a single job
 // log that cannot be fetched does not block attribution of the others.
 func (p *Provider) jobLogTail(ctx context.Context, owner, repo, runID, jobID string) (string, bool) {
-	data, err := p.client.DownloadActionJobLogs(ctx, backendutil.Esc(owner), backendutil.Esc(repo), runID, jobID)
+	data, err := p.client.DownloadActionJobLogs(ctx, owner, repo, runID, jobID)
 	if err != nil || len(data) == 0 {
 		return "", false
 	}

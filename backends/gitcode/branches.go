@@ -5,7 +5,6 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -13,7 +12,7 @@ import (
 // endpoint exposes no page parameter (it hard-codes per_page=100), so the
 // call stays single-shot.
 func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
-	branches, err := p.client.ListBranches(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
+	branches, err := p.client.ListBranches(ctx, owner, repo)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListBranches", err)
 	}
@@ -26,7 +25,7 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 
 // CreateBranch implements provider.BranchManager.
 func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
-	_, err := p.client.CreateBranch(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.CreateBranchOptions{
+	_, err := p.client.CreateBranch(ctx, owner, repo, gitcode.CreateBranchOptions{
 		BranchName: branch, Ref: ref,
 	})
 	if err != nil {
@@ -37,7 +36,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 
 // DeleteBranch implements provider.BranchManager.
 func (p *Provider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
-	err := p.client.DeleteBranch(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(branch))
+	err := p.client.DeleteBranch(ctx, owner, repo, branch)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteBranch", err)
 	}

@@ -46,7 +46,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	for _, e := range events {
 		em[e] = true
 	}
-	hook, err := p.client.CreateWebhook(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), gitcode.CreateWebhookOptions{
+	hook, err := p.client.CreateWebhook(ctx, opts.Owner, opts.Repo, gitcode.CreateWebhookOptions{
 		URL:                 opts.URL,
 		Password:            opts.Secret,
 		PushEvents:          gitcode.Bool(em["push"]),
@@ -63,7 +63,7 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 
 // GetWebhook implements provider.WebhookConfigManager.
 func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
-	hook, err := p.client.GetWebhook(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
+	hook, err := p.client.GetWebhook(ctx, owner, repo, webhookID)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetWebhook", err)
 	}
@@ -93,7 +93,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 		sdkOpts.NoteEvents = gitcode.Bool(em["note"] || em["comment"])
 		sdkOpts.MergeRequestsEvents = gitcode.Bool(em["pull_request"])
 	}
-	hook, err := p.client.UpdateWebhook(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID, sdkOpts)
+	hook, err := p.client.UpdateWebhook(ctx, owner, repo, webhookID, sdkOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateWebhook", err)
 	}
@@ -102,7 +102,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 
 // DeleteWebhook implements provider.WebhookManager.
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
-	err := p.client.DeleteWebhook(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
+	err := p.client.DeleteWebhook(ctx, owner, repo, webhookID)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteWebhook", err)
 	}
@@ -114,7 +114,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 // the walk covers every page.
 func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
 	hooks, err := backendutil.AllPages(func(page int) ([]*gitcode.Webhook, error) {
-		return p.client.ListWebhooksWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
+		return p.client.ListWebhooksWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListWebhooks", err)
