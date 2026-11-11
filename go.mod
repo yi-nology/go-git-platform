@@ -14,8 +14,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.16.0
 	github.com/yi-nology/go-gongfeng v0.3.1
-	gitlab.com/gitlab-org/api/client-go/v3 v3.47.0
-	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2
+	gitlab.com/gitlab-org/api/client-go/v3 v3.48.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/oauth2 v0.38.0
 	golang.org/x/time v0.16.0
 )
@@ -27,7 +27,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
-	github.com/davidmz/go-pageant v1.0.2 // indirect
+	github.com/davidmz/go-pageant v1.1.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
