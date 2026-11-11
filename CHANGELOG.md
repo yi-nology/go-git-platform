@@ -169,6 +169,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `"... (truncated)"`）原样保留。新增 CJK 截断回归测试两条（UTF-8 有效性
   + rune 边界收缩断言）。
 
+### 依赖地板
+
+- **地板抬升**（发版批统一动作，2026-11-12）：`golang.org/x/crypto →v0.59.0`、
+  `gitlab.com/gitlab-org/api/client-go/v3 →v3.48.0`。
+- **钉回**：`oekit/pkg 钉在 v0.44.0`、`oekit/logx 钉在 v0.9.2`——pkg v0.45.0 移除了
+  `errors.Errorf`，依赖 `go-gongfeng v0.3.1`（当前最新 tag）直接编译不过
+  （`undefined: oekiterrors.Errorf`）。上游 go-gongfeng 适配 pkg v0.45+ 发新版后再随
+  （已提 issue 登记）。
+- toolchain 1.27.4（GO-2026-6859，随 #139 已抬）。
+
 ## [0.126.0] - 2026-11-11
 
 ### Changed（go-gitcode v0.15.0→v0.16.0 收编：撤 84 处 Esc 预转义，wire 转义回归 SDK 单源）
