@@ -1,0 +1,79 @@
+# Real-environment smoke test (issue #119): manually dispatched only.
+#
+# The contract suites run against httptest fakes; this workflow is the
+# manual trigger that points the env-gated smoke test (smoke/) at a LIVE
+# platform so wire drift surfaces as a red run instead of waiting for a
+# human probe round. Strictly read-only probes (GetRepo + one page of
+# ListRepos).
+
+name: smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform (github|gitlab|gitea|forgejo|gitee|gitcode|tencentcode)'
+        required: false
+        default: 'github'
+      owner:
+        description: 'Owner (org or user) to probe'
+        required: true
+      repo:
+        description: 'Repository to probe'
+        required: true
+      url:
+        description: 'Optional base URL (self-hosted platforms)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.event.inputs.platform }}-${{ github.event.inputs.owner }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Smoke (${{ github.event.inputs.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Show Go version
+        run: go version
+
+      # Token selection: GIT_PLATFORM_SMOKE_TOKEN_<PLATFORM> secret when it
+      # exists, falling back to SMOKE_TOKEN. A missing secret makes the test
+      # SKIP (env-gated), not fail — dispatch without secrets is a no-op.
+      - name: Run smoke test
+        env:
+          GIT_PLATFORM_SMOKE_PLATFORM: ${{ github.event.inputs.platform }}
+          GIT_PLATFORM_SMOKE_OWNER: ${{ github.event.inputs.owner }}
+          GIT_PLATFORM_SMOKE_REPO: ${{ github.event.inputs.repo }}
+          GIT_PLATFORM_SMOKE_URL: ${{ github.event.inputs.url }}
+          GIT_PLATFORM_SMOKE_TOKEN_GITHUB: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_GITHUB }}
+          GIT_PLATFORM_SMOKE_TOKEN_GITLAB: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_GITLAB }}
+          GIT_PLATFORM_SMOKE_TOKEN_GITEA: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_GITEA }}
+          GIT_PLATFORM_SMOKE_TOKEN_FORGEJO: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_FORGEJO }}
+          GIT_PLATFORM_SMOKE_TOKEN_GITEE: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_GITEE }}
+          GIT_PLATFORM_SMOKE_TOKEN_GITCODE: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_GITCODE }}
+          GIT_PLATFORM_SMOKE_TOKEN_TENCENTCODE: ${{ secrets.GIT_PLATFORM_SMOKE_TOKEN_TENCENTCODE }}
+          SMOKE_TOKEN: ${{ secrets.SMOKE_TOKEN }}
+        run: |
+          platform="$(echo "${GIT_PLATFORM_SMOKE_PLATFORM}" | tr '[:lower:]' '[:upper:]')"
+          token_var="GIT_PLATFORM_SMOKE_TOKEN_${platform}"
+          token="${!token_var:-${SMOKE_TOKEN}}"
+          if [ -z "${token}" ]; then
+            echo "::warning::no ${token_var} / SMOKE_TOKEN secret configured — the smoke test will skip"
+          fi
+          export GIT_PLATFORM_SMOKE_TOKEN="${token}"
+          go test ./smoke/ -v -run TestSmoke -count=1

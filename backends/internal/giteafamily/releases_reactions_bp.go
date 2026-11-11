@@ -381,30 +381,32 @@ func convertReaction(r *FamilyReaction) *provider.Reaction {
 // FamilyBranchProtection is the slice of the family's branch-protection
 // object the engine consumes.
 type FamilyBranchProtection struct {
-	BranchName             string
-	RequiredApprovals      int64
-	EnableStatusCheck      bool
-	EnablePush             bool
-	BlockOnRejectedReviews bool
+	BranchName        string
+	RequiredApprovals int64
+	EnableStatusCheck bool
+	// ForcePushes is the family wire's force-push toggle — mapped only when
+	// the family SDK actually models it (gitea: enable_force_push; forgejo's
+	// SDK has no such field and its port leaves the read at false, registered
+	// DivergenceIgnore). It deliberately has no AllowDeletions counterpart:
+	// the family wire has no deletions face at all (issue #130).
+	ForcePushes bool
 }
 
 // FamilyCreateBranchProtectionOption mirrors the family's protection create
 // body.
 type FamilyCreateBranchProtectionOption struct {
-	BranchName             string
-	RequiredApprovals      int64
-	EnableStatusCheck      bool
-	EnablePush             bool
-	BlockOnRejectedReviews bool
+	BranchName        string
+	RequiredApprovals int64
+	EnableStatusCheck bool
+	ForcePushes       bool
 }
 
 // FamilyEditBranchProtectionOption mirrors the family's protection edit body
 // (nil fields pass through untouched).
 type FamilyEditBranchProtectionOption struct {
-	RequiredApprovals      *int64
-	EnableStatusCheck      *bool
-	EnablePush             *bool
-	BlockOnRejectedReviews *bool
+	RequiredApprovals *int64
+	EnableStatusCheck *bool
+	ForcePushes       *bool
 }
 
 // BranchProtectionPort is the branch-protection endpoint of the family SDK
@@ -442,20 +444,21 @@ func GetBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, 
 	return convertBranchProtection(bp), nil
 }
 
-// CreateBranchProtection creates a protection rule. AllowDeletions maps
-// inversely onto the family's BlockOnRejectedReviews (issue #93, aligned
-// with the read side below): the create body carries the field on both
-// family SDKs, so the round trip Create(AllowDeletions=false) → read back
-// AllowDeletions=false now holds — the old create dropped the field
-// entirely while the read inverted it, so EnsureBranchProtection compared
-// false (requested) against true (read) and updated forever.
+// CreateBranchProtection creates a protection rule.
+//
+// 映射语义（issue #130 推翻 #93 的反号替身）：AllowForcePushes 只映射到
+// 家族 wire 的 force-push 开关（gitea 的 enable_force_push；forgejo 的
+// SDK 无该字段，由各自 port 决定映射或忽略——引擎不分支平台名）；
+// AllowDeletions 在家族 wire 上**无对应面**，写侧丢弃、读侧恒 false，
+// 登记两家族的 DivergenceIgnore。绝不再拿语义无关的开关当替身——#93 把
+// AllowDeletions 反号写进 BlockOnRejectedReviews（评审驳回阻塞合并），
+// Create(AllowDeletions=false) 会静默打开一个调用意图之外的保护特性。
 func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	bp, err := c.CreateBranchProtection(ctx, owner, repo, FamilyCreateBranchProtectionOption{
-		BranchName:             opts.BranchName,
-		RequiredApprovals:      int64(opts.RequiredApprovingReviews),
-		EnableStatusCheck:      opts.RequiredStatusChecks,
-		EnablePush:             opts.AllowForcePushes,
-		BlockOnRejectedReviews: !opts.AllowDeletions,
+		BranchName:        opts.BranchName,
+		RequiredApprovals: int64(opts.RequiredApprovingReviews),
+		EnableStatusCheck: opts.RequiredStatusChecks,
+		ForcePushes:       opts.AllowForcePushes,
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "CreateBranchProtection", err)
@@ -464,10 +467,10 @@ func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 }
 
 // UpdateBranchProtection edits a protection rule; nil option fields pass
-// through untouched. AllowDeletions maps inversely onto the family's
-// BlockOnRejectedReviews (issue #93): the inverse is written, not dropped —
-// symmetric with the read conversion so writes are observable and Ensure
-// converges.
+// through untouched. AllowForcePushes maps onto the family wire's
+// force-push toggle where the SDK models it (issue #130); AllowDeletions
+// has no family wire face and is dropped (ledger-registered), never
+// substituted onto an unrelated switch.
 func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
 	edit := FamilyEditBranchProtectionOption{}
 	if opts.RequiredApprovingReviews != nil {
@@ -478,11 +481,7 @@ func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 		edit.EnableStatusCheck = opts.RequiredStatusChecks
 	}
 	if opts.AllowForcePushes != nil {
-		edit.EnablePush = opts.AllowForcePushes
-	}
-	if opts.AllowDeletions != nil {
-		v := !*opts.AllowDeletions
-		edit.BlockOnRejectedReviews = &v
+		edit.ForcePushes = opts.AllowForcePushes
 	}
 	bp, err := c.EditBranchProtection(ctx, owner, repo, branch, edit)
 	if err != nil {
@@ -500,14 +499,15 @@ func DeleteBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 }
 
 // convertBranchProtection maps a family protection rule to the provider
-// shape. The family's delete toggle rides BlockOnRejectedReviews, so
-// AllowDeletions is its inverse.
+// shape. AllowForcePushes reads from the wire's force-push toggle (gitea
+// only); AllowDeletions always reports the zero value — the family wire
+// has no deletions face, and fabricating it from an unrelated switch was
+// exactly the #130 defect.
 func convertBranchProtection(bp *FamilyBranchProtection) *provider.BranchProtection {
 	return &provider.BranchProtection{
 		BranchName:               bp.BranchName,
 		RequiredApprovingReviews: int(bp.RequiredApprovals),
 		RequiredStatusChecks:     bp.EnableStatusCheck,
-		AllowForcePushes:         bp.EnablePush,
-		AllowDeletions:           !bp.BlockOnRejectedReviews,
+		AllowForcePushes:         bp.ForcePushes,
 	}
 }

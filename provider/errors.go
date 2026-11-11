@@ -208,7 +208,10 @@ func New(platform Platform, op string, status int, body string) error {
 		Cause:      classifyStatusCode(status),
 	}
 	if body != "" && pe.Cause != nil {
-		pe.Cause = fmt.Errorf("%w: %s", pe.Cause, body)
+		// oekiterrors.Errorf（issue #132）：单 %w + 动态 body 的格式化包装
+		// 不在「纯 %w 双链」永久豁免面内——oekiterrors.Errorf 与 fmt.Errorf
+		// 同型且保留 cause 链,规则一面归零。
+		pe.Cause = oekiterrors.Errorf("%w: %s", pe.Cause, body)
 	}
 	return pe
 }

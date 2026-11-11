@@ -123,10 +123,16 @@ func TestGitea_Contract(t *testing.T) {
 			ListResponse:   `[{"content":"+1","user":{"id":1,"login":"dev"}}]`,
 			CreateResponse: `{"content":"heart","user":{"id":1,"login":"dev"}}`,
 		},
+		// 真实 Gitea wire 键形（issue #130）：branch_name/required_approvals/
+		// enable_status_check/enable_push/enable_force_push/
+		// block_on_rejected_reviews——旧夹具的 GitHub 形键
+		// (allow_force_pushes/allow_deletions/required_approving_reviews/
+		// required_status_checks)在真实 wire 上不存在,SDK 解析时全部丢弃,
+		// 断言等于没断言。
 		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
-			ListResponse:   `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
-			MutateResponse: `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
-			GetResponse:    `{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}`,
+			ListResponse:   `[{"branch_name":"main","required_approvals":1,"enable_status_check":true,"enable_push":false,"enable_force_push":false,"block_on_rejected_reviews":false}]`,
+			MutateResponse: `{"branch_name":"main","required_approvals":1,"enable_status_check":true,"enable_push":false,"enable_force_push":false,"block_on_rejected_reviews":false}`,
+			GetResponse:    `{"branch_name":"main","required_approvals":1,"enable_status_check":true,"enable_push":false,"enable_force_push":false,"block_on_rejected_reviews":false}`,
 		},
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,

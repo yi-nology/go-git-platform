@@ -1198,21 +1198,22 @@ func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch s
 
 func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
 	bp, resp, err := s.c.Repositories.CreateBranchProtection(ctx, owner, repo, gitea.CreateBranchProtectionOption{
-		BranchName:             opt.BranchName,
-		RequiredApprovals:      opt.RequiredApprovals,
-		EnableStatusCheck:      opt.EnableStatusCheck,
-		EnablePush:             opt.EnablePush,
-		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+		BranchName:        opt.BranchName,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
+		// 真键映射（issue #130）：gitea wire 的 enable_force_push 是
+		// force-push 的语义开关（SDK v1.5.1 建模），AllowForcePushes 映到它；
+		// 旧映射骑 enable_push（允许任意直推）是另一个开关。
+		EnableForcePush: opt.ForcePushes,
 	})
 	return familyBranchProtection(bp), withStatus(err, resp)
 }
 
 func (s sdkPorts) EditBranchProtection(ctx context.Context, owner, repo, branch string, opt giteafamily.FamilyEditBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
 	bp, resp, err := s.c.Repositories.EditBranchProtection(ctx, owner, repo, branch, gitea.EditBranchProtectionOption{
-		RequiredApprovals:      opt.RequiredApprovals,
-		EnableStatusCheck:      opt.EnableStatusCheck,
-		EnablePush:             opt.EnablePush,
-		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
+		EnableForcePush:   opt.ForcePushes,
 	})
 	return familyBranchProtection(bp), withStatus(err, resp)
 }
@@ -1227,11 +1228,10 @@ func familyBranchProtection(bp *gitea.BranchProtection) *giteafamily.FamilyBranc
 		return nil
 	}
 	return &giteafamily.FamilyBranchProtection{
-		BranchName:             bp.BranchName,
-		RequiredApprovals:      bp.RequiredApprovals,
-		EnableStatusCheck:      bp.EnableStatusCheck,
-		EnablePush:             bp.EnablePush,
-		BlockOnRejectedReviews: bp.BlockOnRejectedReviews,
+		BranchName:        bp.BranchName,
+		RequiredApprovals: bp.RequiredApprovals,
+		EnableStatusCheck: bp.EnableStatusCheck,
+		ForcePushes:       bp.EnableForcePush,
 	}
 }
 

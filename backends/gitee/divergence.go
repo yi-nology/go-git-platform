@@ -36,6 +36,10 @@ var divergences = []provider.Divergence{
 		Reason: "Driven over the raw transport (NewRequest/Do) against a private rawNotificationList shape instead of go-gitee's typed SDK: the notifications wire is non-standard (unread is a \"true\"/\"false\" string the typed model cannot parse). The payload shape has no SDK contract backing, so an SDK upgrade brings no regression net for it (issue #62; pre-fix this lived only in file comments). The platform's total_count field is parsed but not surfaced — the list methods return no total. ListRepoNotifications detours the same way."},
 	{Capability: "NotificationManager", Method: "ListRepoNotifications", Field: "", Kind: provider.DivergenceDetour,
 		Reason: "Same raw-transport detour as ListNotifications, scoped to /repos/{owner}/{repo}/notifications (issue #62)."},
+	{Capability: "NotificationManager", Method: "MarkNotificationsRead", Field: "opts.LastReadAt (valid values)", Kind: provider.DivergenceIgnore,
+		Reason: "go-gitee's mark-read surface carries only ids — the wire has no last_read_at parameter (API v5 doc and SDK model agree), so valid timestamps are dropped and every call degenerates to mark-ALL (irreversible); malformed values still fail the call with ErrInvalidInput (issue #129, the #52/#75/#97 family contract)."},
+	{Capability: "NotificationManager", Method: "MarkRepoNotificationsRead", Field: "opts.LastReadAt (valid values)", Kind: provider.DivergenceIgnore,
+		Reason: "Same SDK/wire absence as MarkNotificationsRead; validation semantics identical (issue #129)."},
 }
 
 // Divergences returns the registered divergence ledger for the Gitee backend.

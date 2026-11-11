@@ -1,7 +1,8 @@
 // Example: list reactions on an issue and add a reaction.
 //
-// Set PLATFORM_TOKEN to run. Works with GitHub, GitCode, GitLab, Gitea,
-// and Forgejo.
+// Set PLATFORM_TOKEN to run. Works with GitHub, GitLab, Gitea, and Forgejo
+// (issue #125: GitCode's reactions capability was removed — its wire routes
+// live-404 and the type assertion fails).
 package main
 
 import (

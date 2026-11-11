@@ -2,11 +2,11 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/oekit/pkg/cache"
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // ttlCache 是 Manager 背后的 TTL+LRU 缓存：TTL 过期、有界容量（最久未用者先
@@ -40,6 +40,7 @@ type ttlCache[V any] struct {
 
 	flightsMu sync.Mutex
 	flights   map[string]*ttlFlight[V] // 按 key 收敛的回源 flight（赢家构造、等待者共享）
+	gen       uint64                   // 失效世代：remove/purge 推进（issue #135）
 
 	mu       sync.Mutex
 	baseline cache.Stats // ResetStats 时刻的计数基线（对外按差值暴露）
@@ -122,7 +123,13 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 	defer func() {
 		r := recover()
 		if r != nil {
-			f.err = fmt.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %v", r)
+			// oekiterrors.Errorf（issue #132，规则一：禁 bare fmt.Errorf）。
+			// panic 值是 error 时多 %w 保留 cause 链；非 error panic 值只格式化。
+			if e, ok := r.(error); ok {
+				f.err = oekiterrors.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %w", e)
+			} else {
+				f.err = oekiterrors.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %v", r)
+			}
 		}
 		close(f.done)
 		c.flightsMu.Lock()
@@ -133,24 +140,44 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 		}
 	}()
 
+	// 捕获起飞世代（issue #135）：build 执行期间 remove/purge 会推进世代。
+	c.flightsMu.Lock()
+	gen := c.gen
+	c.flightsMu.Unlock()
+
 	f.v, f.err = build()
 	if f.err != nil {
 		// 回源失败不写缓存（含 null marker）：失败必须能被下一次查找重试。
 		var zero V
 		return zero, f.err
 	}
-	// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
-	_ = c.sf.Set(ctx, key, &f.v)
+	// 回填前复查世代（issue #135，对齐上游 LocalCache 加载路径的 #200 防线）：
+	// build 执行期间该 key 被 remove/purge（Manager.Remove/Purge 删旧实例）
+	// ⇒ 本次回填放弃，旧实例不得复活——「Remove 后必须重建」在并发窗口内
+	// 也成立。返回值仍给调用方（与上游口径一致：在途构造的结果不丢）。
+	c.flightsMu.Lock()
+	stale := c.gen != gen
+	c.flightsMu.Unlock()
+	if !stale {
+		// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
+		_ = c.sf.Set(ctx, key, &f.v)
+	}
 	return f.v, nil
 }
 
 // remove 丢弃一个条目。
 func (c *ttlCache[V]) remove(key string) {
+	c.flightsMu.Lock()
+	c.gen++
+	c.flightsMu.Unlock()
 	_ = c.sf.Del(context.Background(), key)
 }
 
 // purge 丢弃全部条目。
 func (c *ttlCache[V]) purge() {
+	c.flightsMu.Lock()
+	c.gen++
+	c.flightsMu.Unlock()
 	c.inner.Clear()
 }
 

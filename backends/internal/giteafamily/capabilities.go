@@ -277,5 +277,11 @@ func Divergences(displayName string) []provider.Divergence {
 			Reason: "The family SDK's commit-list options carry no time filters (the platform wire has none either); values are validated against RFC3339 (issue #52 — unparsable input fails the call with ErrInvalidInput) but valid filters cannot be applied — incremental syncs must filter client-side."},
 		{Capability: "RepoStatsManager", Method: "ListContributors", Kind: provider.DivergenceStub,
 			Reason: "The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56)."},
+		{Capability: "RepoManager", Method: "ListRepos", Field: "opts.Owner", Kind: provider.DivergenceMapping,
+			Reason: fmt.Sprintf("%s serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (issue #92; pre-fix the listing was org-only).", displayName)},
+		{Capability: "BranchProtectionManager", Method: "CreateBranchProtection", Field: "opts.AllowDeletions", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("The %s branch-protection wire has no allow-deletions face (neither family SDK models such a field): valid values are dropped and reads always report false. The pre-#130 mapping inverted the option onto block_on_rejected_reviews — an unrelated merge-blocking switch — silently flipping protection semantics the caller never asked for; a semantic mapping must never ride an unrelated toggle (issue #130, superseding the #93 inverse mapping).", displayName)},
+		{Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowDeletions", Kind: provider.DivergenceIgnore,
+			Reason: "See CreateBranchProtection (issue #130)."},
 	}
 }

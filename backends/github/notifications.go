@@ -2,10 +2,8 @@ package github
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/go-github/v93/github"
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -113,19 +111,18 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // parseLastReadAt resolves opts.LastReadAt per the contract ("RFC3339;
 // empty = mark all") into the go-github timestamp.
 //
+// 解析统一委托 provider.ParseTimestamp（issue #129：#75 手写实现未走共享
+// 解析器，双实现漂移风险——timeparse.go 的族契约把 LastReadAt 列入强制
+// 校验面；%v 丢 *time.ParseError cause 链也一并改为多 %w，规则一归位）。
 // 非空但解析失败**必须报错**(issue #75,#52 的写操作面同源缺陷):
 // go-github 对零值 lastRead 的语义是「把**全部**通知标为已读」
 // (activity_notifications.go:127)——旧的静默丢弃(err==nil 才赋值)会把
 // 一个格式笔误(如 "2026/11/11")升级成不可逆的全量副作用。拒绝语义与
 // GitLab 非法 threadID 同型:ErrInvalidInput 哨兵经 Wrap 保留可判定性。
 func parseLastReadAt(op, raw string) (github.Timestamp, error) {
-	if raw == "" {
-		return github.Timestamp{}, nil
-	}
-	t, err := time.Parse(time.RFC3339, raw)
+	t, err := provider.ParseTimestamp("LastReadAt", raw)
 	if err != nil {
-		return github.Timestamp{}, provider.Wrap(provider.PlatformGitHub, op,
-			oekiterrors.Errorf("%w: LastReadAt %q is not RFC3339: %v", provider.ErrInvalidInput, raw, err))
+		return github.Timestamp{}, provider.Wrap(provider.PlatformGitHub, op, err)
 	}
 	return github.Timestamp{Time: t}, nil
 }

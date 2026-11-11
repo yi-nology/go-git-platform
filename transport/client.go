@@ -32,6 +32,7 @@ import (
 
 	"github.com/oekit/concurrency/retry/httpx"
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/stringx"
 )
 
 // DefaultTimeout is the per-request HTTP timeout applied when the caller does
@@ -509,18 +510,26 @@ var sensitiveHeaders = []string{
 }
 
 // StripSensitiveHeaders 删掉可能随跨 host 重定向外泄的凭据头。
+//
+// 宿主判据用**重定向链头**（OriginRedirectHost），与决定层
+// CrossHostRedirect 完全同判据（issue #127）：判定与执行必须同口径——
+// 旧实现这里用「紧邻上一跳」，而 Go 的重定向实现把**初始请求头快照**逐跳
+// 复制到新请求（六名标准敏感头之外的头每跳无条件复制），于是
+// 「平台 → 第三方 → 第三方同域再跳」链的 hop2 上，SDK 注入初始请求头的
+// Private-Token 等凭据被 Go 复活，而本函数因「上一跳同 host」no-op 不剥
+// ——判定层（链头）说要剥、执行层（上一跳）没剥。判据统一到链头后，
+// 任何落到非认证 host 的跳（无论第几跳、凭据来自 RT 施加还是初始头）
+// 都不带凭据。
 func StripSensitiveHeaders(req *http.Request) {
 	if req == nil {
 		return
 	}
 	// oekit httpx.StripSensitiveHeadersWith（concurrency#200 落地）：宿主
-	// 判定一并委托（prev vs current 宿主，与 CrossHostRedirect 同判据）；
+	// 判定一并委托（链头 vs current 宿主，与 CrossHostRedirect 同判据）；
 	// 词表经 With 变体传入——本仓词表多 X-Access-Token/X-Gitlab-Token 两
 	// 个平台形态（保留自旧实现，非 oekit 缺省词表成员）。
-	var from, to string
-	if req.Response != nil && req.Response.Request != nil && req.Response.Request.URL != nil {
-		from = req.Response.Request.URL.Host
-	}
+	var to string
+	from := OriginRedirectHost(req)
 	if req.URL != nil {
 		to = req.URL.Host
 	}
@@ -948,9 +957,14 @@ func redactPath(p string) string {
 
 // truncateForLog returns a string representation of body, capped at maxLen
 // bytes. Bodies exceeding the limit are truncated with "...".
+//
+// 委托 stringx.TruncBytes(pkg#327 收编)：字节预算语义不变（at most maxLen
+// bytes），RuneStart 回退顺带修复硬字节切对 CJK 响应体产出非法 UTF-8 的
+// 缺陷（日志采集端 JSON 编码报错/grep 失效）；ASCII 输入逐字节等价。
 func truncateForLog(body []byte, maxLen int) string {
-	if len(body) <= maxLen {
-		return string(body)
+	out, truncated := stringx.TruncBytes(string(body), maxLen)
+	if !truncated {
+		return out
 	}
-	return string(body[:maxLen]) + "... (truncated)"
+	return out + "... (truncated)"
 }

@@ -140,7 +140,7 @@ func (p *Provider) UpdateNote(ctx context.Context, owner, repo, number, noteID, 
 	}
 	nid, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
-		return nil, provider.Wrapf(provider.PlatformTencentCode, "UpdateNote", "invalid note ID %q: %v", noteID, err)
+		return nil, provider.Wrapf(provider.PlatformTencentCode, "UpdateNote", "invalid note ID %q: %w", noteID, err)
 	}
 	note, _, err := p.client.Notes.UpdateMergeRequestNote(ctx, pid(owner, repo), n, int(nid),
 		&gongfeng.UpdateMergeRequestNoteOptions{Body: gongfeng.Ptr(body)})

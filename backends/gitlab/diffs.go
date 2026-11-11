@@ -77,7 +77,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	}
 	nid, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
-		return provider.Wrapf(provider.PlatformGitLab, "DeleteNote", "invalid note ID %q: %v", noteID, err)
+		return provider.Wrapf(provider.PlatformGitLab, "DeleteNote", "invalid note ID %q: %w", noteID, err)
 	}
 	_, err = p.client.Notes.DeleteMergeRequestNote(pidOf(owner, repo), n, nid, gitlab.WithContext(ctx))
 	if err != nil {
@@ -142,7 +142,7 @@ func (p *Provider) UpdateNote(ctx context.Context, owner, repo, number, noteID, 
 	}
 	nid, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
-		return nil, provider.Wrapf(provider.PlatformGitLab, "UpdateNote", "invalid note ID %q: %v", noteID, err)
+		return nil, provider.Wrapf(provider.PlatformGitLab, "UpdateNote", "invalid note ID %q: %w", noteID, err)
 	}
 	note, _, err := p.client.Notes.UpdateMergeRequestNote(pidOf(owner, repo), n, nid,
 		&gitlab.UpdateMergeRequestNoteOptions{Body: new(body)}, gitlab.WithContext(ctx))

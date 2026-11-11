@@ -51,6 +51,7 @@ type toolset struct {
 type state struct {
 	p        provider.Provider
 	readonly bool
+	toolset  string // 正在注册的 toolset 名（add() 记账用）
 }
 
 // NewServer builds an MCP server over the given provider. The provider
@@ -79,7 +80,25 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 		if !want(ts.name) || !ts.enabled(p) {
 			continue
 		}
+		st.toolset = ts.name
 		ts.registered(s, st)
 	}
 	return s, nil
+}
+
+// toolRegistry 是 add() 挂账的工具面台账（toolset → 工具名集合）——
+// README 工具表对账机检的注册面真源（issue #122）。全局可变,但只做
+// 幂等集合写入（同一 server 重复构造不叠加,测试 -count=2 安全）。
+var toolRegistry = map[string]map[string]bool{}
+
+func recordTool(toolset, name string) {
+	if toolset == "" {
+		return
+	}
+	m := toolRegistry[toolset]
+	if m == nil {
+		m = map[string]bool{}
+		toolRegistry[toolset] = m
+	}
+	m[name] = true
 }

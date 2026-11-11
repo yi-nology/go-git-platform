@@ -141,9 +141,16 @@ func TestClient_SameHostRedirect_KeepsCredentials(t *testing.T) {
 }
 
 // TestStripSensitiveHeaders 敏感头删除要覆盖非标准头。
+//
+// StripSensitiveHeaders 的宿主判据是**链头 vs 目标**(issue #127 起与
+// CrossHostRedirect 同判据)⇒ 直接调用需构造跨 host 重定向语境:
+// Response 挂一条链头在 origin.example 的链,目标在 example.com。
 func TestStripSensitiveHeaders(t *testing.T) {
+	origin, err := http.NewRequest(http.MethodGet, "https://origin.example/start", nil)
+	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodGet, "https://example.com/x", nil)
 	require.NoError(t, err)
+	req.Response = &http.Response{Request: origin}
 	req.Header.Set("Authorization", "Bearer x")
 	req.Header.Set("PRIVATE-TOKEN", "y")
 	req.Header.Set("X-Auth-Token", "z")
@@ -157,6 +164,14 @@ func TestStripSensitiveHeaders(t *testing.T) {
 	assert.Empty(t, req.Header.Get("X-Auth-Token"))
 	assert.Empty(t, req.Header.Get("X-Api-Key"))
 	assert.Equal(t, "keep-me", req.Header.Get("X-Request-Id"), "非敏感头必须保留")
+
+	// 非跨 host(无重定向语境,链头==目标)必须整单 no-op——同 host 正常
+	// 跳转的凭据不能被误剥。
+	same, err := http.NewRequest(http.MethodGet, "https://example.com/x", nil)
+	require.NoError(t, err)
+	same.Header.Set("PRIVATE-TOKEN", "keep")
+	StripSensitiveHeaders(same)
+	assert.Equal(t, "keep", same.Header.Get("PRIVATE-TOKEN"), "非重定向请求不得剥凭据")
 }
 
 // TestClient_CrossHostRedirect_QueryTokenNotLeaked 跨 host 重定向时
@@ -382,4 +397,78 @@ func TestRedactPath_MasksSecretQuery(t *testing.T) {
 	got := redactPath("/api/v1/x?access_token=SECRET&page=2")
 	assert.NotContains(t, got, "SECRET", "query 里的 token 必须被脱敏")
 	assert.Contains(t, got, "page=2", "非秘密参数要保留")
+}
+
+// TestClient_MultiHopRedirect_InitialHeaderCredentialsNotResurrected
+// 「初始请求头」里的凭据同样不得在多跳链上复活(issue #127,#65 的盲区)。
+//
+// 与 TestClient_MultiHopRedirect_NoCredentialResurrection 的区别:那条链的
+// 凭据来自 RT 层逐跳重施加(AuthFunc);这条链的凭据来自**初始请求头**——
+// 平台 SDK(go-gitlab/go-gitcode/go-gongfeng)把 Private-Token 等非标准头
+// 注入初始请求是常态,而 Go 的重定向实现把**初始请求头快照**逐跳复制到新
+// 请求上,六名标准敏感头(Authorization/Cookie 家族)之外的头**每跳无条件
+// 复制** ⇒ hop2(第三方同域再跳)上凭据凭空复活。
+//
+// 修复前:剥头执行层(StripSensitiveHeaders)的宿主判据用**紧邻上一跳**
+// (hop2 的上一跳是 hop1,同 host ⇒ no-op),而决定层(CrossHostRedirect)
+// 用链头 ⇒ 判定要剥、执行没剥,Private-Token 发往第三方 hop2。
+// 修复后:执行层与决定层同判据(链头),两跳全剥。
+func TestClient_MultiHopRedirect_InitialHeaderCredentialsNotResurrected(t *testing.T) {
+	var mu sync.Mutex
+	type hopSeen struct {
+		auth, private string
+		calls         int
+	}
+	seen := map[string]hopSeen{}
+
+	record := func(name string, r *http.Request) {
+		mu.Lock()
+		seen[name] = hopSeen{
+			auth:    r.Header.Get("Authorization"),
+			private: r.Header.Get("PRIVATE-TOKEN"),
+			calls:   1,
+		}
+		mu.Unlock()
+	}
+
+	// 第三方主机:hop1 302 → 同 host 的 hop2;hop2 终点。
+	target := http.NewServeMux()
+	target.HandleFunc("/hop1", func(w http.ResponseWriter, r *http.Request) {
+		record("hop1", r)
+		http.Redirect(w, r, "/hop2", http.StatusFound)
+	})
+	target.HandleFunc("/hop2", func(w http.ResponseWriter, r *http.Request) {
+		record("hop2", r)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	third := httptest.NewServer(target)
+	defer third.Close()
+
+	// 平台主机:302 → 第三方 hop1。
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, third.URL+"/hop1", http.StatusFound)
+	}))
+	defer source.Close()
+
+	// 无 RT 层凭据(NewClient 第二参 nil)——凭据只来自**初始请求头**,
+	// 模拟 SDK 客户端自带 Private-Token 的请求进入本 transport 的形状。
+	c := NewClient(source.URL, nil)
+	httpCli := &http.Client{Transport: c.NewRetryingRoundTripper()}
+
+	req, err := http.NewRequest(http.MethodGet, source.URL+"/start", nil)
+	require.NoError(t, err)
+	req.Header.Set("PRIVATE-TOKEN", "INITIAL-SECRET")
+	resp, err := httpCli.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	mu.Lock()
+	hop1, hop2 := seen["hop1"], seen["hop2"]
+	mu.Unlock()
+	require.Equal(t, 1, hop1.calls, "hop1 应恰好到达一次")
+	require.Equal(t, 1, hop2.calls, "hop2 应恰好到达一次")
+	assert.Empty(t, hop1.private, "第一跳(跨 host)不得带走初始请求头的 PRIVATE-TOKEN")
+	assert.Empty(t, hop1.auth)
+	assert.Empty(t, hop2.private, "第二跳(第三方同域再跳)不得复活初始请求头的 PRIVATE-TOKEN(Go 的初始头快照逐跳复制通道)")
+	assert.Empty(t, hop2.auth)
 }

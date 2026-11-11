@@ -25,7 +25,10 @@ func ParseTimestamp(field, value string) (time.Time, error) {
 	}
 	t, err := time.Parse(time.RFC3339, value)
 	if err != nil {
-		return time.Time{}, oekiterrors.Errorf("%w: %s %q is not RFC3339: %v", ErrInvalidInput, field, value, err)
+		// 多 %w（issue #132）：*time.ParseError 的 cause 链随哨兵一路保留
+		// （oekiterrors.Errorf 多 %w 走 Unwrap() []error,house 先例
+		// errors.go 双链形态）,%v 丢弃 cause 的旧形态废除。
+		return time.Time{}, oekiterrors.Errorf("%w: %s %q is not RFC3339: %w", ErrInvalidInput, field, value, err)
 	}
 	return t, nil
 }

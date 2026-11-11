@@ -1,7 +1,8 @@
 // Example: list notifications and mark them as read.
 //
-// Set PLATFORM_TOKEN to run. Works with GitHub, GitCode, GitLab, Gitea,
-// Forgejo, and Gitee.
+// Set PLATFORM_TOKEN to run. Works with GitHub, GitLab, Gitea, Forgejo, and
+// Gitee (issue #125: GitCode serves only the repo-scoped half — the global
+// ListNotifications this example starts with is ErrNotImplemented there).
 package main
 
 import (
@@ -47,7 +48,13 @@ func main() {
 		if n.Unread {
 			unread++
 		}
-		fmt.Printf("[%s] %s: %s\n", n.Repo.FullName, n.Subject.Type, n.Subject.Title)
+		// Notification.Repo 是可空指针(gitlab 的 todo 无 project 时为 nil,
+		// issue #125)——判空取仓库名,别解引用。
+		repo := ""
+		if n.Repo != nil {
+			repo = n.Repo.FullName
+		}
+		fmt.Printf("[%s] %s: %s\n", repo, n.Subject.Type, n.Subject.Title)
 	}
 	fmt.Printf("\n%d total, %d unread\n", len(notifications), unread)
 

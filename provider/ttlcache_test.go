@@ -199,3 +199,95 @@ func TestTTLCache_ResetStatsZeroesCounters(t *testing.T) {
 		t.Errorf("expected hits=1 misses=0 after reset, got hits=%d misses=%d", s.Hits, s.Misses)
 	}
 }
+
+// TestTTLCache_RemoveDuringFlightDoesNotResurrect pins the issue #135 fix:
+// the self-built flight's backfill must re-check the invalidation generation
+// before Set — Remove/Purge racing an in-flight build must not resurrect the
+// stale value into the cache (the caller still gets the built value, matching
+// the upstream LocalCache load-path semantics). The old shape backfilled
+// unconditionally, so a Manager.Remove(cfg) during the build window left the
+// removed (stale) instance in the cache for the next Get.
+func TestTTLCache_RemoveDuringFlightDoesNotResurrect(t *testing.T) {
+	c := newTTLCache[string](time.Minute, 0)
+
+	release := make(chan struct{})
+	var builds atomic.Int64
+	//nolint:unparam // 闭包签名由 getOrBuild 的 build 类型钉死,error 位恒 nil 是本用例的事实
+	build := func() (string, error) {
+		builds.Add(1)
+		<-release // 构造窗口悬停,给 remove 让出竞争窗口
+		return "stale-instance", nil
+	}
+
+	// 起飞:winner 卡在 build 窗口内。
+	done := make(chan struct{})
+	var got string
+	var gotErr error
+	go func() {
+		defer close(done)
+		got, gotErr = c.getOrBuild("k", build)
+	}()
+
+	// 等 winner 真正起飞(进入 build)。
+	deadline := time.Now().Add(2 * time.Second)
+	for builds.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if builds.Load() == 0 {
+		t.Fatal("winner never entered build")
+	}
+
+	// 竞争:构造在途时失效该 key。
+	c.remove("k")
+	close(release)
+	<-done
+
+	if gotErr != nil {
+		t.Fatalf("getOrBuild: %v", gotErr)
+	}
+	if got != "stale-instance" {
+		t.Errorf("caller must still receive the built value (upstream semantics), got %q", got)
+	}
+
+	// 回填必须被放弃:缓存里不得有旧实例复活,下一次查找必须重新构造。
+	if n := c.len(); n != 0 {
+		t.Errorf("cache must stay empty after remove-during-flight, got %d entries", n)
+	}
+	var secondBuilds atomic.Int64
+	if _, err := c.getOrBuild("k", func() (string, error) {
+		secondBuilds.Add(1)
+		return "fresh-instance", nil
+	}); err != nil {
+		t.Fatalf("second getOrBuild: %v", err)
+	}
+	if secondBuilds.Load() != 1 {
+		t.Errorf("post-remove lookup must rebuild (stale value was resurrected), builds=%d", secondBuilds.Load())
+	}
+}
+
+// TestTTLCache_PurgeDuringFlightDoesNotResurrect — purge 同世代防线
+// (issue #135):清空全部条目后,在途构造的回填同样必须放弃。
+func TestTTLCache_PurgeDuringFlightDoesNotResurrect(t *testing.T) {
+	c := newTTLCache[string](time.Minute, 0)
+
+	release := make(chan struct{})
+	//nolint:unparam // 闭包签名由 getOrBuild 的 build 类型钉死,error 位恒 nil 是本用例的事实
+	build := func() (string, error) {
+		<-release
+		return "stale", nil
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = c.getOrBuild("k", build)
+	}()
+	time.Sleep(10 * time.Millisecond) // 让 winner 起飞
+
+	c.purge()
+	close(release)
+	<-done
+
+	if n := c.len(); n != 0 {
+		t.Errorf("cache must stay empty after purge-during-flight, got %d entries", n)
+	}
+}

@@ -46,6 +46,8 @@ var divergences = []provider.Divergence{
 		Reason: "Maps onto the Todos API filtered by project ID; see ListNotifications for the data-source semantics (issue #62)."},
 	{Capability: "NotificationManager", Method: "MarkRepoNotificationsRead", Kind: provider.DivergenceStub,
 		Reason: "The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread."},
+	{Capability: "NotificationManager", Method: "MarkNotificationsRead", Field: "opts.LastReadAt (valid values)", Kind: provider.DivergenceIgnore,
+		Reason: "Mark-all-todos has no last_read_at face — valid timestamps are dropped and the call degenerates to marking every todo done (irreversible); malformed values still fail the call with ErrInvalidInput (issue #129, the #52/#75/#97 family contract)."},
 }
 
 // Divergences returns the registered divergence ledger for the GitLab backend.

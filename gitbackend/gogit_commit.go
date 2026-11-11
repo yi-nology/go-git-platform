@@ -106,11 +106,24 @@ func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, desce
 		return false, err
 	}
 
-	ancestorCommit, err := repo.CommitObject(plumbing.NewHash(ancestor))
+	// rev 类参数统一走 resolveRev（issue #128，#108 的镜像方法补迁）：
+	// plumbing.NewHash 会把**任意**字符串盲 hex 解码——分支名/短 hash 在
+	// 这条路上解出垃圾 hash 再撞 CommitObject 错误，而 native 后端
+	// （git merge-base --is-ancestor）接受全 rev 词表。两后端可互换契约下
+	// 同一调用必须同结果。
+	ancestorHash, err := resolveRev(repo, ancestor)
 	if err != nil {
 		return false, newGitError("IsAncestor", repoPath, "", err)
 	}
-	descendantCommit, err := repo.CommitObject(plumbing.NewHash(descendant))
+	descendantHash, err := resolveRev(repo, descendant)
+	if err != nil {
+		return false, newGitError("IsAncestor", repoPath, "", err)
+	}
+	ancestorCommit, err := repo.CommitObject(ancestorHash)
+	if err != nil {
+		return false, newGitError("IsAncestor", repoPath, "", err)
+	}
+	descendantCommit, err := repo.CommitObject(descendantHash)
 	if err != nil {
 		return false, newGitError("IsAncestor", repoPath, "", err)
 	}

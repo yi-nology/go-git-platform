@@ -225,3 +225,51 @@ func TestGoGit_Diff(t *testing.T) {
 		t.Fatal("expected non-empty diff")
 	}
 }
+
+// TestGoGit_IsAncestor_RevsParity pins the resolveRev migration (issue #128,
+// the #108 mirror-method escape): gogit IsAncestor must accept the same rev
+// vocabulary as native — branch names, HEAD, short hashes — not just 40-char
+// SHAs. native_regress_test.go pins the same table for the native backend;
+// the two backends are interchangeable (distroless picks gogit) so a rev
+// input that succeeds on one must succeed on the other.
+func TestGoGit_IsAncestor_RevsParity(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	ctx := context.Background()
+	repo := createTestRepo(t)
+	base := headHash(t, repo)
+	commitFile(t, repo, "a.txt", "v2", "second")
+	tip := headHash(t, repo)
+
+	cur := currentBranch(t, repo) // CI 的 git init 默认分支可能是 master
+	cases := []struct {
+		name       string
+		ancestor   string
+		descendant string
+		wantOK     bool
+		wantErr    bool
+	}{
+		{"full hashes", base, tip, true, false},
+		{"branch names instead of hashes", cur, "HEAD", true, false},
+		{"HEAD vs branch name (same tip, equality counts)", "HEAD", cur, true, false},
+		{"short hash ancestor", base[:7], tip, true, false},
+		{"invalid ancestor ref", "no-such-ref", tip, false, true},
+		{"invalid descendant ref", base, "no-such-ref", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ok, err := b.IsAncestor(ctx, repo, tc.ancestor, tc.descendant)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("IsAncestor(%q, %q) = (false, nil), want error for unresolvable ref", tc.ancestor, tc.descendant)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("IsAncestor(%q, %q): %v", tc.ancestor, tc.descendant, err)
+			}
+			if ok != tc.wantOK {
+				t.Fatalf("IsAncestor(%q, %q) = %v, want %v", tc.ancestor, tc.descendant, ok, tc.wantOK)
+			}
+		})
+	}
+}
