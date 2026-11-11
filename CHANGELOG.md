@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.126.0] - 2026-11-11
 
 ### Changed（go-gitcode v0.15.0→v0.16.0 收编：撤 84 处 Esc 预转义，wire 转义回归 SDK 单源）
 
