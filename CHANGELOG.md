@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.127.0] - 2026-11-12
 
+### Changed（依赖/工具链）
+
+- deps: **toolchain go1.27.3→go1.27.4**（根 go.mod 与 mcp/go.mod 同步）——
+  govulncheck 门新入库 stdlib 漏洞 [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859)
+  （net/http MaxBytesReader 头竞态，fix in go1.27.4）把 main 同门打红（
+  2026-11-11 起），与本批修复无关但挡「CI 全绿合入」；经裁定随本 PR 抬
+  （stdlib 安全补丁非模块依赖地板）。配套复核（v0.79.x 教训）：GOTOOLCHAIN=
+  go1.27.4 下 build/vet/全量测试（含 -race）/golangci-lint（主模块 0 issues
+  + mcp 0 issues）/govulncheck（No vulnerabilities found，真跑目标版本）全绿；
+  CI golangci-lint 钉 v2.14.0 走 action 自带下载，与 toolchain 解耦无需动。
+
 ### Fixed（安全/行为修复批：重定向凭据复活、反号映射、LastReadAt 族、gogit rev、ttlCache 世代、branchfilter 跨平台）
 
 - fix(transport): **多跳重定向下初始请求头凭据「复活」**（issue #127，#65 修复不完整，探针实锤）——
