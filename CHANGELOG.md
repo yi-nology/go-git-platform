@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed（go-gitcode v0.15.0→v0.16.0 收编：撤 84 处 Esc 预转义，wire 转义回归 SDK 单源）
+
+- deps/fix(backends/gitcode): **go-gitcode v0.15.0→v0.16.0 双重转义收编**（issue #116）——
+  v0.125.0 把 SDK 钉回 v0.15.0，是因为 v0.16.0 起 SDK 内建路径段转义（其
+  issue #6：pathf 统一收口 383 个插值点）与本仓 #84 后置补丁的预转义
+  （backendutil.Esc / escPath，gitcode 后端 84 处调用点）叠加成**双重转
+  义**：wire 上 owner/repo 变 `%2523`。本次按 issue 方案逐点区分 path/
+  query 两面撤预转义：**path 面 83 处**（owner/repo/branch/sha/tag/ref-tag/
+  label-name/username/base/head）SDK pathf 已 `url.PathEscape`，本仓的
+  `backendutil.Esc` 包装全删；**query 面 1 处**（GetRepositoryContent 的
+  ref）SDK v0.16.0 已 `url.QueryEscape`，手动补的同删——空格落线形态从
+  `%20` 变 QueryEscape 的 `+`（解码等价）；**files.go 的 escPath 函数**
+  （4 处调用）删，SDK `pathSegs` 按段转义且保留 `/` 分隔符，行为一致。
+  本仓独有的 query 参数核查后为空：`ListCommits` 的 `sha=`/`ListPullRequests`
+  的 `head=`/`base=` 等裸拼接参数本仓本就未手动转义（口径不变）。新增
+  `TestGitCode_NoDoubleEscapingOnWire` 钉住测试：wire 上 owner 含 `#` 必须
+  是 `%23` 而非 `%2523`（EscapedPath/RawQuery 直读 wire 字节，含
+  `%2523`/`%252F`/`%253F`/`%2520` 双转义签名即红），escape_wire_test 原套
+  件随 SDK 接管保持绿（ref 断言按 QueryEscape 口径更新）。转义语义自此
+  回到 SDK 单源。
+
+### Fixed（provider 测试注册表幂等：-count=2 下不再重复注册 panic）
+
+- fix(provider): **测试平台 key 进程内唯一化**（issue #117）——
+  `TestWrapSDKThrottleClassifierMechanism` 用固定 key `sdk-throttle-test`
+  注册 ThrottleClassifier + StatusExtractor，注册表对重复注册 panic 且无
+  注销 API，`go test -race -count=2 ./provider` 第二轮必炸（errors.go:277）。
+  新增 `uniqueTestPlatform`（atomic 计数后缀）生成进程内唯一 key，同文件
+  的 `TestWrapWithoutThrottleClassifierKeepsStatusClassification`
+  （`sdk-no-classifier-test`）与 errors_test.go 的
+  `TestWrap_PreservesOriginalCause_5xx`（`test-wrap-extractor`）同款固定
+  key 形态一并修；`go test -race -count=2 ./provider` 绿。
+
 ## [0.125.0] - 2026-11-11
 
 ### Changed（依赖地板全量拉升：oekit 三件套 + gitlab/gongfeng/oauth2；go-gitcode 钉 v0.15.0）

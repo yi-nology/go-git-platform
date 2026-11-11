@@ -12,12 +12,7 @@ require (
 	github.com/oekit/logx v0.9.2
 	github.com/oekit/pkg v0.44.0
 	github.com/stretchr/testify v1.12.1
-	// pinned v0.15.0：v0.16.0 起 SDK 内建路径段转义（其 issue #6，pathf 统一收口），
-	// 与本仓 #84 后置补丁的预转义（backendutil.Esc / escPath）叠加成双重转义
-	// （wire 里 owner/repo 变 %2523，escape_wire_test 当场抓红）。撤预转义需逐点
-	// 区分 path/query 两面（gitcode 后端 84 处 Esc 调用点），属专门收编批，不随
-	// 依赖地板批量升。升级前先撤 Esc 预转义并核对 ref 等查询参数的转义口径。
-	github.com/yi-nology/go-gitcode v0.15.0
+	github.com/yi-nology/go-gitcode v0.16.0
 	github.com/yi-nology/go-gongfeng v0.3.1
 	gitlab.com/gitlab-org/api/client-go/v3 v3.47.0
 	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2

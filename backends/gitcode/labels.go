@@ -20,7 +20,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 	var labels []*gitcode.Label
 	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitcode.Label, error) {
-			return p.client.ListIssueLabelsWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), gitcode.ListOptions{Page: page, PerPage: perPage})
+			return p.client.ListIssueLabelsWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: perPage})
 		})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListLabels", err)
@@ -35,7 +35,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 // CreateLabel implements provider.LabelManager. GitCode's label API has no
 // description field; opts.Description is ignored.
 func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
-	label, err := p.client.CreateIssueLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), opts.Name, opts.Color)
+	label, err := p.client.CreateIssueLabel(ctx, owner, repo, opts.Name, opts.Color)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateLabel", err)
 	}
@@ -58,7 +58,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 		// caller-supplied '#' from doubling.
 		updateOpts.Color = "#" + strings.TrimPrefix(*opts.Color, "#")
 	}
-	label, err := p.client.UpdateIssueLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name), updateOpts)
+	label, err := p.client.UpdateIssueLabel(ctx, owner, repo, name, updateOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateLabel", err)
 	}
@@ -67,7 +67,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
-	if err := p.client.DeleteIssueLabel(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name)); err != nil {
+	if err := p.client.DeleteIssueLabel(ctx, owner, repo, name); err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "DeleteLabel", err)
 	}
 	return nil

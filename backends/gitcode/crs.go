@@ -13,7 +13,7 @@ import (
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
-	pr, err := p.client.CreatePullRequest(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), gitcode.CreatePullRequestOptions{
+	pr, err := p.client.CreatePullRequest(ctx, opts.Owner, opts.Repo, gitcode.CreatePullRequestOptions{
 		Title: opts.Title, Body: opts.Description,
 		Head: opts.SourceBranch, Base: opts.TargetBranch,
 	})
@@ -29,7 +29,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 	if err != nil {
 		return nil, err
 	}
-	pr, err := p.client.GetPullRequest(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
+	pr, err := p.client.GetPullRequest(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "GetCR", err)
 	}
@@ -56,7 +56,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	case provider.CRStateOpened:
 		state = gitcode.PullRequestStateOpen
 	}
-	prs, err := p.client.ListPullRequests(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), gitcode.ListPullRequestsOptions{
+	prs, err := p.client.ListPullRequests(ctx, opts.Owner, opts.Repo, gitcode.ListPullRequestsOptions{
 		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
 		State:       state,
 	})
@@ -88,7 +88,7 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	if err != nil {
 		return nil, err
 	}
-	err = p.client.MergePullRequest(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, &gitcode.MergePullRequestOptions{
+	err = p.client.MergePullRequest(ctx, owner, repo, n, &gitcode.MergePullRequestOptions{
 		CommitMessage: opts.MergeCommitMessage,
 		Squash:        opts.Squash,
 	})
@@ -104,7 +104,7 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 	if err != nil {
 		return nil, err
 	}
-	pr, err := p.client.ClosePullRequest(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
+	pr, err := p.client.ClosePullRequest(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CloseCR", err)
 	}
@@ -117,7 +117,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 	if err != nil {
 		return nil, err
 	}
-	pr, err := p.client.ReopenPullRequest(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
+	pr, err := p.client.ReopenPullRequest(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ReopenCR", err)
 	}
@@ -130,7 +130,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if err != nil {
 		return nil, err
 	}
-	pr, err := p.client.UpdatePullRequest(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, gitcode.UpdatePullRequestOptions{
+	pr, err := p.client.UpdatePullRequest(ctx, owner, repo, n, gitcode.UpdatePullRequestOptions{
 		Title: opts.Title, Body: opts.Description, Base: opts.TargetBranch,
 	})
 	if err != nil {
@@ -145,7 +145,7 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	if err != nil {
 		return err
 	}
-	err = p.client.AddIssueLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, labels)
+	err = p.client.AddIssueLabels(ctx, owner, repo, n, labels)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitCode, "UpdateCRLabels", err)
 	}
@@ -164,7 +164,7 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return nil, err
 	}
 	comments, err := backendutil.AllPages(func(page int) ([]*gitcode.IssueComment, error) {
-		return p.client.ListIssueCommentsWithOptions(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, gitcode.ListIssueCommentsOptions{
+		return p.client.ListIssueCommentsWithOptions(ctx, owner, repo, n, gitcode.ListIssueCommentsOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: backendutil.IssueCommentPageSize},
 		})
 	})
@@ -193,7 +193,7 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 	if err != nil {
 		return nil, err
 	}
-	commits, err := p.client.ListPullRequestCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
+	commits, err := p.client.ListPullRequestCommits(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "ListCRCommits", err)
 	}

@@ -194,8 +194,10 @@ func TestWrap_PreservesOriginalCause(t *testing.T) {
 func TestWrap_PreservesOriginalCause_5xx(t *testing.T) {
 	// Classification runs through a registered StatusExtractor (the
 	// reflection-over-fields fallback was removed in v0.83). A throwaway
-	// platform value keeps the registry clean for other tests.
-	const tp Platform = "test-wrap-extractor"
+	// platform value keeps the registry clean for other tests — the key
+	// must be process-unique: the registry panics on duplicate
+	// registration and go test -count=2 runs this test twice (issue #117).
+	tp := uniqueTestPlatform("test-wrap-extractor")
 	RegisterStatusExtractor(tp, func(err error) (int, bool) {
 		var se *sdkStatusError
 		if errors.As(err, &se) {

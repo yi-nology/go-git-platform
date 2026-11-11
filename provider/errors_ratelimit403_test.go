@@ -2,12 +2,25 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/yi-nology/go-git-platform/transport"
 )
+
+// testPlatformSeq 保证测试平台 key 进程内唯一。注册表是全局的且对重复
+// 注册 panic（errors.go RegisterStatusExtractor / RegisterThrottleClassifier），
+// 固定 key 在 go test -count=2 下第二轮必炸（issue #117）；测试运行器不
+// 提供注销 API，key 唯一化即幂等。同文件的 StatusExtractor 注册测试
+// （含 errors_test.go 的 throwaway 平台）一律走这里。
+var testPlatformSeq atomic.Int64
+
+func uniqueTestPlatform(prefix string) Platform {
+	return Platform(fmt.Sprintf("%s-%d", prefix, testPlatformSeq.Add(1)))
+}
 
 // issue #42：GitHub/Gitea 把最常见的节流信号发成 403 + X-RateLimit-Remaining: 0。
 // transport 层已把它判成限流（IsRateLimited），Wrap 不得把这一判定丢回
@@ -50,7 +63,7 @@ type sdkPlainError struct{ response *http.Response }
 func (e *sdkPlainError) Error() string { return "forbidden by policy" }
 
 func TestWrapSDKThrottleClassifierMechanism(t *testing.T) {
-	const p Platform = "sdk-throttle-test"
+	p := uniqueTestPlatform("sdk-throttle-test")
 	RegisterStatusExtractor(p, func(err error) (int, bool) {
 		if e, ok := err.(*sdkThrottleError); ok && e.response != nil {
 			return e.response.StatusCode, true
@@ -83,7 +96,7 @@ func TestWrapSDKThrottleClassifierMechanism(t *testing.T) {
 
 // 未注册分类器的平台：同样的 SDK 错误维持裸状态分类（403 → ErrForbidden）。
 func TestWrapWithoutThrottleClassifierKeepsStatusClassification(t *testing.T) {
-	const p Platform = "sdk-no-classifier-test"
+	p := uniqueTestPlatform("sdk-no-classifier-test")
 	RegisterStatusExtractor(p, func(err error) (int, bool) {
 		if e, ok := err.(*sdkThrottleError); ok && e.response != nil {
 			return e.response.StatusCode, true
