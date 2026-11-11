@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestError_Is(t *testing.T) {
@@ -121,5 +122,33 @@ func TestError_StatusCodeMethod(t *testing.T) {
 	var sc statusCoder = e
 	if got := sc.StatusCode(); got != 429 {
 		t.Errorf("expected 429 via statusCoder interface, got %d", got)
+	}
+}
+
+// TestTruncate_CJKStaysValidUTF8 pins the pkg#327 adoption (issue #138): the
+// byte-budget truncator must never split a multi-byte rune — the old hard
+// byte slice turned a CJK response body into invalid UTF-8 (log shippers'
+// JSON encoders choke on it, grep loses the line). ASCII truncation must stay
+// byte-for-byte identical to the old implementation.
+func TestTruncate_CJKStaysValidUTF8(t *testing.T) {
+	// "汉"是 3 字节;10 字节预算恰在第 4 个"汉"的第 2 字节处切断。
+	body := []byte("汉汉汉汉汉汉") // 18 bytes
+	got := truncate(body, 10)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncate produced invalid UTF-8: %q", got)
+	}
+	if want := "汉汉汉...(truncated)"; got != want {
+		t.Errorf("truncate CJK = %q, want %q (budget may only shrink on rune boundaries)", got, want)
+	}
+
+	// ASCII:逐字节与旧硬切实现一致(含后缀)。
+	ascii := []byte("abcdefghijk") // 11 bytes
+	if got, want := truncate(ascii, 10), "abcdefghij...(truncated)"; got != want {
+		t.Errorf("truncate ascii = %q, want %q", got, want)
+	}
+
+	// 预算内原样返回,无后缀。
+	if got, want := truncate([]byte("短"), 10), "短"; got != want {
+		t.Errorf("truncate within budget = %q, want %q", got, want)
 	}
 }

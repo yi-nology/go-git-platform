@@ -1071,3 +1071,51 @@ func TestParseWebhookEvent_EmptySecretRejected(t *testing.T) {
 		t.Fatal("错误签名必须被拒")
 	}
 }
+
+// TestDownloadReleaseAsset_CrossHostRedirect_NoCredentialLeak 附件下载二跳
+// **不得**带凭据(issue #136,补 gitee NoTokenLeak 同款用例)。
+//
+// 真实 GitHub 形态:附件端点 302 到 S3/对象存储(跨 host)。断言二跳的
+// Authorization 与 query 令牌均为空——followClient 无认证包装;一旦有人
+// 把二跳改走 p.client(token 通道),本用例立刻红。
+func TestDownloadReleaseAsset_CrossHostRedirect_NoCredentialLeak(t *testing.T) {
+	assetAuth := ""
+	assetQuery := ""
+	objectStore := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assetAuth = r.Header.Get("Authorization")
+		assetQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte("asset-bytes"))
+	}))
+	defer objectStore.Close()
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3/repos/owner/repo/releases/assets/99" {
+			http.NotFound(w, r)
+			return
+		}
+		// 附件端点必须带 octet-stream Accept,否则 GitHub 回 JSON 元数据。
+		if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+			t.Errorf("expected Accept application/octet-stream, got %q", got)
+		}
+		if r.Header.Get("Authorization") == "" {
+			t.Error("第一跳必须带平台凭据(SDK 通道),否则测的是假链路")
+		}
+		http.Redirect(w, r, objectStore.URL+"/s3/asset.bin", http.StatusFound)
+	}))
+	defer api.Close()
+
+	p := newTestProvider(t, api.URL+"/api/v3")
+	var buf bytes.Buffer
+	if err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "asset-bytes" {
+		t.Fatalf("expected streamed bytes, got %q", buf.String())
+	}
+	if assetAuth != "" {
+		t.Errorf("第二跳(跨 host 对象存储)不得带 Authorization,实际=%q", assetAuth)
+	}
+	if strings.Contains(assetQuery, "token") {
+		t.Errorf("第二跳 query 不得带令牌参数,实际=%q", assetQuery)
+	}
+}

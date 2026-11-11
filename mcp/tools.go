@@ -99,6 +99,11 @@ func perPage(n int) int {
 // under ReadOnly: the model should not see (and cannot call) mutations
 // it is not allowed to make — the strongest form of read-only mode.
 func add[In, Out any](s *mcp.Server, st *state, name, title, desc string, write bool, h func(context.Context, In) (Out, error)) {
+	// 注册进工具面台账（toolset → 工具名）：README 工具表的对账机检
+	// （readme_tools_test.go，issue #122）从这里取注册面真源——手工清单
+	// 已经漂过一次（delete_issue_comment 上线两份表都没跟）。只读模式下
+	// 写工具被裁剪,但注册面台账记录的是 toolset 的完整工具形态。
+	recordTool(st.toolset, name)
 	if write && st.readonly {
 		return
 	}

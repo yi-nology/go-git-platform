@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // roundTripFunc adapts a function into an http.RoundTripper for tests.
@@ -657,5 +658,20 @@ func assertRoundTripEvent(t *testing.T, e logEvent, status int, baseURL string) 
 	}
 	if _, ok := got["duration"]; !ok {
 		t.Error("duration kv missing")
+	}
+}
+
+// TestTruncateForLog_CJKStaysValidUTF8 pins the pkg#327 adoption (issue #138):
+// the log-side byte-budget truncator must never split a multi-byte rune —
+// CJK response bodies used to come out as invalid UTF-8, breaking JSON log
+// shippers and grep. ASCII truncation stays byte-for-byte identical.
+func TestTruncateForLog_CJKStaysValidUTF8(t *testing.T) {
+	body := []byte("日志内容日志内容日志内容") // CJK, 30 bytes
+	got := truncateForLog(body, 14)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateForLog produced invalid UTF-8: %q", got)
+	}
+	if want := "日志内容... (truncated)"; got != want { // 12 bytes of CJK + suffix
+		t.Errorf("truncateForLog CJK = %q, want %q", got, want)
 	}
 }

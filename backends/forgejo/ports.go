@@ -25,7 +25,16 @@ func withStatus(err error, resp *forgejo.Response) error {
 }
 
 // forgejoDivergences is the Forgejo view of the family divergence ledger.
-var forgejoDivergences = giteafamily.Divergences("Forgejo")
+var forgejoDivergences = append(giteafamily.Divergences("Forgejo"),
+	provider.Divergence{
+		Capability: "BranchProtectionManager", Method: "CreateBranchProtection", Field: "opts.AllowForcePushes", Kind: provider.DivergenceIgnore,
+		Reason: "The forgejo SDK's branch-protection model (mvdkleijn v3) has no force-push field, so the option is dropped and reads always report false. The pre-#130 mapping rode enable_push — an unrelated switch (allow ANY direct push vs allow history-rewriting pushes; issue #130).",
+	},
+	provider.Divergence{
+		Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowForcePushes", Kind: provider.DivergenceIgnore,
+		Reason: "See CreateBranchProtection (issue #130).",
+	},
+)
 
 // sdkPorts adapts the forgejo SDK to the family engine's ports. The Forgejo
 // SDK accepts no context parameter (registered platform limitation) and
@@ -1286,12 +1295,14 @@ func (s sdkPorts) GetBranchProtection(ctx context.Context, owner, repo, branch s
 
 func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string, opt giteafamily.FamilyCreateBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
 	_ = ctx
+	// AllowForcePushes/AllowDeletions 在 forgejo SDK 的保护模型（mvdkleijn
+	// v3）中无对应字段——写侧丢弃，读侧恒 false，登记 DivergenceIgnore
+	// （issue #130：绝不拿 enable_push/block_on_rejected_reviews 等语义无关
+	// 开关当替身）。
 	bp, resp, err := s.c.CreateBranchProtection(owner, repo, forgejo.CreateBranchProtectionOption{
-		BranchName:             opt.BranchName,
-		RequiredApprovals:      opt.RequiredApprovals,
-		EnableStatusCheck:      opt.EnableStatusCheck,
-		EnablePush:             opt.EnablePush,
-		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+		BranchName:        opt.BranchName,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
 	})
 	return familyBranchProtection(bp), withStatus(err, resp)
 }
@@ -1299,10 +1310,8 @@ func (s sdkPorts) CreateBranchProtection(ctx context.Context, owner, repo string
 func (s sdkPorts) EditBranchProtection(ctx context.Context, owner, repo, branch string, opt giteafamily.FamilyEditBranchProtectionOption) (*giteafamily.FamilyBranchProtection, error) {
 	_ = ctx
 	bp, resp, err := s.c.EditBranchProtection(owner, repo, branch, forgejo.EditBranchProtectionOption{
-		RequiredApprovals:      opt.RequiredApprovals,
-		EnableStatusCheck:      opt.EnableStatusCheck,
-		EnablePush:             opt.EnablePush,
-		BlockOnRejectedReviews: opt.BlockOnRejectedReviews,
+		RequiredApprovals: opt.RequiredApprovals,
+		EnableStatusCheck: opt.EnableStatusCheck,
 	})
 	return familyBranchProtection(bp), withStatus(err, resp)
 }
@@ -1318,11 +1327,11 @@ func familyBranchProtection(bp *forgejo.BranchProtection) *giteafamily.FamilyBra
 		return nil
 	}
 	return &giteafamily.FamilyBranchProtection{
-		BranchName:             bp.BranchName,
-		RequiredApprovals:      bp.RequiredApprovals,
-		EnableStatusCheck:      bp.EnableStatusCheck,
-		EnablePush:             bp.EnablePush,
-		BlockOnRejectedReviews: bp.BlockOnRejectedReviews,
+		BranchName:        bp.BranchName,
+		RequiredApprovals: bp.RequiredApprovals,
+		EnableStatusCheck: bp.EnableStatusCheck,
+		// ForcePushes 无 wire 来源（forgejo SDK 模型无该字段）——保持零值，
+		// 台账登记 ignore（issue #130）。
 	}
 }
 

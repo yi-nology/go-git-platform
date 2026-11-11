@@ -140,6 +140,19 @@ func RunNotificationsSuite(t *testing.T, h NotificationsHarness) {
 			t.Fatalf("MarkNotificationsRead: %v", err)
 		}
 	})
+
+	t.Run("MarkNotificationsRead_MalformedLastReadAt_Rejected", func(t *testing.T) {
+		// issue #129 (#52/#75/#97 同族收口): the SAME malformed LastReadAt
+		// must fail with ErrInvalidInput on every global-capable backend —
+		// mark-all is an irreversible bulk side effect, so a format typo must
+		// never silently degrade into "mark everything read" (gitee used to
+		// drop the option whole, gitcode used to pass it raw onto the wire).
+		nm := newNM(t)
+		err := nm.MarkNotificationsRead(context.Background(), provider.MarkNotificationsOptions{LastReadAt: "2026/11/11"})
+		if err == nil || !provider.IsInvalidInput(err) {
+			t.Fatalf("malformed LastReadAt = %v, want an error wrapping ErrInvalidInput", err)
+		}
+	})
 }
 
 // runGlobalUnsupportedSuite pins the partial-capability contract for
@@ -180,6 +193,16 @@ func runGlobalUnsupportedSuite(t *testing.T, newNM func(*testing.T) provider.Not
 		_, err := nm.ListRepoNotifications(context.Background(), "owner", "repo", provider.ListNotificationsOptions{Since: "2026-01-01"})
 		if err == nil || !provider.IsInvalidInput(err) {
 			t.Fatalf("malformed Since = %v, want an error wrapping ErrInvalidInput", err)
+		}
+	})
+	t.Run("RepoScoped_MalformedLastReadAt_Rejected", func(t *testing.T) {
+		// issue #129: the malformed LastReadAt face on the repo-scoped half —
+		// the repo-scoped mark must validate like the global one (gitcode
+		// used to pass the raw string onto the wire).
+		nm := newNM(t)
+		err := nm.MarkRepoNotificationsRead(context.Background(), "owner", "repo", provider.MarkNotificationsOptions{LastReadAt: "2026/11/11"})
+		if err == nil || !provider.IsInvalidInput(err) {
+			t.Fatalf("malformed LastReadAt = %v, want an error wrapping ErrInvalidInput", err)
 		}
 	})
 }

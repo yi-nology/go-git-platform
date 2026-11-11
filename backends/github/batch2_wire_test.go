@@ -415,3 +415,37 @@ func putProtectionResponse() *sdkgithub.Protection { return currentProtectionRes
 
 // 编译期防漂移:github 的团队评审能力面(指针接收者)。
 var _ provider.TeamReviewManager = (*ghbackend.Provider)(nil)
+
+// TestGetArchive_CrossHostRedirect_NoCredentialLeak 下载二跳**不得**带凭据
+// (issue #136,补 gitee NoTokenLeak 同款用例——github 面此前裸奔)。
+//
+// 链形:归档端点(带平台凭据的 SDK 通道)302 → 对象存储(跨 host,真实
+// GitHub 的 codeload/对象存储 302 链形态)。断言二跳 Authorization/query
+// 令牌均为空:followClient 无认证包装;一旦有人把二跳改走 p.client
+// (token 通道),本用例立刻红——凭据泄漏类回归不再静默通过。
+func TestGetArchive_CrossHostRedirect_NoCredentialLeak(t *testing.T) {
+	objectStoreAuth := ""
+	objectStoreQuery := ""
+	objectStore := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		objectStoreAuth = r.Header.Get("Authorization")
+		objectStoreQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte("TAR-BYTES"))
+	}))
+	defer objectStore.Close()
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			t.Error("第一跳必须带平台凭据(SDK 通道),否则测的是假链路")
+		}
+		http.Redirect(w, r, objectStore.URL+"/bucket/archive.tar.gz", http.StatusFound)
+	}))
+	defer api.Close()
+
+	p := newTestProvider(t, api.URL+"/api/v3")
+
+	data, err := p.GetArchive(context.Background(), "owner", "repo", "main", "tarball")
+	require.NoError(t, err)
+	assert.Equal(t, "TAR-BYTES", string(data))
+	assert.Empty(t, objectStoreAuth, "第二跳(跨 host 对象存储)不得带 Authorization")
+	assert.NotContains(t, objectStoreQuery, "token", "第二跳 query 不得带令牌参数")
+}

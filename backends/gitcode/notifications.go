@@ -70,7 +70,15 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
+//
+// LastReadAt 裸传平台前先经共享解析器校验（issue #129，#52 同族收口的漏网
+// 处）：畸形值此前原样触线，而 mark-all 是不可逆的全量副作用——拒绝面必须
+// 与其他后端一致（ErrInvalidInput），合法值照旧透传（GitCode wire 支持
+// last_read_at）。
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
+	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+		return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", err)
+	}
 	return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, owner, repo, gitcode.MarkNotificationsOptions{
 		LastReadAt: opts.LastReadAt,
 	}))

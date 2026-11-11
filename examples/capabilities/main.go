@@ -85,6 +85,7 @@ func printDeclarations(caps provider.CapabilitySet) {
 		{"Deployments", caps.Deployments},
 		{"RepoTemplates", caps.RepoTemplates},
 		{"ForkSync", caps.ForkSync},
+		{"TeamReviews", caps.TeamReviews},
 	} {
 		mark := "  -"
 		if e.on {

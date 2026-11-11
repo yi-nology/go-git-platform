@@ -2,7 +2,7 @@ package branchfilter
 
 import (
 	"errors"
-	"path/filepath"
+	"path"
 	"testing"
 )
 
@@ -40,10 +40,10 @@ func TestNew_BadPatternRejected(t *testing.T) {
 	if f != nil {
 		t.Errorf("expected a nil filter alongside the error, got %+v", f)
 	}
-	if !errors.Is(err, filepath.ErrBadPattern) {
-		t.Errorf("expected the error to wrap filepath.ErrBadPattern, got %v", err)
+	if !errors.Is(err, path.ErrBadPattern) {
+		t.Errorf("expected the error to wrap path.ErrBadPattern, got %v", err)
 	}
-	if _, err := New("["); err == nil || !errors.Is(err, filepath.ErrBadPattern) {
+	if _, err := New("["); err == nil || !errors.Is(err, path.ErrBadPattern) {
 		t.Errorf("expected an unclosed bracket to be rejected, got %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func TestMatch_GlobPattern(t *testing.T) {
 }
 
 // TestMatch_StarDoesNotCrossSlash pins the documented semantics: `*` matches
-// only within one path level (filepath.Match), so "release/*" never reaches
+// only within one path level (path.Match), so "release/*" never reaches
 // "release/a/b" and there is no `**`.
 func TestMatch_StarDoesNotCrossSlash(t *testing.T) {
 	f := mustNew(t, "release/*")
@@ -179,16 +179,16 @@ func TestNewPatterns_MatchesAndErrors(t *testing.T) {
 			t.Fatalf("NewPatterns: %v", err)
 		}
 		if !f.Match("main") || !f.Match("release-2") || !f.Match("feature/x") || f.Match("release/2") {
-			t.Fatal("NewPatterns must follow filepath.Match semantics, same as New")
+			t.Fatal("NewPatterns must follow path.Match semantics, same as New")
 		}
 	})
 	t.Run("bad_pattern_rejected_loud", func(t *testing.T) {
 		f, err := NewPatterns([]string{"main", "[bad"})
 		if err == nil || f != nil {
-			t.Fatal("malformed pattern must error wrapping filepath.ErrBadPattern")
+			t.Fatal("malformed pattern must error wrapping path.ErrBadPattern")
 		}
-		if !errors.Is(err, filepath.ErrBadPattern) {
-			t.Fatalf("err = %v, want wrapping filepath.ErrBadPattern", err)
+		if !errors.Is(err, path.ErrBadPattern) {
+			t.Fatalf("err = %v, want wrapping path.ErrBadPattern", err)
 		}
 	})
 	t.Run("spaces_inside_one_pattern_are_literal", func(t *testing.T) {
@@ -214,5 +214,49 @@ func TestNew_CommaIsAlwaysASeparator(t *testing.T) {
 	}
 	if !f.Match("release") || !f.Match("1.0") || f.Match("release,1.0") {
 		t.Fatal("comma-split convenience surface must keep its splitting semantics")
+	}
+}
+
+// TestNew_MalformedAfterStarRejected pins the issue #133 fix: patterns whose
+// malformed section hides BEHIND a star ("release/*[") used to slip past the
+// constructor probe — filepath.Match with an empty name fails the leading
+// literal chunk first and never scans the rest, so the filter constructed
+// fine and silently matched nothing at runtime. path.Match (Go 1.27)
+// validates the full pattern before returning a bare false.
+func TestNew_MalformedAfterStarRejected(t *testing.T) {
+	for _, p := range []string{"release/*[", "feature/*[a", "x*[", "*/release/*[", "a\\", "[a-"} {
+		f, err := NewPatterns([]string{p})
+		if err == nil {
+			t.Errorf("pattern %q must be rejected at construction (it would silently match nothing), got filter %+v", p, f)
+		}
+		if !errors.Is(err, path.ErrBadPattern) {
+			t.Errorf("pattern %q: expected error wrapping path.ErrBadPattern, got %v", p, err)
+		}
+	}
+	// 便捷串形态同样要拦(星号畸形藏在逗号列表第二段)。
+	if _, err := New("main,release/*["); err == nil || !errors.Is(err, path.ErrBadPattern) {
+		t.Errorf("New comma form must reject a malformed second pattern, got %v", err)
+	}
+}
+
+// TestMatch_StarDoesNotCrossSlash_PathSemantics pins the issue #134 fix: the
+// matcher is path.Match (separator is always `/`), not filepath.Match (whose
+// separator is `\` on Windows, where `*` would cross `/` and flip the
+// contract). Same assertions as TestMatch_StarDoesNotCrossSlash, kept as its
+// primitive-level twin.
+func TestMatch_StarDoesNotCrossSlash_PathSemantics(t *testing.T) {
+	f := mustNew(t, "release/*")
+	if f.Match("release/a/b") {
+		t.Error("`release/*` must not match `release/a/b` on any OS (path.Match semantics)")
+	}
+	if f.Match("release/a") != true {
+		t.Error("`release/*` must match `release/a`")
+	}
+	multi := mustNew(t, "feature/*/*")
+	if multi.Match("feature/x") {
+		t.Error("`feature/*/*` must not match a single level")
+	}
+	if !multi.Match("feature/x/y") {
+		t.Error("`feature/*/*` must match two levels")
 	}
 }

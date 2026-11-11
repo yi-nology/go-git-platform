@@ -86,7 +86,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 	}
 	id, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
-		return provider.Wrapf(provider.PlatformGitHub, "DeleteNote", "invalid note ID %q: %v", noteID, err)
+		return provider.Wrapf(provider.PlatformGitHub, "DeleteNote", "invalid note ID %q: %w", noteID, err)
 	}
 	_, err = p.client.Issues.DeleteComment(ctx, owner, repo, id)
 	if err != nil {

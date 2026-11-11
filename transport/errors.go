@@ -8,6 +8,7 @@ import (
 
 	"github.com/oekit/concurrency/retry/httpx"
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/stringx"
 )
 
 // NewStatusError builds an error for an HTTP response with status >= 400. The
@@ -172,9 +173,14 @@ var ErrEmptyResponse = oekiterrors.Errorf("transport: empty response body")
 
 // truncate returns s shortened to at most n bytes. It is used to keep error
 // messages bounded when the response body is large.
+//
+// 委托 stringx.TruncBytes(pkg#327 收编)：字节预算语义不变（at most n
+// bytes），RuneStart 回退顺带修复旧的硬字节切把 CJK 等多字节字符腰斩、
+// 产出非法 UTF-8 的缺陷；ASCII 输入逐字节等价。
 func truncate(b []byte, n int) string {
-	if len(b) <= n {
-		return string(b)
+	out, truncated := stringx.TruncBytes(string(b), n)
+	if !truncated {
+		return out
 	}
-	return string(b[:n]) + "...(truncated)"
+	return out + "...(truncated)"
 }

@@ -4,6 +4,171 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.127.0] - 2026-11-12
+
+### Changed（依赖/工具链）
+
+- deps: **toolchain go1.27.3→go1.27.4**（根 go.mod 与 mcp/go.mod 同步）——
+  govulncheck 门新入库 stdlib 漏洞 [GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859)
+  （net/http MaxBytesReader 头竞态，fix in go1.27.4）把 main 同门打红（
+  2026-11-11 起），与本批修复无关但挡「CI 全绿合入」；经裁定随本 PR 抬
+  （stdlib 安全补丁非模块依赖地板）。配套复核（v0.79.x 教训）：GOTOOLCHAIN=
+  go1.27.4 下 build/vet/全量测试（含 -race）/golangci-lint（主模块 0 issues
+  + mcp 0 issues）/govulncheck（No vulnerabilities found，真跑目标版本）全绿；
+  CI golangci-lint 钉 v2.14.0 走 action 自带下载，与 toolchain 解耦无需动。
+
+### Fixed（安全/行为修复批：重定向凭据复活、反号映射、LastReadAt 族、gogit rev、ttlCache 世代、branchfilter 跨平台）
+
+- fix(transport): **多跳重定向下初始请求头凭据「复活」**（issue #127，#65 修复不完整，探针实锤）——
+  Go 标准库把**初始请求头快照**逐跳复制到重定向请求（六名标准敏感头之外的
+  `PRIVATE-TOKEN`/`X-Auth-Token` 等每跳无条件复制），而 `StripSensitiveHeaders`
+  执行层的宿主判据用**紧邻上一跳**、决定层 `CrossHostRedirect` 用**链头**：
+  「平台 → 第三方 → 第三方同域再跳」链的 hop2 上判定要剥、执行 no-op，SDK
+  （go-gitlab/go-gitcode/go-gongfeng 注入初始头是常态）的令牌发往第三方主机。
+  修复：执行层 `from` 改 `OriginRedirectHost`（链头），与决定层完全同判据——
+  任何落到非认证 host 的跳（无论第几跳、凭据来自 RT 施加还是初始头）都不带
+  凭据。新增 `TestClient_MultiHopRedirect_InitialHeaderCredentialsNotResurrected`
+  （修复前 hop2 复活 `INITIAL-SECRET` 红，修复后绿）；`TestStripSensitiveHeaders`
+  改挂重定向语境并补「非重定向 no-op」负对照。
+- fix(giteafamily): **#93 反号映射作废——`AllowDeletions` 不再写进语义无关的
+  `BlockOnRejectedReviews`**（issue #130）——`AllowDeletions`（允许删受保护分支）
+  与 `BlockOnRejectedReviews`（评审驳回阻塞合并）互不相关，反号落线使
+  `CreateBranchProtection(AllowDeletions=false)` 静默**打开**一个调用意图之外
+  的保护特性；`AllowForcePushes→EnablePush` 同病。真语义：**gitea** wire 有
+  `enable_force_push` 真键（gitea.dev/sdk v1.5.1 建模），`AllowForcePushes` 改映
+  真键双向映射；**forgejo** SDK（mvdkleijn v3）无 force-push 字段，登记
+  DivergenceIgnore；两家族的 `AllowDeletions` wire 均无此面，写侧丢弃、读侧
+  恒 false，DivergenceIgnore 登记在案。家族选项结构删 `EnablePush`/
+  `BlockOnRejectedReviews` 字段（旧替身通道编译级消失）。测试改抓真实 wire：
+  新增 gitea/forgejo `branch_protection_wire_test.go`（httptest 抓 create/update
+  body 键形——`enable_force_push` 必须在场、`block_on_rejected_reviews` 不得因
+  AllowDeletions 翻转、GitHub 形键不得出现、读侧 `enable_force_push:true` 映回
+  `AllowForcePushes:true`）；gitea/forgejo 契约夹具的 BP 响应从 GitHub 形键
+  （`allow_force_pushes`/`allow_deletions`——真实 wire 不存在、SDK 解析即丢，
+  断言等于没断言）改为真实家族键形。
+- fix(backends): **LastReadAt 校验族真收口**（issue #129，#75/#97 的「第三处
+  收口」不实）——同一 `MarkNotificationsRead(LastReadAt:"2026/11/11")` 此前
+  四种行为：gitcode 裸传触线（畸形串原样上 wire）、gitee 整体丢弃（合法值
+  也吞，不可逆退化「全量已读」）、gitlab 同病（todos mark-all 无此面）、
+  github 手写 time.Parse 未走共享解析器。修复：gitcode/gitee/gitlab 全部过
+  `provider.ParseTimestamp` 门（非法 ⇒ `ErrInvalidInput`，mark-all 不可逆副
+  作用绝不静默触发），合法值按各平台真实面落线或登记 ignore（gitee/gitlab
+  台账新增 3 条 DivergenceIgnore——gitee mark 面只收 ids、wire 无
+  last_read_at）；github `parseLastReadAt` 删除手写实现委托共享解析器。契约
+  套件新增畸形 `LastReadAt` 全后端断言（全局面 `MarkNotificationsRead` +
+  repo 域 `MarkRepoNotificationsRead`，与 #52 的 Since 断言同形）。
+- fix(gitbackend): **gogit `IsAncestor` 补迁 resolveRev**（issue #128，#108
+  统一解析的镜像方法漏网）——裸用 `plumbing.NewHash` 盲 hex 解码，分支名/
+  短 hash/HEAD 在 gogit 侧解出垃圾 hash 全失败，native 侧同输入成功。两个
+  参数改走 `resolveRev`（单入口不变量归位）；新增
+  `TestGoGit_IsAncestor_RevsParity` 与 native 回归表逐 case 对钉（分支名/
+  HEAD/短 hash/无效 ref）。
+- fix(provider): **ttlCache 自建 flight 回填绕过上游世代失效防线**（issue
+  #135）——回填走 `SingleFlightCache.Set` 无条件写，`Manager.Remove/Purge`
+  与在途构造竞争时旧实例复活（语义竞争，`-race` 不报）。修复：本地世代计数
+  （remove/purge 推进）+ 起飞捕获 + 回填前复查，变了放弃回填（返回值仍给
+  调用方，对齐上游 LocalCache 加载路径的 #200 口径）。新增
+  `TestTTLCache_RemoveDuringFlightDoesNotResurrect`/
+  `TestTTLCache_PurgeDuringFlightDoesNotResurrect`（悬停构造窗口竞争,-race 绿）。
+- fix(pkg/branchfilter): **matcher 换 `path.Match` + 构造期校验真收口**（issue
+  #134/#133）——`filepath.Match` 的「`*` 不跨分隔符」在 Windows 上跨的是 `\`，
+  `*` 会跨 `/` 翻转契约（本仓 CI 无 Windows 腿故未暴露）；换 `path.Match`
+  （分隔符恒 `/`，OS 无关）。构造期预检同步换空名 `path.Match` 探针：Go 1.27
+  的 `path.Match` 返回裸 false 前会全模式语法校验，「星号后的畸形 pattern」
+  （`release/*[`——旧 filepath 探针因前导 chunk 先失配而逃逸，运行期静默
+  永不匹配）构造期即拒。新增 `TestNew_MalformedAfterStarRejected`（5 类星后
+  畸形 + 便捷串形态）与 `TestMatch_StarDoesNotCrossSlash_PathSemantics`。
+- fix(backends): **github 下载面补二跳无凭据断言**（issue #136）——gitee 有
+  `NoTokenLeak` 用例、github 面裸奔：实现面当前结构上安全（followClient 无
+  认证包装），但无测试钉住。新增 `TestGetArchive_CrossHostRedirect_NoCredentialLeak`
+  与 `TestDownloadReleaseAsset_CrossHostRedirect_NoCredentialLeak`（第一跳
+  断言**必须带**凭据防假链路，二跳跨 host 断言 Authorization/query 令牌为空
+  ——二跳改走 token 通道即红）。
+- fix(provider,backends): **规则一残留第二波清零**（issue #132）——
+  `provider/errors.go` New() 的 `fmt.Errorf("%w: %s")`（单 %w + 动态 body，
+  非双链豁免形态）迁 `oekiterrors.Errorf`；`provider/ttlcache.go` 回源 panic
+  错误迁 `oekiterrors.Errorf`（panic 值为 error 时多 %w 保 cause 链）；
+  `provider/timeparse.go` 与 github notifications 的 `%v` 包装改多 `%w`
+  （`*time.ParseError` cause 链保留，house 先例 = errors.go 双链形态）；同族
+  的 4 处 `Wrapf(...%v..., err)`（gitlab/tencentcode/github note ID 解析）一并
+  改 `%w`。`fmt.Errorf` 在 SDK/mcp 源码回归双链豁免配额内（grep 复核）。
+
+### Changed（文档与现实同步 + 收编两处 + 台账补登）
+
+- docs(README): **能力矩阵对账现实**（issue #120/#121）——Reactions×GitCode
+  ✅ 改 `❌¹`（能力 2026-11-03 已摘除，wire 测试断言类型断言必失败，矩阵漏
+  改与自家脚注矛盾）；矩阵补 TeamReviews 行（GH/Gitea/Forgejo ✅）；静态
+  计数 22→23（两处）；examples/capabilities 声明打印补 TeamReviews（23 项
+  对齐）；`docs/v1.0-readiness.md`「全部 17 个能力」改 23 并注明
+  TeamReviews 纯写仅声明；CONTRIBUTING「Adding an optional capability」把
+  巡检/矩阵/静态计数/覆盖登记列为落地必经步骤（TeamReviews 三处失明的
+  教训固化）。**防再漂网**：新增 `backends/all/readme_matrix_test.go`——
+  七平台真构造 provider，README 矩阵逐格对账 `Capabilities()`（含反向：
+  CapabilitySet 每字段必须有矩阵行；❌¹=未声明、⚠️²/✅⁵=声明的归一判定）。
+- docs(contracttest): **覆盖记录第三向断言**（issue #123）——TeamReviewManager
+  进 `uncoveredFamilies`（第七族，行为现由三后端 team_reviewers_wire_test.go
+  钉在后端层）；新增 `TestCapabilityFamiliesAllRegistered`：`CapabilitySet`
+  全部 23 字段经 `capFieldToFamily` 反射核对必须落在 coveredFamilies ∪
+  uncoveredFamilies——新能力两头都没进时机器红（TeamReviews 式漏网不可再发
+  生）。
+- docs(provider): **NotificationManager 接口 doc 双错修正**（issue #124）——
+  GitLab 实际经 Todos 映射实现该接口（`Notifications=true`，doc 原说 false
+  与现实相反），GitCode 仅仓库域可用（全局三方法 ErrNotImplemented，doc 原
+  说全域支持）；支持段改写并与 README 矩阵 ⚠️²、divergence 台账口径对齐。
+- docs(examples): **notification/reaction 平台清单去 GitCode**（issue #125）——
+  notification 示例首个调用 `ListNotifications` 在 GitCode 即
+  ErrNotImplemented；reaction 示例的 ReactionManager 在 GitCode 类型断言必
+  失败；notification 示例补 `n.Repo != nil` 守卫（gitlab todo 无 project 时
+  `EventRepo` 为 nil，旧代码 nil deref panic）。
+- docs(mcp): **工具表对账注册面**（issue #122）——mcp/README.md issues 行补
+  `delete_issue_comment`(写)（#33 落地时两份表漏同步；现存表仅 mcp/README
+  一份，根 README 已改链接形态）；tencentcode 行 `get/set_*_subscription`
+  简写展开为注册面的四个独立工具名。**生成化机检**：`add()` 挂账
+  `toolRegistry`（toolset→工具名，幂等），新增 mcp
+  `TestReadmeToolTableMatchesRegistry` 双向对账（注册了没进表 / 表里列了没
+  注册 / toolset 缺行全红）——工具表手维护面从漂移即无声变漂移即红。
+- docs(README): **Gitee `ChangeRequest.Draft` 假限制删除**（issue #126）——
+  「go-gitee SDK 的 PullRequest 模型缺该字段」是 v0.54.0 弃 swagger SDK 之前
+  的旧事实：next-bin/go-gitee types.go `Draft *bool json:"draft,omitempty"`
+  字段在场、`convertPR` 已映射（`Draft: deref(pr.Draft)`）。README「已知限
+  制」条目与 readiness「恒 false」条目删除；新增
+  `TestGitee_CR_DraftMapped`（wire 载荷 `draft:true` ⇒ `ChangeRequest.Draft=true`）
+  钉住映射。
+- docs(v1.0-readiness): **测试矩阵项收口**（issue #119）——env-gated 真实
+  环境冒烟测试落地：`smoke/` 包 + `TestSmoke_RealEnvironment`
+  （`GIT_PLATFORM_SMOKE_TOKEN` 缺失毫秒级 skip，在位时跑 GetRepo + 一页
+  ListRepos 两个只读探针，本地 stub 全链路验证过）；新增
+  `.github/workflows/smoke.yml`（workflow_dispatch 手动触发，platform/owner/
+  repo 为输入，token 走 `GIT_PLATFORM_SMOKE_TOKEN_<PLATFORM>` /
+  `SMOKE_TOKEN` secret，缺失 secret 降级 skip 不红）；README 补
+  「Real-environment smoke test」触发说明；readiness 检查单该项勾销。
+- chore(ledger): **偏离台账补登三连**（issue #131）——① giteafamily 补
+  `RepoManager.ListRepos/opts.Owner` mapping 登记（#92 org-first+404 回退
+  改动一直无机器背书，台账沉默）；② #130 重映射的 BP 台账（家族级
+  AllowDeletions ignore ×2 + gitea 级 AllowForcePushes mapping ×2 + forgejo
+  级 AllowForcePushes ignore ×2），`go generate` 再生成台账；③
+  `backends/github/divergence.go` ListRepos 的 Reason 括注改真——#92 已把
+  gitea 家族 search-based 形态整个换掉且从未注册过，指向不存在的背书改为
+  org-first/user-fallback 同形描述。
+
+### Adopted（oekit 上游收编两处）
+
+- refactor(backends/contracttest): **signRequest 四块手算 HMAC 收编
+  `webhook.SignHMAC`**（pkg#325/#328 落地，issue #137；pkg v0.42.0）——发端
+  与验签器家族共享同一 HMACOption 语义面（`sha256=` 前缀两形走
+  `WithSignaturePrefix`、gitee/gitcode 裸 hex 两形走缺省），漂移面消除；
+  **空密钥负对照保留最小手算分支**（上游 SignHMAC 空 secret fail-closed
+  panic 拒签，攻击者空密钥伪造可预测载荷的形态只能手算——测试意图本身）。
+  七平台 contracttest 套件 + webhookcorpus 全绿 = 发↔收配对回归证明。
+- refactor(transport): **两处字节切截断委托 `stringx.TruncBytes`**（pkg#327
+  落地，issue #138；字节预算语义取 TruncBytes 非 TruncRunes）——
+  `transport/errors.go` truncate（n=200）与 `transport/client.go`
+  truncateForLog（maxLen=2048）按字节硬切会把 CJK 响应体腰斩出非法 UTF-8
+  （日志采集端 JSON 编码报错/grep 失效）；委托后 RuneStart 回退保证永不产
+  出非法 UTF-8，ASCII 行为逐字节不变，两处后缀（`"...(truncated)"` 与
+  `"... (truncated)"`）原样保留。新增 CJK 截断回归测试两条（UTF-8 有效性
+  + rune 边界收缩断言）。
+
 ## [0.126.0] - 2026-11-11
 
 ### Changed（go-gitcode v0.15.0→v0.16.0 收编：撤 84 处 Esc 预转义，wire 转义回归 SDK 单源）

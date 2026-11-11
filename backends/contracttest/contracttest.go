@@ -11,6 +11,7 @@ package contracttest
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -21,6 +22,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/oekit/pkg/webhook"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -307,31 +310,46 @@ func testWebhookSignature(t *testing.T, h Harness) {
 // signRequest sets the validator's signature/token header on req for the given
 // body and secret, so the validator can be exercised end to end. It understands
 // the two validator types the SDK ships (HMAC-SHA256 and static-token).
+//
+// HMAC 签名收编 webhook.SignHMAC（pkg#325/#328，issue #137）：发端与验签器
+// 家族共享同一 HMACOption 语义面（前缀/编码同源），删除四块手算 HMAC——
+// 发↔收单源，漂移面消除。唯一保留的手算分支是**空密钥负对照**：上游
+// SignHMAC 对空 secret fail-closed 拒签（构造期 panic）,而「攻击者用空
+// 密钥伪造可预测载荷的签名」恰恰要求算出签名再被验签器拒绝——这层测试
+// 意图只能手算表达。
 func signRequest(req *http.Request, v provider.WebhookValidator, body []byte, secret string) {
 	switch vv := v.(type) {
 	case provider.HMACSHA256Validator:
-		mac := hmac.New(sha256.New, []byte(secret))
-		_, _ = mac.Write(body)
-		req.Header.Set(vv.Header, "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		req.Header.Set(vv.Header, signBody(body, secret, "sha256="))
 	case provider.StaticTokenValidator:
 		req.Header.Set(vv.Header, secret)
 	case provider.ForgejoWebhookValidator:
-		mac := hmac.New(sha256.New, []byte(secret))
-		_, _ = mac.Write(body)
-		req.Header.Set("X-Forgejo-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		req.Header.Set("X-Forgejo-Signature", signBody(body, secret, "sha256="))
 	case provider.GiteeWebhookValidator:
 		// Gitee backend scheme: HMAC-SHA256 hex over the body in
 		// X-Gitee-Token (no timestamp). The registry also accepts the
 		// ts-based sign mode, but the corpus pins the backend's scheme.
-		mac := hmac.New(sha256.New, []byte(secret))
-		_, _ = mac.Write(body)
-		req.Header.Set("X-Gitee-Token", hex.EncodeToString(mac.Sum(nil)))
-		_ = vv
+		req.Header.Set("X-Gitee-Token", signBody(body, secret, ""))
 	case provider.GitCodeWebhookValidator:
-		mac := hmac.New(sha256.New, []byte(secret))
-		_, _ = mac.Write(body)
-		req.Header.Set("X-GitCode-Signature", hex.EncodeToString(mac.Sum(nil)))
+		req.Header.Set("X-GitCode-Signature", signBody(body, secret, ""))
 	}
+}
+
+// signBody produces the platform's HMAC-SHA256 signature header value via
+// webhook.SignHMAC: prefix 非空走 sha256= 前缀形,空串走裸 hex 形（与验证器
+// 家族同一选项接线）。secret 为空时上游 fail-closed 拒签 ⇒ 空密钥负对照
+// 夹具在此保留最小手算（见 signRequest 注释）。
+func signBody(body []byte, secret, prefix string) string {
+	if secret == "" {
+		mac := hmac.New(sha256.New, nil)
+		_, _ = mac.Write(body)
+		return prefix + hex.EncodeToString(mac.Sum(nil))
+	}
+	opts := []webhook.HMACOption(nil)
+	if prefix != "" {
+		opts = []webhook.HMACOption{webhook.WithSignaturePrefix(prefix)}
+	}
+	return webhook.SignHMAC([]byte(secret), crypto.SHA256, body, opts...)
 }
 
 // ParseSigned signs req with the platform's registered webhook validator and

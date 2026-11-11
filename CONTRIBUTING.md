@@ -136,12 +136,26 @@ plus the release/CI discipline AI agents must follow.
    by a stub.
 3. Extend `backends/contracttest/capabilities.go` with the bidirectional
    assertion for the new field, and add a mounted suite
-   (`backends/contracttest/<name>.go` + `Harness` field + `Run` wiring).
+   (`backends/contracttest/<name>.go` + `Harness` field + `Run` wiring) —
+   or, if the capability ships without a shared suite (write-only surfaces,
+   ID-scoped families), register the family in
+   `backends/contracttest/coverage_check_test.go`'s `uncoveredFamilies` AND
+   extend `capFieldToFamily`: the third-way check
+   (`TestCapabilityFamiliesAllRegistered`) fails for any `CapabilitySet`
+   field that lands in neither registry (issue #123).
 4. Register any partial divergences (per-method stubs, ignored fields,
    semantic mappings, raw detours) in the affected backends'
    `divergence.go`, then run `go generate ./...` to refresh
    `docs/divergence-ledger.md`.
-5. Update this checklist if the coupling points change.
+5. Sync the capability-discovery surfaces — all four, in the same change
+   (issue #121: TeamReviews shipped with three of them blind):
+   `examples/capabilities/main.go` (printDeclarations entry + probe if a
+   read-only call exists), the README capability matrix (a row), and both
+   static counts (README "N optional capability interfaces",
+   README project-structure "CapabilitySet (N 项能力声明)"; the README
+   matrix↔`Capabilities()` machine check in `backends/all` catches matrix
+   drift automatically).
+6. Update this checklist if the coupling points change.
 
 ## Breaking changes
 

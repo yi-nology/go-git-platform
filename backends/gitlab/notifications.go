@@ -90,7 +90,14 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 
 // MarkNotificationsRead implements provider.NotificationManager.
 // Maps to marking all GitLab todos as done.
+//
+// LastReadAt 合法值无 Todos 线路面（登记 ignore 台账，issue #129）：mark-all
+// 是不可逆的全量副作用，畸形值必须报错而非静默退化成「全部标已读」——
+// 与 #52/#75/#97 的时间戳选项拒绝面全后端一致。
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
+	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "MarkNotificationsRead", err)
+	}
 	_, err := p.client.Todos.MarkAllTodosAsDone(gitlab.WithContext(ctx))
 	return provider.Wrap(provider.PlatformGitLab, "MarkNotificationsRead", err)
 }

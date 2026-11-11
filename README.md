@@ -19,7 +19,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 **Highlights**
 
 - **Unified transport layer** — one auth/retry/hooks/rate-limit/logging pipeline for every platform; third-party SDKs (go-github, gitlab client-go, …) plug in via `http.RoundTripper`
-- **Capability-gated optional APIs** — 22 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
+- **Capability-gated optional APIs** — 23 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
 - **CI failure diagnostics** — `CILogManager` (GitHub / GitLab / Gitea / GitCode) returns failed jobs with the tail of their execution logs, sized for LLM consumption; declared via `Capabilities().CILogs`
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
 - **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
@@ -94,7 +94,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Reviews | ✅ | ✅ | ✅ | ✅ | — | ✅ | ✅ | `ReviewManager` |
 | CommitStatuses | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ | ✅ | `CommitStatusManager` |
 | Notifications | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | `NotificationManager` |
-| Reactions | ✅ | ✅ | ✅ | ✅ | — | ✅ | — | `ReactionManager` |
+| Reactions | ✅ | ✅ | ✅ | ✅ | — | ❌¹ | — | `ReactionManager` |
 | BranchProtections | ✅ | ✅ | ✅ | ✅ | ✅ | ❌¹ | ✅ | `BranchProtectionManager` |
 | Collaborators | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `CollaboratorManager` |
 | WebhookConfig | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | `WebhookConfigManager` |
@@ -109,6 +109,7 @@ if caps := p.Capabilities(); caps.Reviews {
 | Deployments | ✅ | — | — | — | — | — | — | `DeploymentManager` (`Capabilities().Deployments`) |
 | RepoTemplates | ✅ | — | ✅ | — | — | — | — | `TemplateRepoManager` (`Capabilities().RepoTemplates`) |
 | ForkSync | ✅ | — | — | — | — | — | — | `ForkSyncManager` (`Capabilities().ForkSync`) |
+| TeamReviews | ✅ | — | ✅ | ✅ | — | — | — | `TeamReviewManager` (`Capabilities().TeamReviews`) |
 
 The matrix stays honest: `examples/capabilities` probes every declared capability with read-only calls (`PLATFORM=gitea PLATFORM_TOKEN=xxx OWNER=o REPO=r go run ./examples/capabilities`).
 
@@ -125,6 +126,19 @@ GitCode 脚注（2026-11-04 live 探针实证，证据链见
 ### Local git operations
 
 `gitbackend` wraps local git behind two interchangeable backends — `native` (shells out to `git`, fullest feature set incl. rebase/stash) and `gogit` (pure Go via go-git/v5, no git binary needed). See the [中文 · Git 后端操作](#git-后端操作) section for the auth security model (token credential helper, SSH fingerprint pinning) and partial-clone options.
+
+### Real-environment smoke test
+
+The contract suites all run against httptest fakes; `smoke/` adds the env-gated live probe (issue #119): without credentials it skips in milliseconds, with them it runs two read-only calls (GetRepo + one page of ListRepos) against the real platform — the net that catches route/vocabulary wire drift.
+
+```bash
+GIT_PLATFORM_SMOKE_PLATFORM=github \
+GIT_PLATFORM_SMOKE_TOKEN=$GITHUB_TOKEN \
+GIT_PLATFORM_SMOKE_OWNER=go-gitea GIT_PLATFORM_SMOKE_REPO=gitea \
+go test ./smoke/ -v -run TestSmoke
+```
+
+In CI, dispatch the **smoke** GitHub Actions workflow manually (`workflow_dispatch`, platform/owner/repo as inputs; token from the `GIT_PLATFORM_SMOKE_TOKEN_<PLATFORM>` or `SMOKE_TOKEN` secret).
 
 ### Documentation
 
@@ -276,7 +290,7 @@ type Provider interface {
 }
 ```
 
-### 可选能力(17 项 + CI 日志)
+### 可选能力(23 项 + CI 日志)
 
 可选能力不进入 `Provider` 组合, 调用方通过 `Capabilities()` 声明式判断(或直接类型断言):
 
@@ -519,7 +533,6 @@ backend 所依赖的工蜂 SDK，v0.1.0 起））：
 
 ## 已知限制
 
-- **Gitee `ChangeRequest.Draft` 恒为 `false`**: 线上 PR 载荷有原生 `draft` 布尔字段，但 go-gitee SDK 的 `PullRequest` 模型缺该字段（上游 swagger 遗漏）， SDK 补齐前无法如实返回。
 - **GitLab Reviews 是 approvals 汇总映射**（已登记， spec §4.6）: GitLab 没有 逐条 review 对象， `ListReviews`/`GetReview` 走 MR 审批状态并按审批人合成 `approved` 汇总条目（ID 均为 MR IID）； `RequestReviewers` 为登记忽略（`reviewer_ids` 需 username→ID 解析， SDK 无此面）。
 - **GitLab 行内评论 diff 感知定位**: `CreateReview` 的行内评论按 MR diff hunk 映射行号, 行不在 hunk 时降级 file 级 position, 文件不在 diff 时跳过并 `Warn` 留痕(不再静默丢弃)。
 - **Gitea / Forgejo 的 `REQUEST_CHANGES`/`COMMENT` 评审需要 body 或行内评论**: 两平台 SDK 的客户端校验拒绝空 body 且无评论的非 APPROVE 评审（APPROVE 豁免）。
@@ -538,7 +551,7 @@ backend 所依赖的工蜂 SDK，v0.1.0 起））：
 ```
 go-git-platform/
 ├── provider/                    # 公共 API (类型 + 接口 + 工厂 + Manager)
-│   ├── provider.go              # Provider 接口 + CapabilitySet (17 项能力声明)
+│   ├── provider.go              # Provider 接口 + CapabilitySet (23 项能力声明)
 │   ├── options.go               # 所有 Options/Result 类型 (集中定义)
 │   ├── errors.go                # ProviderError + Wrap/New 助手 + 状态码反射
 │   ├── webhook.go               # WebhookValidator 接口 + 注册表 + 策略
