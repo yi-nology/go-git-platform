@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -302,5 +303,32 @@ func TestCollaboratorPermissionValidated(t *testing.T) {
 	}
 	if !res.IsError {
 		t.Fatalf("invalid permission must be a tool error, got: %v", res.Content)
+	}
+}
+
+// TestNewServer_ConcurrentConstruction 钉死并发构造无数据竞争：toolRegistry
+// 是包级台账（issue #122），并发 NewServer 写入必须由锁保护。
+// 必须带 -race 运行（Makefile TEST_FLAGS 已含）。
+func TestNewServer_ConcurrentConstruction(t *testing.T) {
+	const n = 16
+	var wg sync.WaitGroup
+	errCh := make(chan error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := NewServer(fakeProvider{}, Options{})
+			errCh <- err
+		}()
+	}
+	wg.Wait()
+	for i := 0; i < n; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("concurrent NewServer: %v", err)
+		}
+	}
+	// 台账仍完整：core toolset 至少有仓库读工具记账。
+	if len(toolRegistry["core"]) == 0 {
+		t.Fatalf("toolRegistry[core] empty after concurrent construction")
 	}
 }

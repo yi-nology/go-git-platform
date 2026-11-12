@@ -16,6 +16,7 @@ package mcpserver
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -90,12 +91,18 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 // toolRegistry 是 add() 挂账的工具面台账（toolset → 工具名集合）——
 // README 工具表对账机检的注册面真源（issue #122）。全局可变,但只做
 // 幂等集合写入（同一 server 重复构造不叠加,测试 -count=2 安全）。
-var toolRegistry = map[string]map[string]bool{}
+// 并发构造 NewServer 时会并发写入,必须经 toolRegistryMu 保护。
+var (
+	toolRegistryMu sync.Mutex
+	toolRegistry   = map[string]map[string]bool{}
+)
 
 func recordTool(toolset, name string) {
 	if toolset == "" {
 		return
 	}
+	toolRegistryMu.Lock()
+	defer toolRegistryMu.Unlock()
 	m := toolRegistry[toolset]
 	if m == nil {
 		m = map[string]bool{}
