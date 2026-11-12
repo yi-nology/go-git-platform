@@ -566,3 +566,81 @@ func TestGitConfigPath_Gitfile(t *testing.T) {
 		t.Fatalf("gitConfigPath = %q (%v), want %q", got, ok, filepath.Join(realGitDir, "config"))
 	}
 }
+
+// TestCredSession_AskpassKeepsPort_HostFormMatchesHelper 回归（issue #144，
+// 安全面）：askpass 兜底脚本旧模板 `host=${u%%:*}` 把端口剥掉——白名单用
+// hostOfURL 的完整 host（含端口）口径，两条路径对「这是不是同一个目标」
+// 给出不同答案：白名单 ["example.com"] 时 `http://example.com:8080` 的提示
+// 也命中，git 跟随重定向/子模块解析到带端口主机时令牌被投给白名单未声明
+// 的 origin。helper 路径（比对 credential 协议的 host= 行）在同场景下拒绝
+// ——修复后 askpass 与 helper 同判据：host:port 整体比对。
+func TestCredSession_AskpassKeepsPort_HostFormMatchesHelper(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("helper scripts require a POSIX sh")
+	}
+	t.Run("port-bearing prompt refused when whitelist has bare host", func(t *testing.T) {
+		s, err := newCredSession("tok", "s3cret", []string{"example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.close()
+		for _, prompt := range []string{
+			"Username for 'http://example.com:8080': ",
+			"Password for 'http://example.com:8080': ",
+			"Password for 'https://example.com:8443': ",
+		} {
+			out, err := exec.Command("sh", s.askPath, prompt).Output()
+			if err != nil {
+				t.Fatalf("askpass(%q): %v", prompt, err)
+			}
+			if strings.TrimSpace(string(out)) != "" {
+				t.Fatalf("whitelist [example.com] must NOT answer %q, got %q", prompt, out)
+			}
+		}
+		// 同场景下 helper 一致拒绝（判据对齐的参照实现）
+		out, err := shHelperGet(t, s.helperPath, "example.com:8080").Output()
+		if err != nil {
+			t.Fatalf("helper get: %v", err)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			t.Fatalf("helper must refuse host=example.com:8080 for whitelist [example.com], got %q", out)
+		}
+	})
+
+	t.Run("port-bearing whitelist answers matching host:port", func(t *testing.T) {
+		s, err := newCredSession("tok", "s3cret", []string{"example.com:8080"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.close()
+		out, err := exec.Command("sh", s.askPath, "Password for 'https://example.com:8080':").Output()
+		if err != nil || strings.TrimSpace(string(out)) != "s3cret" {
+			t.Fatalf("whitelist [example.com:8080] must answer its own host:port, out=%q err=%v", out, err)
+		}
+		// 带端口白名单对不带端口的提示同样静默——同一主机不同端口是不同源
+		out, err = exec.Command("sh", s.askPath, "Password for 'https://example.com':").Output()
+		if err != nil {
+			t.Fatalf("askpass: %v", err)
+		}
+		if strings.TrimSpace(string(out)) != "" {
+			t.Fatalf("whitelist [example.com:8080] must NOT answer bare example.com, got %q", out)
+		}
+	})
+
+	t.Run("bare host prompt still answered by bare whitelist", func(t *testing.T) {
+		s, err := newCredSession("tok", "s3cret", []string{"example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.close()
+		out, err := exec.Command("sh", s.askPath, "Username for 'https://example.com':").Output()
+		if err != nil || strings.TrimSpace(string(out)) != "tok" {
+			t.Fatalf("no-port prompts keep working, out=%q err=%v", out, err)
+		}
+		// scp 形态（无 scheme，无端口）
+		out, err = exec.Command("sh", s.askPath, "Password for 'git@example.com':").Output()
+		if err != nil || strings.TrimSpace(string(out)) != "s3cret" {
+			t.Fatalf("scp-style host prompt keeps working, out=%q err=%v", out, err)
+		}
+	})
+}

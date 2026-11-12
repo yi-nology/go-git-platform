@@ -21,6 +21,12 @@ var urlContextRe = regexp.MustCompile(`\]\([^)]*$|\w+://\S*$|mailto:\S*$`)
 // Email addresses (foo@bar.com) are excluded by the leading non-word-char
 // guard. Mentions inside URLs (e.g. `[@user](https://example.com/@user)`)
 // are also excluded. The returned order follows first occurrence.
+//
+// 尾部标点剥离（issue #145）：用户名字符类含 '.'/'-'（GitLab 的 first.last
+// 形态），正文最常见的 "cc @alice." 会把句号吞进用户名——解析出 "alice."
+// 而非合法账号 "alice"，真实用户被漏掉。合法账号名不以 '.'/'-' 结尾
+// （GitHub/GitLab 注册规则同此），只裁尾部、保留内部点号（@first.last
+// 不受影响）；"@alice..." 三连句号裁成 "alice"。
 func ExtractMentions(body string) []string {
 	seen := make(map[string]struct{})
 	var result []string
@@ -39,6 +45,10 @@ func ExtractMentions(body string) []string {
 		}
 		if isInsideURL(body, atPos) {
 			continue
+		}
+		name = strings.TrimRight(name, ".-")
+		if name == "" {
+			continue // 字符类只命中标点本身（如 "@..."），不是用户名
 		}
 		if _, ok := seen[name]; !ok {
 			seen[name] = struct{}{}

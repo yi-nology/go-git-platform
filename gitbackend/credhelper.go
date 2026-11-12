@@ -144,12 +144,21 @@ func (s *credSession) writeHelperScript(tokenPath string) (string, error) {
 // 从提示文本（"Username for 'https://example.com': " 形态）里提取目标主机，
 // 只在白名单内才应答；未知提示一律静默退出——旧实现对任意提示回退输出
 // username，同样构成跨域泄漏面（issue #106）。
+//
+// 主机判据与 helper 路径同口径：**完整 host（含端口）**（issue #144）。
+// 白名单来自 hostOfURL 的 url.Parse().Host（https://example.com:8080 ⇒
+// "example.com:8080"），helper 比对的是 git credential 协议送来的 host= 行
+// （带端口原样）——旧 askpass 的 `host=${u%%:*}` 把端口剥掉后用的是另一套
+// 口径，白名单 example.com 时 `http://example.com:8080` 的提示也命中，
+// git 跟随重定向/子模块解析到带端口主机时令牌被投给白名单未声明的 origin。
+// 端口判据对齐 transport/client.go 的同源判定：同一台机器的不同端口也是
+// 不同源。
 func (s *credSession) writeAskpassScript(tokenPath string) (string, error) {
 	askPath := filepath.Join(s.dir, "askpass")
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("# gitferry ephemeral askpass (auto-generated)\n")
-	b.WriteString("# 只应答白名单主机的 Username/Password 提示，其余静默退出。\n")
+	b.WriteString("# 只应答白名单主机（含端口，与 credential helper 同判据）的 Username/Password 提示，其余静默退出。\n")
 	if len(s.hosts) == 0 {
 		b.WriteString("exit 0\n")
 		//nolint:gosec // G306: git 需要以 0700 可执行方式调用 askpass
@@ -167,7 +176,8 @@ func (s *credSession) writeAskpassScript(tokenPath string) (string, error) {
 	b.WriteString("u=${u#*://}\n")
 	b.WriteString("u=${u%%/*}\n")
 	b.WriteString("u=${u#*@}\n")
-	b.WriteString("host=${u%%:*}\n")
+	// 保留端口：host:port 整体比对，白名单外的主机一律静默（issue #144）
+	b.WriteString("host=$u\n")
 	b.WriteString("host=$(printf '%s' \"$host\" | tr '[:upper:]' '[:lower:]')\n")
 	b.WriteString("case \"$host\" in\n")
 	patterns := make([]string, 0, len(s.hosts))

@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	crand "crypto/rand"
 	"crypto/x509"
+	"embed"
 	"encoding/pem"
 	"errors"
 	"strings"
@@ -121,5 +122,48 @@ func TestSSHKeyHelper_ProcessPrivateKey_PreservesCauseChain(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to parse encrypted private key") {
 		t.Errorf("friendly context missing from message: %q", err.Error())
+	}
+}
+
+//go:embed testdata
+var keyFixtures embed.FS
+
+// TestSSHKeyHelper_ProcessPrivateKey_DecryptRoundTrip 钉解密成功路径：带口令
+// 的 openssh ed25519 私钥经 ProcessPrivateKey 解密重编码为无口令 PKCS8 后，
+// 必须能用无口令 ParsePrivateKey 解析且与夹具公钥同一密钥对。回归背景
+// （随 gitbackend #142 接线发现）：openssh 的 ed25519 解出 *ed25519.PrivateKey，
+// x509.MarshalPKCS8PrivateKey 不认指针类型——不解引用则最常见的现代密钥类型
+// 走到 "unknown key type while marshaling PKCS#8"。
+func TestSSHKeyHelper_ProcessPrivateKey_DecryptRoundTrip(t *testing.T) {
+	encPEM, err := keyFixtures.ReadFile("testdata/enc_ed25519.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pubPEM, err := keyFixtures.ReadFile("testdata/enc_ed25519.pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewSSHKeyHelper()
+	plain, err := h.ProcessPrivateKey(string(encPEM), "pkgcred-pass")
+	if err != nil {
+		t.Fatalf("decrypt with correct passphrase: %v", err)
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(plain))
+	if err != nil {
+		t.Fatalf("re-encoded key must parse WITHOUT passphrase: %v\nkey:\n%s", err, plain)
+	}
+	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(pubPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := ssh.FingerprintSHA256(signer.PublicKey()), ssh.FingerprintSHA256(pubKey); got != want {
+		t.Fatalf("round-trip produced a different keypair: got %s, want %s", got, want)
+	}
+
+	// CRLF 归一面：Windows 行尾的加密 key 同样可解
+	crlf := strings.ReplaceAll(string(encPEM), "\n", "\r\n")
+	if plain2, err := h.ProcessPrivateKey(crlf, "pkgcred-pass"); err != nil || !strings.HasSuffix(plain2, "\n") {
+		t.Fatalf("CRLF key: plain=%q err=%v", plain2, err)
 	}
 }

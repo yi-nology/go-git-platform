@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 )
 
@@ -170,5 +171,55 @@ func TestCollectErrorReturnsNil(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("got = %v, want nil on error", got)
+	}
+}
+
+// TestEachBounded_ReusedBufferNotFalseTruncation 回归（issue #143）：旧实现
+// 的伪翻页检测 `prev = batch` 存的是切片头别名——fetch 复用同一底层数组
+// （避免每页分配的常规写法）时 batch 与 prev 恒等，第 2 页即被判成无进展
+// 静默收手：列表截成第 1 页、err 为 nil。修复后上一页取快照再比较。
+func TestEachBounded_ReusedBufferNotFalseTruncation(t *testing.T) {
+	buf := make([]int, 3)                             // fetch 每页复用同一底层数组
+	want := []int{10, 11, 12, 20, 21, 22, 30, 31, 32} // 三页共 9 个元素
+	pages := 0
+	var got []int
+	err := EachBounded(context.Background(), func(_ context.Context, page int) ([]int, error) {
+		pages++
+		if page > 3 {
+			return nil, nil // 取完
+		}
+		for i := range buf {
+			buf[i] = want[(page-1)*3+i]
+		}
+		return buf, nil
+	}, 10, func(item int) error {
+		got = append(got, item)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("reused-buffer walk must not truncate silently: %v", err)
+	}
+	if pages != 4 { // 三页数据 + 空页收尾
+		t.Fatalf("pages = %d, want 4（旧实现第 2 页即误判停手）", pages)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got = %v, want %v", got, want)
+	}
+}
+
+// 复用 buffer 时真·伪翻页（服务端每页回同一批值）仍须被判停：快照比较的
+// 语义是「值相同」，不是「内存不同」。
+func TestEachBounded_ReusedBufferStillDetectsNoProgress(t *testing.T) {
+	buf := []int{1, 2}
+	fetches := 0
+	err := EachBounded(context.Background(), func(_ context.Context, _ int) ([]int, error) {
+		fetches++
+		return buf, nil // 平台忽略 page 参数，每页同一 buffer 同一批值
+	}, 50, func(int) error { return nil })
+	if err != nil {
+		t.Fatalf("no-progress soft stop: %v", err)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetches = %d, want 2", fetches)
 	}
 }
