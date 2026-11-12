@@ -6,6 +6,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.131.0] - 2026-11-13
+
+### Fixed（清零战役 Y4——六个真缺陷，#141-#146）
+
+- **gitbackend/gogit Merge 空指针**（#141）：commit 对象缺失时 `CommitObject`
+  解引用 panic 打穿宿主——保留两处错误检查 fail-fast 返回 error，与 native 后端
+  同场景同形。
+- **gitbackend/native 丢 Passphrase**（#142）：`AuthConfig.Passphrase` 此前被
+  静默丢弃，带口令 SSH 私钥必然认证失败——`resolveAuth` 经 `ProcessPrivateKey`
+  进程内解密落盘（SSHKeyContent 与带路径 SSHKey 两路），口令错 fail-fast；
+  顺带修复 openssh ed25519 解出指针类型不被 `x509.MarshalPKCS8PrivateKey` 认的
+  缺陷（最常见密钥类型解密成功后报 unknown key type）。
+- **provider/EachBounded 伪翻页误判**（#143）：上一页取 `slices.Clone` 快照再
+  比较——调用方复用 buffer 时列表不再被第 2 页误判静默截断，真伪翻页仍检出。
+- **gitbackend/askpass 剥端口**（#144，安全面）：凭据主机白名单比对此前剥掉
+  端口号，与 helper 路径判据不一致——令牌可能投给白名单未声明的 origin。
+  host 提取保留端口（host:port 整体比对）。
+- **provider/ExtractMentions 吞标点**（#145）：`TrimRight(name, ".-")` 只裁
+  尾部保留内部点号，裁空跳过——`cc @alice.` 不再解析出用户 `alice.`。
+- **provider/错误链遍历只走单分支**（#146）：`RateLimitRecovery`/`Wrap` 的
+  `errors.Unwrap` 遍历新增 `Unwrap() []error` 多分支 DFS（与 errors.Is/As
+  同口径、按值剪环），多 `%w` 链不再断；全仓手写遍历清零。
+
+
 ## [0.130.0] - 2026-11-13
 
 ### Security（敏感 query 词表合并——strip/redact 双向补齐 15 项超集）
