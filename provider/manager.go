@@ -2,13 +2,12 @@ package provider
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"reflect"
 	"sync/atomic"
 	"time"
 
+	"github.com/oekit/pkg/encoding"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -90,8 +89,7 @@ func HashToken(token string) string {
 	if token == "" {
 		return ""
 	}
-	sum := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(sum[:])[:16]
+	return encoding.Sha256(token)[:16]
 }
 
 // GetByURL detects the platform from the clone URL and returns a cached or

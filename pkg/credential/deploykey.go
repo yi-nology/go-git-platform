@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"strings"
 
+	"github.com/oekit/pkg/encoding"
 	oekiterrors "github.com/oekit/pkg/errors"
 
 	"golang.org/x/crypto/ssh"
@@ -60,12 +60,12 @@ func FingerprintSHA256(authorizedKey string) string {
 	if len(fields) < 2 {
 		return ""
 	}
-	raw, err := base64.StdEncoding.DecodeString(fields[1])
+	raw, err := encoding.Base64DecodeBytes(fields[1])
 	if err != nil {
 		return ""
 	}
 	sum := sha256.Sum256(raw)
-	return "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
+	return "SHA256:" + encoding.Base64RawEncodeBytes(sum[:])
 }
 
 // MatchFingerprint 判断 authorized_keys 公钥是否匹配期望指纹。
