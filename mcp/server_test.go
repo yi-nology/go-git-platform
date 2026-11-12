@@ -307,7 +307,7 @@ func TestCollaboratorPermissionValidated(t *testing.T) {
 }
 
 // TestNewServer_ConcurrentConstruction 钉死并发构造无数据竞争：toolRegistry
-// 是包级台账（issue #122），并发 NewServer 写入必须由锁保护。
+// 是包级台账（issue #122），并发 NewServer 写入由 SafeMap 容器层承接。
 // 必须带 -race 运行（Makefile TEST_FLAGS 已含）。
 func TestNewServer_ConcurrentConstruction(t *testing.T) {
 	const n = 16
@@ -328,7 +328,7 @@ func TestNewServer_ConcurrentConstruction(t *testing.T) {
 		}
 	}
 	// 台账仍完整：core toolset 至少有仓库读工具记账。
-	if len(toolRegistry["core"]) == 0 {
+	if len(recordedToolsOf("core")) == 0 {
 		t.Fatalf("toolRegistry[core] empty after concurrent construction")
 	}
 }

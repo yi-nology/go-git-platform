@@ -16,9 +16,11 @@ package mcpserver
 
 import (
 	"fmt"
-	"sync"
+	"slices"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/oekit/pkg/container"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -88,25 +90,48 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	return s, nil
 }
 
-// toolRegistry 是 add() 挂账的工具面台账（toolset → 工具名集合）——
-// README 工具表对账机检的注册面真源（issue #122）。全局可变,但只做
-// 幂等集合写入（同一 server 重复构造不叠加,测试 -count=2 安全）。
-// 并发构造 NewServer 时会并发写入,必须经 toolRegistryMu 保护。
-var (
-	toolRegistryMu sync.Mutex
-	toolRegistry   = map[string]map[string]bool{}
-)
+// toolRegistry 是 add() 挂账的工具面台账（key = toolset + "\x00" + 工具名）
+// —— README 工具表对账机检的注册面真源（issue #122）。oekit container.
+// SafeMap 收编（本仓第 6 处注册表迁移，前五处见 AGENTS.md 规则一）：
+// 并发构造 NewServer 的写入由容器层互斥承接，Phase 1 的手写
+// toolRegistryMu 随之删除。
+var toolRegistry = container.NewSafeMap[string, bool]()
+
+const toolsetSep = "\x00"
+
+func toolsetKey(toolset, name string) string { return toolset + toolsetSep + name }
 
 func recordTool(toolset, name string) {
 	if toolset == "" {
 		return
 	}
-	toolRegistryMu.Lock()
-	defer toolRegistryMu.Unlock()
-	m := toolRegistry[toolset]
-	if m == nil {
-		m = map[string]bool{}
-		toolRegistry[toolset] = m
-	}
-	m[name] = true
+	toolRegistry.Set(toolsetKey(toolset, name), true)
+}
+
+// recordedToolsOf 返回某 toolset 已挂账的工具名（README 对账读取面）。
+// Range 走容器快照、顺序不定 ⇒ 输出排序保证确定性。
+func recordedToolsOf(toolset string) []string {
+	prefix := toolset + toolsetSep
+	var out []string
+	toolRegistry.Range(func(k string, _ bool) bool {
+		if after, ok := strings.CutPrefix(k, prefix); ok {
+			out = append(out, after)
+		}
+		return true
+	})
+	slices.Sort(out)
+	return out
+}
+
+// recordedToolsets 返回全部已挂账的 toolset 名（排序）。
+func recordedToolsets() []string {
+	var out []string
+	toolRegistry.Range(func(k string, _ bool) bool {
+		if i := strings.IndexByte(k, toolsetSep[0]); i > 0 && !slices.Contains(out, k[:i]) {
+			out = append(out, k[:i])
+		}
+		return true
+	})
+	slices.Sort(out)
+	return out
 }
