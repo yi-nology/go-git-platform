@@ -6,6 +6,41 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security（敏感 query 词表合并——strip/redact 双向补齐 15 项超集）
+
+- fix(transport): **敏感 query 参数词表合并为 15 项超集单一真源**——跨 host
+  重定向剥离补 `password/passwd/secret/key`，日志与错误掩码补
+  `auth/authorization/jwt/session/signature/sig`（原 strip 11 项与 redact
+  9 项互有出入，任何一份缺席都是漏洞面：口令参数随重定向外泄、jwt 明文进
+  日志）。
+
+### Fixed（SSH 转义 + 错误卫生）
+
+- fix(ssh): **GIT_SSH_COMMAND 七处 `%q` 改 `shellx.Quote`**——`sh -c` 执行面
+  下 `$` 与反引号不再被 shell 展开（旧双引号形态对元字符路径不安全）；
+  `sshHostKeyArgs` 手拼点同收编，元字符路径测试补钉。
+- fix: **六处非清理类 `_ =` 丢错误逐处收口**（规则一）——可传播者传播、
+  best-effort 者显式注释；评审追加 `wt.Remove` 索引写错误由静默丢弃改传播。
+- fix(gitbackend): **Delete 分支补「已达期望态」容忍**——双侧同删文件的
+  rebase 不再假冲突（`IsNotExist` + `index.ErrEntryNotFound` 容忍、真 I/O
+  错误仍传播），补 both-deleted rebase 回归测试 ×2（评审 round-2）。
+
+### Changed（oekit 收编轮——七收编 + 两处评估转收编）
+
+- refactor: **oekit 收编轮**——`HashToken`/`FingerprintSHA256` 走
+  `encoding`、branchfilter 走 `stringx.SplitCSVNonEmpty` +
+  `slicex.Filter`、mcp `toolRegistry` 迁 `container.SafeMap`（第六处注册表）、
+  `TailOfReader` 委托 `bufiox.TailLines`（**#198 更正**：v0.118.0 声称收编
+  从未实施，本轮 `c9aa087` 真实首次落地）、`WaitForCommitStatus` 轮询环收编
+  `retry.Poll` + `InitialDelay` 定时器卫生。
+- refactor(provider): **ttlcache flights 迁 `container.SafeMap.GetOrSet`、
+  世代计数迁 `sync/atomic.Uint64`**——手写互斥删除；自建 per-key 单飞按
+  #353 保留（不迁）。
+- test(provider): **cachetest 套件认证 ttlcache**——测试内适配器
+  `ttlCacheAside` 覆盖 `getOrBuild`/`remove`，挂载
+  `RunNoBackgroundGoroutine` + `RunReadPromotion` 两变体；其余 10 变体
+  fail-loud 逐变体一行原因排除。
+
 ## [0.129.0] - 2026-11-12
 
 ### Security（MCP HTTP 监听加固——评审 P0 清零）

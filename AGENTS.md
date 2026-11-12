@@ -142,7 +142,9 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   cron 方言/cache Key 契约警示/httpjson 204 空体对偶面）——经 ttlcache
   委托与错误面被动受益。下游反馈回流已全部被上游采纳落地（v0.37.0，当日往返）：#197 timex
   `ParseFirst`（已收编：gitcode/gitee due_on 手写循环删除）、#198
-  bufiox `TailLines`（已收编：TailOfReader 委托，CRLF 归一改进）、
+  bufiox `TailLines`（**原存档「已收编」不实，2026-11-12 更正**：v0.118.0
+  d657dc2 仅在提交信息/CHANGELOG 声称委托、diff 从未触及 logtail.go，
+  c9aa087 才是真实首次落地——详见规则一「仓内扫描收编轮」条目）、
   #199 Slice.RemoveIf（无下游消费点，原语就位待用）、#210 MatchSimpleGlob
   跨 `/` 语义 doc 补全、#211 pagination WalkEach（收编否决：缺伪翻页
   检测——Forgejo 15.0.1 现场实证行为，pageiter 保留）、#212 secretx
@@ -341,6 +343,43 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   open（不在 v0.10.0），下轮增量再审。升级落点：主模块+mcp 双 go.mod 三行
   同升（mcp 无 replace（go.work 本地协同）、require 版本行随 tag 人工跟随），Go 地板 1.26
   低于本仓 1.27.4 无 toolchain 动作。
+- **仓内扫描收编轮（2026-11-12，用户指令「尽可能使用 oekit」；扫描方法 =
+  10 模式族仓内全量 × 三模块 go doc API 面 × 存档交叉）**。收编七处：
+  ① shellx.Quote——GIT_SSH_COMMAND 七处 `%q` 改单引号化（旧注释对 $/反引号
+  的保护声明不实，`sh -c` 下会展开；sshHostKeyArgs 手拼点同收编；元字符
+  测试补钉 GIT_SSH_COMMAND 面，sshHostKeyArgs 无专属元字符测试为遗留
+  minor）；② container.SafeMap 第六处——mcp toolRegistry 拍平 key
+  迁移（Phase 1 手写互斥删除）；③ 敏感 query 词表合并 15 项超集单一真源
+  （strip 11 项与 redact 9 项互有出入，合并双向补齐：strip 补
+  password/passwd/secret/key、redact 补 auth/authorization/jwt/session/
+  signature/sig——行为变更记 CHANGELOG Security）；④ encoding 收编——
+  HashToken→Sha256、FingerprintSHA256 两端 Base64（无 raw-sha256 字节原语，
+  sha256.Sum256 诚实保留）；⑤ stringx.SplitCSVNonEmpty + slicex.Filter——
+  branchfilter 拆分样板与三处收集循环（早退谓词类 slicex 无 Any/FindFunc
+  原语，保留并注明）；⑥ bufiox.TailLines——TailOfReader 委托（**#198 条目
+  修正**：原存档称已收编系虚假声称——v0.118.0 d657dc2 提交信息与 CHANGELOG
+  宣称 TailLines 委托但 diff 从未触及 logtail.go，c9aa087 才是真实首次落地；
+  上方 #198 措辞已同步改正，CHANGELOG 未发布段补真实落地行）；⑦
+  retry.Poll——WaitForCommitStatus 轮询环收编 + InitialDelay 定时器卫生
+  （83098cf + 负 Timeout 无预算语义 e2e 钉子 07d33c2，未回滚）。三评估
+  结论：⑧ ttlcache flights 容器迁移——**采纳收编**（400c19a）：getOrBuild
+  flight 区迁 container.SafeMap.GetOrSet、世代计数迁 sync/atomic.Uint64，
+  手写互斥删除；**自建 per-key flight 保留（#353 不变，勿再评估迁移）**；
+  ⑨ cachetest 套件认证 ttlcache——**采纳收编**（4ba114b，初轮否决经审查
+  翻案）：测试内适配器 `ttlCacheAside` 覆盖 getOrBuild/remove，挂载
+  RunNoBackgroundGoroutine + RunReadPromotion 两变体，其余 10 变体 fail-loud
+  逐变体一行原因排除；⑩ SlogLogger 经 logx 重写——**评估否决（勿再评估，
+  NO_COMMIT）**：值接收者 API 钉死（逐调用构造 3 allocs/次 + 每事件
+  getenv 与 64 帧 caller walk；指针缓存破坏 NewDebugLogger 值返回与导出
+  方法集）、NewSlogLogger 强制 service name（消费方各仓约定不同）、组合
+  emit 注入 caller attr、朴素 level 门禁丢 debug、DebugEnabled 探针需依赖
+  将被删除的 level 映射——transport SlogLogger 维持手写。Tier 3 复核维持：
+  retry.go 退避/ratelimit 节流/gitee FixedZone/examples 日志/contracttest
+  空密钥 HMAC/ptrx——扫描现场与存档一致（维持不引入）。后续候选（清单外，
+  另立单/下轮清理）：GetCommitsBetween 返回 newest-first 使多 commit gogit
+  Rebase 回放顺序与 native git 相反（既有行为、非本轮引入，另立单）；
+  gitbackend/gogit_file.go:284/:299 两处清理类裸 `_ =`（os.Remove/f.Close）
+  仍在任务清单外（清单外清理类）。
 
 ## 规则二：公共契约红线
 
