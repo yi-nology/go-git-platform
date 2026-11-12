@@ -56,5 +56,3 @@ require (
 	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 )
-
-replace github.com/yi-nology/go-git-platform => ../

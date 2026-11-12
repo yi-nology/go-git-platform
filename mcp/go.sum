@@ -92,6 +92,8 @@ github.com/segmentio/encoding v0.5.4 h1:OW1VRern8Nw6ITAtwSZ7Idrl3MXCFwXHPgqESYfv
 github.com/segmentio/encoding v0.5.4/go.mod h1:HS1ZKa3kSN32ZHVZ7ZLPLXWvOVIiZtyJnO1gPH1sKt0=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
+github.com/yi-nology/go-git-platform v0.128.0 h1:e1QG7xFgT2E5YOybM3YLKNACcZFoZVlnfXJC3r4naLI=
+github.com/yi-nology/go-git-platform v0.128.0/go.mod h1:8whX6Algy5B7vVb4ni3xB5VIkSLRXfV0XujqS0Jzbiw=
 github.com/yi-nology/go-gitcode v0.16.0 h1:+YLwbUGj07BBqr8rVLrXri1KFOL2bq1rB/E89hTFJv8=
 github.com/yi-nology/go-gitcode v0.16.0/go.mod h1:7WUskajsH/fvcIA9wqoQVLeOL+E7pL/8SbBOhDgxFkc=
 github.com/yi-nology/go-gongfeng v0.4.0 h1:/8poTAASG7mx5kRPYsepbN+OaXQ/uvDKcenEYeNMlCg=

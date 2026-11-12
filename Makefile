@@ -15,22 +15,26 @@ GO ?= go
 GOLANGCI_LINT ?= golangci-lint
 TEST_FLAGS ?= -race -count=1
 COVER_PROFILE ?= coverage.out
+# Root-module jobs explicitly disable the workspace so `make check` keeps
+# covering only the root module (see AGENTS.md 规则四). Override with
+# `make GOWORK=on` to build in workspace mode.
+GOWORK ?= off
 
-.PHONY: all build test test-short cover lint fmt vet tidy check clean install-tools
+.PHONY: all build test test-short cover lint fmt vet tidy check check-mcp clean install-tools
 
 all: build
 
 ## build compiles every package in the module.
 build:
-	$(GO) build ./...
+	GOWORK=$(GOWORK) $(GO) build ./...
 
 ## test runs the full test suite with race detection and coverage.
 test:
-	$(GO) test $(TEST_FLAGS) -coverprofile=$(COVER_PROFILE) ./...
+	GOWORK=$(GOWORK) $(GO) test $(TEST_FLAGS) -coverprofile=$(COVER_PROFILE) ./...
 
 ## test-short runs only tests marked as short (smoke tests).
 test-short:
-	$(GO) test -short ./...
+	GOWORK=$(GOWORK) $(GO) test -short ./...
 
 ## cover prints the per-function coverage summary.
 cover: test
@@ -51,14 +55,21 @@ fmt:
 
 ## vet runs the standard go vet checks.
 vet:
-	$(GO) vet ./...
+	GOWORK=$(GOWORK) $(GO) vet ./...
 
 ## tidy syncs go.mod and go.sum with the current source tree.
 tidy:
-	$(GO) mod tidy
+	GOWORK=$(GOWORK) $(GO) mod tidy
 
 ## check is the CI gate: fmt + vet + lint + test.
 check: vet lint test
+
+## check-mcp runs the CI gate inside the mcp module (workspace mode, so it
+## tests the local SDK, matching the pre-replace development flow).
+check-mcp:
+	cd mcp && $(GO) vet ./...
+	cd mcp && $(GO) test $(TEST_FLAGS) ./...
+	cd mcp && $(GOLANGCI_LINT) run ./...
 
 ## clean removes generated artifacts.
 clean:
