@@ -255,7 +255,7 @@ func TestWaitForCommitStatusNotFoundReturnsImmediately(t *testing.T) {
 }
 
 func TestInitWaitTimeoutSemantics(t *testing.T) {
-	interval, budget, _ := initWait(WaitOptions{})
+	interval, budget, timeout, _ := initWait(WaitOptions{})
 	if interval != DefaultWaitInterval {
 		t.Fatalf("interval = %v, want default", interval)
 	}
@@ -267,10 +267,15 @@ func TestInitWaitTimeoutSemantics(t *testing.T) {
 		t.Fatal("budget fired immediately")
 	default:
 	}
-	if _, budget2, _ := initWait(WaitOptions{Timeout: -1}); budget2 != nil {
-		t.Fatal("negative Timeout must disable the budget")
+	if timeout != DefaultWaitTimeout {
+		t.Fatalf("timeout = %v, want DefaultWaitTimeout after zero-value backfill", timeout)
 	}
-	if _, budget3, w3 := initWait(WaitOptions{Contexts: []string{"a", "a", "b"}}); len(w3) != 2 {
+	if _, budget2, timeout2, _ := initWait(WaitOptions{Timeout: -1}); budget2 != nil {
+		t.Fatal("negative Timeout must disable the budget")
+	} else if timeout2 >= 0 {
+		t.Fatalf("timeout = %v, want negative Timeout passed through", timeout2)
+	}
+	if _, budget3, _, w3 := initWait(WaitOptions{Contexts: []string{"a", "a", "b"}}); len(w3) != 2 {
 		t.Fatalf("want = %v, want deduped contexts", w3)
 	} else if budget3 == nil {
 		t.Fatal("explicit Timeout must arm the budget")

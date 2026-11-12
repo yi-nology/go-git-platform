@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/oekit/concurrency/retry"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -64,47 +66,65 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 		return "", oekiterrors.Wrap(ErrNotImplemented, "provider does not implement CommitStatusManager")
 	}
 
-	interval, budget, want := initWait(opts)
+	interval, budget, timeout, want := initWait(opts)
 
+	start := time.Now()
 	if opts.InitialDelay > 0 {
+		// NewTimer + Stop rather than time.After: on the ctx/budget arms
+		// the pending delay timer is released immediately instead of
+		// lingering until it would have fired.
+		timer := time.NewTimer(opts.InitialDelay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return "", ctx.Err()
 		case <-budget:
+			timer.Stop()
 			return "", ErrWaitTimedOut
-		case <-time.After(opts.InitialDelay):
+		case <-timer.C:
 		}
 	}
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+	remaining := timeout - time.Since(start)
+	if timeout < 0 {
+		// A negative Timeout disables the budget entirely (WaitOptions):
+		// poll until the condition completes or the caller's context ends.
+		remaining = time.Duration(math.MaxInt64)
+	} else if remaining <= 0 {
+		return "", ErrWaitTimedOut
+	}
 
 	var last CombinedCommitStatus
-	for {
+	var final CommitStatusState
+	err := retry.Poll(ctx, interval, remaining, func() (bool, error) {
 		statuses, err := csm.ListCommitStatuses(ctx, owner, repo, sha)
 		if err != nil {
 			// A definitive miss is a diagnosis, not a reason to wait:
 			// a wrong SHA (or lost permissions) would otherwise burn the
 			// whole budget and surface as a misleading ErrWaitTimedOut.
 			if oekiterrors.Is(err, ErrNotFound) {
-				return "", err
+				return false, err
 			}
 			// Transient read errors (5xx, rate limits already retried by
 			// the transport) are not fatal: keep polling.
-		} else {
-			snap, done := foldTerminalStates(statuses, want)
-			if done {
-				return snap.State, nil
-			}
-			last = snap
+			return false, nil
 		}
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-budget:
-			return "", oekiterrors.Wrap(ErrWaitTimedOut, "wait budget exhausted", "last_state", last.String())
-		case <-ticker.C:
+		snap, done := foldTerminalStates(statuses, want)
+		if done {
+			final = snap.State
+			return true, nil
 		}
+		last = snap
+		return false, nil
+	})
+	switch {
+	case err == nil:
+		return final, nil
+	case oekiterrors.Is(err, retry.ErrTimeout):
+		return "", oekiterrors.Wrap(ErrWaitTimedOut, "wait budget exhausted", "last_state", last.String())
+	default:
+		// ctx cancellation / ErrNotFound pass through unchanged.
+		return "", err
 	}
 }
 
@@ -150,7 +170,7 @@ func LatestCommitStatuses(statuses []CommitStatus) []CommitStatus {
 // surface as ErrWaitTimedOut while a caller's context cancellation
 // surfaces as ctx.Err() — the two are different diagnoses and callers
 // check for them differently.
-func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time, want map[string]bool) {
+func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time, timeout time.Duration, want map[string]bool) {
 	interval = opts.Interval
 	if interval <= 0 {
 		interval = DefaultWaitInterval
@@ -169,11 +189,12 @@ func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time
 		t := time.NewTimer(opts.Timeout)
 		budget = t.C
 	}
+	timeout = opts.Timeout
 	want = make(map[string]bool, len(opts.Contexts))
 	for _, c := range opts.Contexts {
 		want[c] = true
 	}
-	return interval, budget, want
+	return interval, budget, timeout, want
 }
 
 // foldTerminalStates combines the LATEST status per context (filtered to
