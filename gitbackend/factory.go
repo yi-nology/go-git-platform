@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/oekit/pkg/container"
-	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // GitBackendConstructor creates a GitBackend instance.
@@ -36,7 +35,7 @@ func NewGitBackend(opts Options) (GitBackend, error) {
 	if opts.Type != "" {
 		ctor, ok := backendRegistry.Get(opts.Type)
 		if !ok {
-			return nil, oekiterrors.Errorf("gitbackend: unknown type %q", opts.Type)
+			return nil, fmt.Errorf("gitbackend: unknown type %q", opts.Type)
 		}
 		return ctor(opts)
 	}
@@ -63,7 +62,7 @@ func newAutoBackend(opts Options, nativeCtor GitBackendConstructor, hasNative bo
 	if hasGogit {
 		return gogitCtor(opts)
 	}
-	return nil, oekiterrors.Errorf("gitbackend: no backends available")
+	return nil, fmt.Errorf("gitbackend: no backends available")
 }
 
 func init() {

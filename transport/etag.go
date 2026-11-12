@@ -3,6 +3,7 @@ package transport
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -198,7 +199,7 @@ func (c *ETagCache) processRT(req *http.Request, resp *http.Response) (*http.Res
 		e, err := c.entries.Get(context.Background(), etagKey(req))
 		if err != nil || e == nil {
 			_ = resp.Body.Close()
-			return nil, oekiterrors.Errorf("transport: conditional request for %s: %w", redactURL(*req.URL), ErrETagEntryGone)
+			return nil, fmt.Errorf("transport: conditional request for %s: %w", redactURL(*req.URL), ErrETagEntryGone)
 		}
 		_ = resp.Body.Close()
 		return e.synthesize(req), nil

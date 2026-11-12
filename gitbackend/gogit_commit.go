@@ -247,14 +247,14 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 
 	// Non-fast-forward merge
 	if opts.FFOnly {
-		return newGitError("Merge", repoPath, "", oekiterrors.Errorf("not a fast-forward merge"))
+		return newGitError("Merge", repoPath, "", fmt.Errorf("not a fast-forward merge"))
 	}
 
 	// Find merge-base
 	baseHash, err := b.MergeBase(ctx, repoPath, head.Hash().String(), ref.Hash().String())
 	if err != nil || baseHash == "" {
 		if !opts.AllowUnrelated {
-			return newGitError("Merge", repoPath, "", oekiterrors.Errorf("no common ancestor"))
+			return newGitError("Merge", repoPath, "", fmt.Errorf("no common ancestor"))
 		}
 	}
 
@@ -484,7 +484,7 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 	// Find merge-base
 	baseHash, err := b.MergeBase(ctx, repoPath, head.Hash().String(), ontoHash.String())
 	if err != nil || baseHash == "" {
-		return newGitError("Rebase", repoPath, "", oekiterrors.Errorf("no common ancestor"))
+		return newGitError("Rebase", repoPath, "", fmt.Errorf("no common ancestor"))
 	}
 
 	// Commits to replay: (base, HEAD]
@@ -546,7 +546,7 @@ func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
 
 	origHead, err := rebaseStateFile(repoPath, "orig-head")
 	if err != nil {
-		return newGitError("RebaseAbort", repoPath, "", oekiterrors.Errorf("no rebase in progress"))
+		return newGitError("RebaseAbort", repoPath, "", fmt.Errorf("no rebase in progress"))
 	}
 
 	headName, err := rebaseStateFile(repoPath, "head-name")
@@ -586,7 +586,7 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 
 	origHead, err := rebaseStateFile(repoPath, "orig-head")
 	if err != nil {
-		return newGitError("RebaseContinue", repoPath, "", oekiterrors.Errorf("no rebase in progress"))
+		return newGitError("RebaseContinue", repoPath, "", fmt.Errorf("no rebase in progress"))
 	}
 	onto, err := rebaseStateFile(repoPath, "onto")
 	if err != nil {
@@ -609,7 +609,7 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 	// counter refers to them), not the onto side's.
 	baseHash, err := b.MergeBase(ctx, repoPath, origHead, onto)
 	if err != nil || baseHash == "" {
-		return newGitError("RebaseContinue", repoPath, "", oekiterrors.Errorf("no common ancestor"))
+		return newGitError("RebaseContinue", repoPath, "", fmt.Errorf("no common ancestor"))
 	}
 	commits, err := b.GetCommitsBetween(ctx, repoPath, baseHash, origHead)
 	if err != nil {

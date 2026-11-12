@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -49,13 +50,13 @@ func detectSSH(raw string) (*DetectResult, error) {
 	rest := raw[4:]
 	parts := strings.SplitN(rest, ":", 2)
 	if len(parts) != 2 {
-		return nil, oekiterrors.Errorf("invalid SSH URL: %s", raw)
+		return nil, fmt.Errorf("invalid SSH URL: %s", raw)
 	}
 	host := parts[0]
 	path := cleanRepoPath(parts[1])
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
-		return nil, oekiterrors.Errorf("invalid SSH path: %s", path)
+		return nil, fmt.Errorf("invalid SSH path: %s", path)
 	}
 	platform, baseURL, err := classifyHost(host)
 	if err != nil {
@@ -78,7 +79,7 @@ func detectSSHProtocol(raw string) (*DetectResult, error) {
 	path := cleanRepoPath(u.Path)
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
-		return nil, oekiterrors.Errorf("invalid SSH path: %s", path)
+		return nil, fmt.Errorf("invalid SSH path: %s", path)
 	}
 	platform, baseURL, err := classifyHost(host)
 	if err != nil {
@@ -101,7 +102,7 @@ func detectHTTP(raw string) (*DetectResult, error) {
 	path := cleanRepoPath(u.Path)
 	pathParts := strings.SplitN(path, "/", 2)
 	if len(pathParts) != 2 {
-		return nil, oekiterrors.Errorf("invalid HTTP path: %s", path)
+		return nil, fmt.Errorf("invalid HTTP path: %s", path)
 	}
 	platform, baseURL, err := classifyHost(host)
 	if err != nil {

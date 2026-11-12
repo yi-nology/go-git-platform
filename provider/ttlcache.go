@@ -123,13 +123,10 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 	defer func() {
 		r := recover()
 		if r != nil {
-			// oekiterrors.Errorf（issue #132，规则一：禁 bare fmt.Errorf）。
-			// panic 值是 error 时多 %w 保留 cause 链；非 error panic 值只格式化。
-			if e, ok := r.(error); ok {
-				f.err = oekiterrors.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %w", e)
-			} else {
-				f.err = oekiterrors.Errorf("provider: 回源构造 panic（同 key 等待者共享同一失败）: %v", r)
-			}
+			// panic 收编单源（pkg/errors.Recovered，#381 收编）：error 型
+			// panic 身份（Unwrap）不丢、非 error 带 %T 类型与 goroutine 栈
+			// ——手写双分支删除。
+			f.err = oekiterrors.Wrap(oekiterrors.Recovered(r), "provider: 回源构造 panic（同 key 等待者共享同一失败）")
 		}
 		close(f.done)
 		c.flightsMu.Lock()

@@ -1,9 +1,8 @@
 package provider
 
 import (
+	"fmt"
 	"time"
-
-	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // ParseTimestamp resolves one RFC3339 timestamp option (issue #52). The
@@ -28,7 +27,7 @@ func ParseTimestamp(field, value string) (time.Time, error) {
 		// 多 %w（issue #132）：*time.ParseError 的 cause 链随哨兵一路保留
 		// （oekiterrors.Errorf 多 %w 走 Unwrap() []error,house 先例
 		// errors.go 双链形态）,%v 丢弃 cause 的旧形态废除。
-		return time.Time{}, oekiterrors.Errorf("%w: %s %q is not RFC3339: %w", ErrInvalidInput, field, value, err)
+		return time.Time{}, fmt.Errorf("%w: %s %q is not RFC3339: %w", ErrInvalidInput, field, value, err)
 	}
 	return t, nil
 }

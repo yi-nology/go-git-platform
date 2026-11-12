@@ -1,11 +1,11 @@
 package gitbackend
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/shellx"
 )
 
@@ -42,7 +42,7 @@ func (s *credSession) close() {
 // helper/askpass 对一切主机静默拒绝——fail-closed，令牌不外泄。
 func newCredSession(username, secret string, hosts []string) (*credSession, error) {
 	if secret == "" {
-		return nil, oekiterrors.Errorf("cred session: empty secret")
+		return nil, fmt.Errorf("cred session: empty secret")
 	}
 	if username == "" {
 		username = "token"

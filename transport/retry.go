@@ -272,13 +272,17 @@ func (rc *RetryConfig) retryLoop(
 	for attemptN := 1; attemptN <= rc.MaxAttempts; attemptN++ {
 		if attemptN > 1 {
 			delay := rc.Backoff(attemptN-1, lastResp)
+			// NewTimer+Stop（#272 同形自留点顺手清）：time.After 在 ctx 早退
+			// 时计时器滞留到点才回收，每轮还新分配。
+			timer := time.NewTimer(delay)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				if lastResp != nil {
 					_ = lastResp.Body.Close()
 				}
 				return nil, nil, ctx.Err()
-			case <-time.After(delay):
+			case <-timer.C:
 			}
 			if err := resetBody(req); err != nil {
 				return nil, nil, err

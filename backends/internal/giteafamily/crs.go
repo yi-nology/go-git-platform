@@ -2,10 +2,9 @@ package giteafamily
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
-
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -191,7 +190,7 @@ func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 	// 不置 err，仅凭 err 判断会把"未合并"当成功返回，上层状态机谎报 MERGED。
 	// 统一兜底：非 2xx 一律转为错误，交给下面的 405 恢复分支/错误路径处理。
 	if err == nil && status/100 != 2 {
-		err = oekiterrors.Errorf("merge pull request: HTTP %d", status)
+		err = fmt.Errorf("merge pull request: HTTP %d", status)
 	}
 	if err != nil {
 		if status == 405 {

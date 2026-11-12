@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/oekit/pkg/container"
-	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // ErrWebhookFiltered 是 ParseWebhookEvent 的「噪声过滤」哨兵（issue #45）：
@@ -195,7 +194,7 @@ func Wrapf(platform Platform, op, format string, args ...any) error {
 	// oekiterrors.Errorf (issue #68): same shape as fmt.Errorf but keeps the
 	// cause chain for %w verbs and satisfies the "no bare fmt.Errorf" rule —
 	// this spot is outside the package's double-chain exemption quota.
-	cause := oekiterrors.Errorf(format, args...)
+	cause := fmt.Errorf(format, args...)
 	return &ProviderError{Platform: platform, Op: op, Cause: cause}
 }
 
@@ -211,7 +210,7 @@ func New(platform Platform, op string, status int, body string) error {
 		// oekiterrors.Errorf（issue #132）：单 %w + 动态 body 的格式化包装
 		// 不在「纯 %w 双链」永久豁免面内——oekiterrors.Errorf 与 fmt.Errorf
 		// 同型且保留 cause 链,规则一面归零。
-		pe.Cause = oekiterrors.Errorf("%w: %s", pe.Cause, body)
+		pe.Cause = fmt.Errorf("%w: %s", pe.Cause, body)
 	}
 	return pe
 }
@@ -371,7 +370,7 @@ func classifyStatusCode(statusCode int) error {
 	case statusCode >= 500 && statusCode < 600:
 		return ErrServerSide
 	default:
-		return oekiterrors.Errorf("HTTP %d", statusCode)
+		return fmt.Errorf("HTTP %d", statusCode)
 	}
 }
 

@@ -86,7 +86,7 @@ func buildTransportAuth(auth AuthConfig) (transport.AuthMethod, error) {
 				signer.HostKeyCallback = hk
 				return signer, nil
 			}
-			return authFail(oekiterrors.Errorf("SSH key file %s not found", auth.SSHKey))
+			return authFail(fmt.Errorf("SSH key file %s not found", auth.SSHKey))
 		}
 	}
 	return nil, nil
@@ -112,7 +112,7 @@ func hostKeyCallbackWithConfig(auth AuthConfig) (ssh.HostKeyCallback, error) {
 				want = "SHA256:" + want
 			}
 			if got != want {
-				return oekiterrors.Errorf("ssh host key fingerprint mismatch for %s: got %s want %s (possible MITM)", hostname, got, want)
+				return fmt.Errorf("ssh host key fingerprint mismatch for %s: got %s want %s (possible MITM)", hostname, got, want)
 			}
 			return nil
 		}, nil
@@ -127,7 +127,7 @@ func hostKeyCallbackWithConfig(auth AuthConfig) (ssh.HostKeyCallback, error) {
 		kh = filepath.Join(home, ".ssh", "known_hosts")
 	}
 	if _, err := os.Stat(kh); err != nil {
-		return nil, oekiterrors.Errorf("ssh host key verification: %s not found; add the host key (ssh-keyscan host >> %s), set HostKeyFingerprint, or set InsecureSkipTLS", kh, kh)
+		return nil, fmt.Errorf("ssh host key verification: %s not found; add the host key (ssh-keyscan host >> %s), set HostKeyFingerprint, or set InsecureSkipTLS", kh, kh)
 	}
 	cb, err := knownhosts.New(kh)
 	if err != nil {

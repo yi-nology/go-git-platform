@@ -2,9 +2,9 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -80,7 +80,7 @@ func registerWebhooks(s *mcp.Server, st *state) {
 	}
 	add(s, st, "update_webhook", "Update webhook", "Patch a webhook: nil fields are left unchanged; a non-nil events array replaces the whole event set.", true, func(ctx context.Context, in updateWebhookIn) (*provider.PlatformWebhook, error) {
 		if in.URL == nil && in.Secret == nil && in.Events == nil {
-			return nil, oekiterrors.Errorf("update_webhook needs at least one of url, secret, events")
+			return nil, fmt.Errorf("update_webhook needs at least one of url, secret, events")
 		}
 		return cm.UpdateWebhook(ctx, in.Owner, in.Repo, in.ID, provider.UpdateWebhookOptions{
 			URL: in.URL, Secret: in.Secret, Events: in.Events,

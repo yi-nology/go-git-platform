@@ -15,8 +15,9 @@
 package mcpserver
 
 import (
+	"fmt"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -70,7 +71,7 @@ func NewServer(p provider.Provider, opts Options) (*mcp.Server, error) {
 	selected := map[string]bool{}
 	for _, t := range opts.Toolsets {
 		if !knownToolsets[t] {
-			return nil, oekiterrors.Errorf("unknown toolset %q (known: core, crs, issues, status, search, releases, protection, collaborators, webhooks, tencentcode, ci, repo-extras)", t)
+			return nil, fmt.Errorf("unknown toolset %q (known: core, crs, issues, status, search, releases, protection, collaborators, webhooks, tencentcode, ci, repo-extras)", t)
 		}
 		selected[t] = true
 	}

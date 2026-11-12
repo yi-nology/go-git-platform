@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/oekit/concurrency/retry/httpx"
-	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/stringx"
 )
 
@@ -169,7 +168,7 @@ func (e *Error) RateLimitInfo() (retryAfter time.Duration, resetAt time.Time) {
 
 // ErrEmptyResponse is returned by DoJSON when the server returned a 2xx with
 // no body and the caller asked for a non-nil result.
-var ErrEmptyResponse = oekiterrors.Errorf("transport: empty response body")
+var ErrEmptyResponse = fmt.Errorf("transport: empty response body")
 
 // truncate returns s shortened to at most n bytes. It is used to keep error
 // messages bounded when the response body is large.

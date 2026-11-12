@@ -2,10 +2,10 @@ package github
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/google/go-github/v93/github"
-	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -24,7 +24,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 		return "", provider.Wrap(provider.PlatformGitHub, "GetFileContent", err)
 	}
 	if rc == nil {
-		return "", oekiterrors.Errorf("github: file not found: %s", path)
+		return "", fmt.Errorf("github: file not found: %s", path)
 	}
 	defer func() { _ = rc.Close() }()
 	if resp != nil && resp.StatusCode >= 400 {

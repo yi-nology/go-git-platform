@@ -34,7 +34,7 @@ const DefaultAPIBase = "https://api.github.com"
 // App 下载的 .pem 是 PKCS#8，openssl genrsa 产出的是 PKCS#1，两者都常见。
 func MintJWT(appID int64, privateKeyPEM string) (string, error) {
 	if appID <= 0 {
-		return "", oekiterrors.Errorf("githubapp: app id must be positive, got %d", appID)
+		return "", fmt.Errorf("githubapp: app id must be positive, got %d", appID)
 	}
 	key, err := parseRSAPrivateKey(privateKeyPEM)
 	if err != nil {
@@ -100,7 +100,7 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 		return "", time.Time{}, oekiterrors.Wrap(err, "githubapp: fetch installation token")
 	}
 	if resp.StatusCode >= 300 {
-		return "", time.Time{}, oekiterrors.Errorf("githubapp: fetch installation token: status %d", resp.StatusCode)
+		return "", time.Time{}, fmt.Errorf("githubapp: fetch installation token: status %d", resp.StatusCode)
 	}
 	var body struct {
 		Token     string    `json:"token"`
@@ -110,7 +110,7 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 		return "", time.Time{}, oekiterrors.Wrap(err, "githubapp: decode installation token")
 	}
 	if body.Token == "" {
-		return "", time.Time{}, oekiterrors.Errorf("githubapp: installation token empty in response")
+		return "", time.Time{}, fmt.Errorf("githubapp: installation token empty in response")
 	}
 	return body.Token, body.ExpiresAt, nil
 }
@@ -119,7 +119,7 @@ func fetchInstallationToken(ctx context.Context, apiBase string, appID, installa
 func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(pemStr))
 	if block == nil {
-		return nil, oekiterrors.Errorf("no PEM block found")
+		return nil, fmt.Errorf("no PEM block found")
 	}
 	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
 		return key, nil
@@ -130,7 +130,7 @@ func parseRSAPrivateKey(pemStr string) (*rsa.PrivateKey, error) {
 	}
 	rsaKey, ok := parsed.(*rsa.PrivateKey)
 	if !ok {
-		return nil, oekiterrors.Errorf("private key is not RSA")
+		return nil, fmt.Errorf("private key is not RSA")
 	}
 	return rsaKey, nil
 }

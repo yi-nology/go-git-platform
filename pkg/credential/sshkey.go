@@ -130,7 +130,7 @@ func (h *SSHKeyHelper) GetHostKeyCallback() ssh.HostKeyCallback {
 		if bytes.Equal(key.Marshal(), knownKey.Marshal()) {
 			return nil
 		}
-		return oekiterrors.Errorf("host key mismatch for %s", hostname)
+		return fmt.Errorf("host key mismatch for %s", hostname)
 	}
 }
 

@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"fmt"
 
 	oekiterrors "github.com/oekit/pkg/errors"
 
@@ -43,7 +44,7 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 			return nil, oekiterrors.Wrap(err, "github: resolve ref", "ref", ref)
 		}
 		if len(commits) == 0 {
-			return nil, oekiterrors.Errorf("github: no commits found on ref %q", ref)
+			return nil, fmt.Errorf("github: no commits found on ref %q", ref)
 		}
 		sha = commits[0].SHA
 	}

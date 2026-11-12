@@ -2,10 +2,10 @@ package mcpserver
 
 import (
 	"context"
-
-	oekiterrors "github.com/oekit/pkg/errors"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -69,7 +69,7 @@ func registerRepoExtras(s *mcp.Server, st *state) {
 		})
 		add(s, st, "create_deployment_status", "Report deployment status", "Report state on a deployment (pending|in_progress|queued|success|failure|error|canceled|inactive).", true, func(ctx context.Context, in deploymentStatusIn) (map[string]any, error) {
 			if !validDeploymentState(in.State) {
-				return nil, oekiterrors.Errorf("invalid state %q (pending|in_progress|queued|success|failure|error|canceled|inactive)", in.State)
+				return nil, fmt.Errorf("invalid state %q (pending|in_progress|queued|success|failure|error|canceled|inactive)", in.State)
 			}
 			err := dm.CreateDeploymentStatus(ctx, in.Owner, in.Repo, in.DeploymentID, provider.DeploymentStatusOptions{
 				State: in.State, Description: in.Description,

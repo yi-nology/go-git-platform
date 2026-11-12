@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Status and diff ---
@@ -105,8 +103,8 @@ func (b *NativeGitBackend) Diff(ctx context.Context, repoPath string, opts DiffO
 		args = []string{"diff", opts.From, opts.To}
 	default:
 		// 单边 From/To 的意图不可判（from..worktree? worktree..to?），显式报错
-		return "", newGitError("Diff", repoPath, "", oekiterrors.Errorf(
-			"From and To must be given together (From=%q To=%q)", opts.From, opts.To))
+		return "", newGitError("Diff", repoPath, "", fmt.Errorf(
+			"both From and To must be given together (From=%q To=%q)", opts.From, opts.To))
 	}
 	args = append(args, "--")
 	args = append(args, opts.Paths...)

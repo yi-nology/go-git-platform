@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	oekiterrors "github.com/oekit/pkg/errors"
@@ -57,7 +58,7 @@ func parseConfigKey(key string) (section, subsection, option string, err error) 
 		// section.subsection.option (e.g. "remote.origin.url")
 		return parts[0], parts[1], parts[2], nil
 	default:
-		return "", "", "", oekiterrors.Errorf("invalid config key: %s (expected section.option or section.subsection.option)", key)
+		return "", "", "", fmt.Errorf("invalid config key: %s (expected section.option or section.subsection.option)", key)
 	}
 }
 

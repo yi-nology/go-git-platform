@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/diff"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
-	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // --- Status and diff ---
@@ -117,8 +117,8 @@ func (b *GoGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptio
 	}
 	// 单边 From/To 意图不可判，与 native 一致显式报错
 	if opts.From == "" || opts.To == "" {
-		return "", newGitError("Diff", repoPath, "", oekiterrors.Errorf(
-			"From and To must be given together (From=%q To=%q)", opts.From, opts.To))
+		return "", newGitError("Diff", repoPath, "", fmt.Errorf(
+			"both From and To must be given together (From=%q To=%q)", opts.From, opts.To))
 	}
 
 	// Diff between two commits

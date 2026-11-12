@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -291,10 +292,10 @@ func (c *Client) DoRaw(ctx context.Context, req *Request) ([]byte, error) {
 // construction for 4xx/5xx, and JSON decoding.
 func (c *Client) do(ctx context.Context, req *Request, decode bool) (*Response, error) {
 	if req == nil {
-		return nil, oekiterrors.Errorf("transport: nil request")
+		return nil, fmt.Errorf("transport: nil request")
 	}
 	if req.Method == "" {
-		return nil, oekiterrors.Errorf("transport: empty method")
+		return nil, fmt.Errorf("transport: empty method")
 	}
 
 	// Overall per-request bound as a context deadline, applied to the request
@@ -883,7 +884,7 @@ func readAndClose(resp *http.Response, maxBodySize int64) ([]byte, error) {
 			return nil, err
 		}
 		if int64(len(body)) > maxBodySize {
-			return nil, oekiterrors.Errorf("response body exceeds maximum size of %d bytes", maxBodySize)
+			return nil, fmt.Errorf("response body exceeds maximum size of %d bytes", maxBodySize)
 		}
 		return body, nil
 	}

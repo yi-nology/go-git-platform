@@ -2,11 +2,11 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	oekiterrors "github.com/oekit/pkg/errors"
-
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -63,7 +63,7 @@ func registerStatus(s *mcp.Server, st *state) {
 
 	add(s, st, "set_commit_status", "Set commit status", "Report a CI status on a commit (e.g. after running checks).", true, func(ctx context.Context, in setStatusIn) (map[string]any, error) {
 		if !validCommitStatusStates[in.State] {
-			return nil, oekiterrors.Errorf("invalid state %q (pending|success|failure|error)", in.State)
+			return nil, fmt.Errorf("invalid state %q (pending|success|failure|error)", in.State)
 		}
 		err := csm.CreateCommitStatus(ctx, in.Owner, in.Repo, in.SHA, provider.CommitStatusOptions{
 			State: in.State, Context: in.Context,

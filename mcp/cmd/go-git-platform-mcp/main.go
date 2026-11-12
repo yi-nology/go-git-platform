@@ -33,6 +33,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -46,8 +47,9 @@ import (
 	"github.com/oekit/concurrency/async"
 	"github.com/oekit/logx"
 
-	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 	"github.com/yi-nology/go-git-platform/provider"
+
+	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 
 	// register every shipped backend
 	_ "github.com/yi-nology/go-git-platform/backends/all"
@@ -80,14 +82,14 @@ func run() error {
 	flag.Parse()
 
 	if *platform == "" {
-		return oekiterrors.Errorf("--platform (or GIT_PLATFORM) is required: github, gitlab, gitea, forgejo, gitee, gitcode, tencentcode")
+		return fmt.Errorf("--platform (or GIT_PLATFORM) is required: github, gitlab, gitea, forgejo, gitee, gitcode, tencentcode")
 	}
 	tok := *token
 	if tok == "" {
 		tok = os.Getenv(*tokenEnv)
 	}
 	if tok == "" {
-		return oekiterrors.Errorf("no token: pass --token or set %s", *tokenEnv)
+		return fmt.Errorf("no token: pass --token or set %s", *tokenEnv)
 	}
 
 	cfg := provider.Config{
