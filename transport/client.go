@@ -537,26 +537,24 @@ func StripSensitiveHeaders(req *http.Request) {
 	httpx.StripSensitiveHeadersWith(req.Header, from, to, sensitiveHeaders)
 }
 
-// sensitiveQueryParams 可能随跨 host 重定向外泄的**凭据 query 参数**。
+// sensitiveQueryParams 是本仓认定「凭据类」的 query 参数单一真源，
+// 同时服务两处消费：
+//   - StripSensitiveQueryParams：跨 host 重定向剥离（防令牌随 query
+//     发给第三方主机）；
+//   - redactURL/redactPath：日志与错误信息里的 query 掩码。
 //
-// 为什么单列一组:有一类平台 SDK 把令牌放在 URL query 而不是请求头 ——
-// go-gitee 的 tokenTransport 每跳都 `q.Set("access_token", token)`,
-// 它包在 http.Client 的 Transport 外层 ⇒ 平台 302 到 CDN/对象存储时,
-// **令牌会跟着 query 一起发给第三方主机**。
+// 合并前两份词表互有出入（strip 11 项独有 auth/jwt/session/signature/sig；
+// redact 9 项独有 password/passwd/secret/key）——任何一份缺席都是漏洞面：
+// 口令参数会随重定向外泄、jwt 会明文进日志。合并为超集后双向补齐。
 //
-// 头部的剥除帮不上忙(令牌根本不在头部),而 Go 也不会剥 query ⇒ 只能自己来。
+// 历史依据：go-gitee 的 tokenTransport 每跳 q.Set("access_token", token) 且
+// 包在 http.Client 的 Transport 外层——平台 302 到 CDN/对象存储时令牌随
+// query 发给第三方主机（头部剥离帮不上，Go 也不剥 query）；日志侧同理，
+// 凭据不得明文进 redact。
 var sensitiveQueryParams = []string{
-	"access_token",
-	"private_token",
-	"token",
-	"api_key",
-	"apikey",
-	"auth",
-	"authorization",
-	"jwt",
-	"session",
-	"signature",
-	"sig",
+	"access_token", "private_token", "token", "api_key", "apikey",
+	"auth", "authorization", "jwt", "session", "signature", "sig",
+	"password", "passwd", "secret", "key",
 }
 
 // StripSensitiveQueryParams 删掉请求 URL 里可能随跨 host 重定向外泄的凭据参数。
@@ -566,8 +564,8 @@ var sensitiveQueryParams = []string{
 //
 // 剥离机制委托 concurrency#208 落地的 httpx.StripSensitiveQueryParamsWith
 // (raw-query 外科手术:不动无关参数的字节,免 re-encode 翻转转义形态);
-// 词表保留本仓 11 项(上游缺省 3 项,本仓是超集——api_key/jwt/session 等
-// 平台特化项)。
+// 词表为本仓 15 项超集(上游缺省 3 项,本仓是超集——api_key/jwt/session 等
+// 平台特化项,并含 redact 面合并补入的 password/secret 口令类)。
 func StripSensitiveQueryParams(req *http.Request) {
 	if req == nil || req.URL == nil {
 		return
@@ -899,10 +897,7 @@ func readAndClose(resp *http.Response, maxBodySize int64) ([]byte, error) {
 func redactURL(u url.URL) string {
 	q := u.Query()
 	changed := false
-	for _, k := range []string{
-		"access_token", "token", "private_token", "password", "passwd",
-		"secret", "api_key", "apikey", "key",
-	} {
+	for _, k := range sensitiveQueryParams {
 		if q.Get(k) != "" {
 			q.Set(k, "***")
 			changed = true
@@ -941,10 +936,7 @@ func redactPath(p string) string {
 		return base + "?***"
 	}
 	changed := false
-	for _, k := range []string{
-		"access_token", "token", "private_token", "password", "passwd",
-		"secret", "api_key", "apikey", "key",
-	} {
+	for _, k := range sensitiveQueryParams {
 		if q.Get(k) != "" {
 			q.Set(k, "***")
 			changed = true

@@ -3,6 +3,7 @@ package transport
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -231,6 +232,23 @@ func TestStripSensitiveQueryParams(t *testing.T) {
 	assert.Equal(t, "main", q.Get("ref"), "非凭据参数必须保留")
 }
 
+// TestStripSensitiveQueryParams_StripsPasswordSecret 双向补齐的 strip 侧。
+//
+// 词表合并背景:合并前 password/secret 是 redact 词表独有项,strip 面缺席 ⇒
+// 口令参数会随跨 host 重定向外泄给第三方主机。两份词表已合并为
+// sensitiveQueryParams 15 项超集(strip/redact 共用单一真源)。
+func TestStripSensitiveQueryParams_StripsPasswordSecret(t *testing.T) {
+	req, err := http.NewRequest(http.MethodGet, "https://example.com/x?password=PW&secret=SEC&page=2", nil)
+	require.NoError(t, err)
+
+	StripSensitiveQueryParams(req)
+
+	q := req.URL.Query()
+	assert.False(t, q.Has("password"), "password 必须被剥掉(原 redact 独有项)")
+	assert.False(t, q.Has("secret"), "secret 必须被剥掉(原 redact 独有项)")
+	assert.Equal(t, "2", q.Get("page"), "非凭据参数必须保留")
+}
+
 // TestSameHostRedirect_KeepsQueryToken 同 host 重定向**要**继续带 query 凭据。
 //
 // 否则会把正常 API 的 302(改路径、http→https)也打断。
@@ -386,6 +404,28 @@ func TestRedactURL_MasksUserInfo(t *testing.T) {
 	got := redactURL(*u.URL)
 	assert.NotContains(t, got, "SECRET-PASS", "userinfo 里的密码必须被脱敏")
 	assert.Contains(t, got, "host", "host 要保留")
+}
+
+// TestRedactURL_MasksJwtSession 双向补齐的 redact 侧。
+//
+// 词表合并背景:合并前 jwt/session 是 strip 词表独有项,redact 面缺席 ⇒
+// 会明文进日志与错误信息(→ 响应体)。两份词表已合并为
+// sensitiveQueryParams 15 项超集(strip/redact 共用单一真源)。
+func TestRedactURL_MasksJwtSession(t *testing.T) {
+	for _, param := range []string{"jwt", "session"} {
+		req, err := http.NewRequest(http.MethodGet, "https://api.example.com/v1/me?"+param+"=SUPER-SECRET&page=2", nil)
+		require.NoError(t, err)
+
+		got := redactURL(*req.URL)
+		assert.NotContains(t, got, "SUPER-SECRET", "%s 不得明文进日志(实际 URL=%q)", param, got)
+		// q.Encode() 会把 * 转义成 %2A ⇒ 解析后比对掩码值,不比对字节形态。
+		parsed, err := url.Parse(got)
+		require.NoError(t, err)
+		assert.Equal(t, "***", parsed.Query().Get(param), "%s 必须被掩码(实际 URL=%q)", param, got)
+		assert.Equal(t, "2", parsed.Query().Get("page"), "非凭据参数必须保留")
+		assert.Contains(t, req.URL.RawQuery, param+"=SUPER-SECRET",
+			"原 URL 不得被改动(出站请求仍要带真凭据)")
+	}
 }
 
 // TestRedactPath_MasksSecretQuery 请求路径里的 query 秘密不能进日志。
