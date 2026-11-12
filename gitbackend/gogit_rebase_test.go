@@ -152,3 +152,127 @@ func TestGoGit_RebaseContinue_ReplaysTheBranchSide(t *testing.T) {
 		t.Errorf("expected the rebase state cleaned up, stat err = %v", err)
 	}
 }
+
+// TestGoGit_Rebase_BothSidesDeletedFile covers both sides deleting the same
+// file: the replay diff (merge-base→topic commit) targets a file that onto
+// already removed from disk and index. Native git treats this as a no-op;
+// propagating ENOENT here surfaced as a bogus ErrMergeConflict (the diff
+// base is the merge-base, not HEAD — the file is legitimately gone).
+func TestGoGit_Rebase_BothSidesDeletedFile(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	main := currentBranch(t, repo)
+
+	// The merge-base still carries the file both sides will delete.
+	commitFile(t, repo, "doomed.txt", "doomed", "add doomed")
+	commitFile(t, repo, "shared.txt", "base shared", "add shared")
+
+	// topic deletes it and edits shared.txt in the SAME commit.
+	gitOutput(t, repo, "checkout", "-b", "topic")
+	gitOutput(t, repo, "rm", "doomed.txt")
+	commitFile(t, repo, "shared.txt", "topic shared", "topic delete doomed")
+
+	// main (the onto side) deletes the same file independently.
+	gitOutput(t, repo, "checkout", main)
+	gitOutput(t, repo, "rm", "doomed.txt")
+	gitOutput(t, repo, "commit", "-m", "main delete doomed")
+	mainTip := headHash(t, repo)
+
+	gitOutput(t, repo, "checkout", "topic")
+	if err := b.Rebase(context.Background(), repo, main); err != nil {
+		t.Fatalf("Rebase must tolerate the already-deleted file: %v", err)
+	}
+
+	if parents := gitOutput(t, repo, "log", "-1", "--pretty=%P"); parents != mainTip {
+		t.Errorf("expected the replayed commit on top of onto %s, parents = %q", mainTip, parents)
+	}
+	if got := gitOutput(t, repo, "ls-tree", "HEAD", "doomed.txt"); got != "" {
+		t.Errorf("expected doomed.txt absent from HEAD tree, got %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "doomed.txt")); !os.IsNotExist(err) {
+		t.Errorf("expected doomed.txt absent from worktree, stat err = %v", err)
+	}
+	// The replayed commit's other change must survive alongside the delete.
+	if got := gitOutput(t, repo, "show", "HEAD:shared.txt"); got != "topic shared" {
+		t.Errorf("expected shared.txt = %q in the replayed commit, got %q", "topic shared", got)
+	}
+	if got := gitOutput(t, repo, "log", "-1", "--pretty=%s"); got != "topic delete doomed" {
+		t.Errorf("expected the replayed message on HEAD, got %q", got)
+	}
+}
+
+// TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile replays a
+// delete-first commit (both sides deleted the file; the delete is the first
+// change of the commit, followed by an edit of another file) through
+// RebaseContinue's replay loop. Tolerating the already-gone file must not
+// swallow the commit's other change: shared.txt's edit has to land in
+// history. Round-1 propagation of ENOENT turned this replay into
+// ErrMergeConflict.
+func TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	main := currentBranch(t, repo)
+
+	// The merge-base carries the file both sides delete.
+	commitFile(t, repo, "doomed.txt", "doomed", "add doomed")
+	commitFile(t, repo, "shared.txt", "base shared", "add shared")
+
+	// topic: the OLDER commit deletes doomed.txt and edits shared.txt
+	// (the delete-first commit under test); the newer one adds top.txt.
+	gitOutput(t, repo, "checkout", "-b", "topic")
+	gitOutput(t, repo, "rm", "doomed.txt")
+	commitFile(t, repo, "shared.txt", "topic shared", "topic shared work")
+	commitFile(t, repo, "top.txt", "top", "topic top")
+	topicTip := headHash(t, repo)
+
+	// main (onto) deletes the same file.
+	gitOutput(t, repo, "checkout", main)
+	gitOutput(t, repo, "rm", "doomed.txt")
+	gitOutput(t, repo, "commit", "-m", "main delete doomed")
+	mainTip := headHash(t, repo)
+
+	// Simulate a rebase stopped at the NEWER commit (msgnum=0) with its
+	// resolution staged: the branch sits on onto's tip, top.txt is staged,
+	// and the state files record the replay position. GetCommitsBetween is
+	// newest-first, so commits[1] is the delete-first commit that the
+	// replay loop below must apply.
+	gitOutput(t, repo, "checkout", "-q", "-B", "topic", main)
+	if err := os.WriteFile(filepath.Join(repo, "top.txt"), []byte("top"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitOutput(t, repo, "add", "top.txt")
+	stateDir := filepath.Join(repo, ".git", "rebase-merge")
+	if err := os.MkdirAll(stateDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, value string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(stateDir, name), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("orig-head", topicTip)
+	write("onto", mainTip)
+	write("head-name", "refs/heads/topic")
+	write("msgnum", "0")
+	write("end", "2")
+
+	if err := b.RebaseContinue(context.Background(), repo); err != nil {
+		t.Fatalf("RebaseContinue must tolerate the already-deleted file: %v", err)
+	}
+
+	// The delete-first commit replayed: doomed gone, and its OTHER change
+	// (shared.txt) kept in history alongside top.txt from the newer commit.
+	if got := gitOutput(t, repo, "ls-tree", "HEAD", "doomed.txt"); got != "" {
+		t.Errorf("expected doomed.txt absent from HEAD tree, got %q", got)
+	}
+	if got := gitOutput(t, repo, "show", "HEAD:shared.txt"); got != "topic shared" {
+		t.Errorf("expected shared.txt = %q in history, got %q", "topic shared", got)
+	}
+	if got := gitOutput(t, repo, "show", "HEAD:top.txt"); got != "top" {
+		t.Errorf("expected top.txt = %q in history, got %q", "top", got)
+	}
+	if _, err := os.Stat(stateDir); !os.IsNotExist(err) {
+		t.Errorf("expected the rebase state cleaned up, stat err = %v", err)
+	}
+}

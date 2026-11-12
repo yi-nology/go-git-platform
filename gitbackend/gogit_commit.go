@@ -2,6 +2,7 @@ package gitbackend
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/utils/merkletrie"
 )
@@ -193,10 +195,13 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 			// 与上方 Modify 分支同规：删除的文件系统与索引写错误必须上抛——
 			// 索引写失败而静默继续会让已删文件仍留在索引里，随后 wt.Commit
 			// 把「还含该文件」的树照常提交（与截断文件被提交同类故障）。
-			if err := os.Remove(fullPath); err != nil {
+			// 但「已达期望态」不是错误：diff base 是 merge-base/被选提交的父
+			// 而非 HEAD，双侧同删时目标已不在磁盘与索引（native git 同样视为
+			// no-op），此二者容忍；其余真 I/O 与 SetIndex 错误照常传播。
+			if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
 				return oekiterrors.Wrap(err, "remove file from worktree", "path", fullPath)
 			}
-			if _, err := wt.Remove(change.From.Name); err != nil {
+			if _, err := wt.Remove(change.From.Name); err != nil && !errors.Is(err, index.ErrEntryNotFound) {
 				return oekiterrors.Wrap(err, "remove file from index", "file", change.From.Name)
 			}
 		}
