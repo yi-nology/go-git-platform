@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"reflect"
+	"slices"
 
 	oekiterrors "github.com/oekit/pkg/errors"
 )
@@ -38,6 +39,12 @@ var ErrPageBudgetExceeded = oekiterrors.New("page budget exceeded before an empt
 //	    fmt.Println(r.FullName)
 //	    return nil
 //	})
+//
+// The iterator keeps a copy of the previous page for its no-progress
+// detection, so a fetch backed by a reused buffer is safe (issue #143):
+// returning a re-sliced buffer whose contents change per page does not
+// trip the check, and the items handed to fn are consumed before the next
+// fetch may overwrite the buffer.
 type PageFetch[T any] func(ctx context.Context, page int) ([]T, error)
 
 // Each walks every page of a paginated list call, invoking fn once per
@@ -64,6 +71,12 @@ func Each[T any](ctx context.Context, fetch PageFetch[T], fn func(T) error) erro
 // 重复到预算耗尽再报错丢弃全部数据。该形态下首页即全量（这正是服务器无法
 // 分页的原因），截断风险仅出现在"忽略 page 但遵守 limit"的另一种服务器形态，
 // 此时返回首页数据也优于整体报错。
+//
+// 快照语义（issue #143）：上一页取 slices.Clone 快照再比较。旧实现
+// `prev = batch` 存的是切片头别名——fetch 复用同一底层数组（避免每页分配的
+// 常规写法）时，batch 与 prev 永远逐值相同，第 2 页就被判成无进展而静默
+// 收手：列表被截成第 1 页且 err 为 nil，违反"a public walk must not
+// truncate silently"的自身契约。
 func EachBounded[T any](ctx context.Context, fetch PageFetch[T], maxPages int, fn func(T) error) error {
 	if maxPages <= 0 {
 		maxPages = DefaultIterMaxPages
@@ -86,7 +99,7 @@ func EachBounded[T any](ctx context.Context, fetch PageFetch[T], maxPages int, f
 		if page > 1 && reflect.DeepEqual(batch, prev) {
 			return nil // 伪翻页：同页重复 = 列表已到尾（见函数文档）
 		}
-		prev = batch
+		prev = slices.Clone(batch)
 		for _, item := range batch {
 			if err := fn(item); err != nil {
 				if oekiterrors.Is(err, ErrStopIteration) {

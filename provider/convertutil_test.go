@@ -1,6 +1,9 @@
 package provider
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestSplitFullName(t *testing.T) {
 	tests := []struct {
@@ -174,6 +177,37 @@ func TestResolveMRSHAs(t *testing.T) {
 			}
 			if start != tt.wantStart {
 				t.Errorf("start = %q, want %q", start, tt.wantStart)
+			}
+		})
+	}
+}
+
+// TestExtractMentions_TrailingPunctuation 回归（issue #145）：句末标点被吞进
+// 用户名——"cc @alice." 解析出 "alice."，真实账号被漏掉。合法账号名不以
+// '.'/'-' 结尾，只裁尾部、保留内部点号（@first.last 不受影响）；去重按
+// 裁剪后的名字（"@alice. @alice" 是同一个人）。
+func TestExtractMentions_TrailingPunctuation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{"sentence period", "cc @alice.", []string{"alice"}},
+		{"sentence period mid", "ping @bob. please review", []string{"bob"}},
+		{"ellipsis", "cc @carol...", []string{"carol"}},
+		{"trailing hyphen", "cc @dave-", []string{"dave"}},
+		{"trailing dot-hyphen mix", "cc @erin.-", []string{"erin"}},
+		{"internal dot kept", "cc @first.last.", []string{"first.last"}},
+		{"internal hyphen kept", "cc @user-name.", []string{"user-name"}},
+		{"dedup after trim", "@alice. and @alice", []string{"alice"}},
+		{"mention next to cjk period", "请看 @alice。", []string{"alice"}},
+		{"bare punctuation is not a user", "hello @...", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ExtractMentions(tt.body)
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("ExtractMentions(%q) = %v, want %v", tt.body, got, tt.want)
 			}
 		})
 	}

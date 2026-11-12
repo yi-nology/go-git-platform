@@ -115,14 +115,18 @@ func Wrap(platform Platform, op string, err error) error {
 	// interface first (*StatusError, transport.Error), then the platform's
 	// registered StatusExtractor over its SDK error types. Errors with
 	// neither carry no status (classify explicitly at the call site).
-	for cur := err; cur != nil; {
+	// 遍历走 walkErrorChain（issue #146）：多 %w（Unwrap() []error）分支同样
+	// 下潜，与 errors.Is 的判定口径一致——旧实现 errors.Unwrap 只走单分支，
+	// 多 %w 链上状态码与限流提示静默丢失（IsRateLimited=true 而
+	// StatusCode=0 的矛盾观测面）。
+	walkErrorChain(err, func(cur error) bool {
 		// Fast path: anything implementing StatusCode() int. Covers
 		// *StatusError in this package and transport.Error.
 		if sc, ok := cur.(statusCoder); ok {
 			pe.StatusCode = sc.StatusCode()
 			pe.Cause = fmt.Errorf("%w: %w", classifyProviderStatus(pe.StatusCode, cur), err)
 			copyRateLimitHints(pe, cur)
-			break
+			return true
 		}
 		// Platform extractor: an explicit, type-safe lookup each backend
 		// registers for its SDK's error types (the pre-0.83 reflection over
@@ -139,15 +143,15 @@ func Wrap(platform Platform, op string, err error) error {
 				pe.StatusCode = code
 				pe.Cause = fmt.Errorf("%w: %w", ErrRateLimited, err)
 				pe.RetryAfter, pe.ResetAt = ra, at
-				break
+				return true
 			}
 			pe.StatusCode = code
 			pe.Cause = fmt.Errorf("%w: %w", classifyProviderStatus(code, cur), err)
 			copyRateLimitHints(pe, cur)
-			break
+			return true
 		}
-		cur = errors.Unwrap(cur)
-	}
+		return false
+	})
 	return pe
 }
 
@@ -161,6 +165,47 @@ func Wrap(platform Platform, op string, err error) error {
 // 的节流形态。
 type rateLimitedMarker interface {
 	IsRateLimited() bool
+}
+
+// walkErrorChain visits every error reachable from err — both the
+// `Unwrap() error` chain and every branch of `Unwrap() []error`（多 %w /
+// errors.Join 节点）—— in depth-first preorder, the same order stdlib
+// errors.Is/As traverse. visit returning true stops the walk; its boolean
+// result reports whether that happened.
+//
+// 本仓 house 先例（issue #132、timeparse.go）：多 %w 走 Unwrap() []error，
+// cause 链随哨兵一路保留。stdlib 的 errors.Unwrap 只认单分支——遇多 %w
+// 节点返回 nil，手写链遍历到此为止，而 errors.Is/As 却能穿透（issue #146）：
+// 同一条链上「是不是限流」判得出、「要等多久」取不到，观测面自相矛盾。
+// 链遍历一律走本 helper，与 stdlib 同口径。seen 按错误值身份剪环。
+func walkErrorChain(err error, visit func(error) bool) bool {
+	if err == nil {
+		return false
+	}
+	seen := make(map[error]bool)
+	var walk func(error) bool
+	walk = func(cur error) bool {
+		if cur == nil || seen[cur] {
+			return false
+		}
+		seen[cur] = true
+		if visit(cur) {
+			return true
+		}
+		if br, ok := cur.(interface{ Unwrap() []error }); ok {
+			for _, child := range br.Unwrap() {
+				if walk(child) {
+					return true
+				}
+			}
+			return false
+		}
+		if u, ok := cur.(interface{ Unwrap() error }); ok {
+			return walk(u.Unwrap())
+		}
+		return false
+	}
+	return walk(err)
 }
 
 // classifyProviderStatus 在裸状态码分类之上叠加下层的限流判定（见
@@ -387,7 +432,10 @@ func IsRateLimited(err error) bool { return errors.Is(err, ErrRateLimited) }
 // rate-limited error, walking the wrapped chain for the transport hints
 // (Retry-After / X-RateLimit-Reset). ok is true only when at least one of
 // retryAfter or resetAt is known — callers rate-limited without hints
-// should fall back to their own backoff.
+// should fall back to their own backoff. The walk covers both `Unwrap()
+// error` chains and `Unwrap() []error` branches（多 %w / errors.Join，
+// issue #146）——判定口径与 errors.Is 一致，同一份错误上 IsRateLimited 为真
+// 时本函数不会再因链形态不同而丢恢复窗口。
 //
 //	if ra, reset, ok := provider.RateLimitRecovery(err); ok {
 //	    wait := ra
@@ -397,20 +445,23 @@ func IsRateLimited(err error) bool { return errors.Is(err, ErrRateLimited) }
 //	    time.Sleep(wait)
 //	}
 func RateLimitRecovery(err error) (retryAfter time.Duration, resetAt time.Time, ok bool) {
-	for cur := err; cur != nil; cur = errors.Unwrap(cur) {
+	walkErrorChain(err, func(cur error) bool {
 		if pe, isPE := cur.(*ProviderError); isPE {
 			if pe.RetryAfter != 0 || !pe.ResetAt.IsZero() {
-				return pe.RetryAfter, pe.ResetAt, true
+				retryAfter, resetAt, ok = pe.RetryAfter, pe.ResetAt, true
+				return true
 			}
-			continue
+			return false
 		}
-		if ri, ok := cur.(rateLimitInfo); ok {
+		if ri, isRI := cur.(rateLimitInfo); isRI {
 			if ra, at := ri.RateLimitInfo(); ra != 0 || !at.IsZero() {
-				return ra, at, true
+				retryAfter, resetAt, ok = ra, at, true
+				return true
 			}
 		}
-	}
-	return 0, time.Time{}, false
+		return false
+	})
+	return retryAfter, resetAt, ok
 }
 
 // IsForbidden reports whether err wraps ErrForbidden (HTTP 403).

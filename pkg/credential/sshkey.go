@@ -51,6 +51,14 @@ func (h *SSHKeyHelper) ProcessPrivateKey(privateKey, passphrase string) (string,
 		if err != nil {
 			return "", oekiterrors.Wrap(err, "failed to parse encrypted private key")
 		}
+		// openssh 格式的 ed25519 解出来是 *ed25519.PrivateKey，而
+		// x509.MarshalPKCS8PrivateKey 只认值类型 ed25519.PrivateKey
+		// （rsa/ecdsa 的指针类型在它的 type switch 里）——不解引用的话
+		// 最常见的现代密钥类型（ed25519）在解密成功后仍报
+		// "unknown key type while marshaling PKCS#8"。
+		if k, ok := rawKey.(*ed25519.PrivateKey); ok {
+			rawKey = *k
+		}
 
 		pemBytes, err := x509.MarshalPKCS8PrivateKey(rawKey)
 		if err != nil {
