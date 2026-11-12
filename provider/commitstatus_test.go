@@ -194,6 +194,29 @@ func TestWaitForCommitStatusContextCancellation(t *testing.T) {
 	}
 }
 
+func TestWaitForCommitStatusNegativeTimeoutNoBudget(t *testing.T) {
+	// Timeout: -1 disables the budget entirely (WaitOptions): the wait
+	// must keep polling until the caller's context ends instead of
+	// failing fast with ErrWaitTimedOut. Deleting the timeout<0 branch
+	// in WaitForCommitStatus turns this red.
+	fake := &waitFakeProvider{}
+	fake.set([]CommitStatus{{State: CommitStatusPending, Context: "ci"}})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+	_, err := WaitForCommitStatus(ctx, fake, "o", "r", "sha",
+		WaitOptions{Interval: 5 * time.Millisecond, Timeout: -1})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled (negative Timeout must keep polling until ctx ends)", err)
+	}
+	if errors.Is(err, ErrWaitTimedOut) {
+		t.Fatalf("err = %v, must not be ErrWaitTimedOut (Timeout: -1 disables the budget)", err)
+	}
+}
+
 func TestWaitForCommitStatusRerunHistoryTakesLatest(t *testing.T) {
 	// CI re-runs append history: ci/test failed once, then succeeded.
 	// The newest report must win (GitHub combined-status semantics) —
