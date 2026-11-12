@@ -339,7 +339,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   桥被动受益。**#353 ttlcache 自建单飞维持**（v0.45 cache 收敛未触注入路
   径）；**测试夹具手写 HMAC 保留独立对照**（不变）。logx #176–#181 仍
   open（不在 v0.10.0），下轮增量再审。升级落点：主模块+mcp 双 go.mod 三行
-  同升（mcp replace ../ 不动、require 版本行随 tag 人工跟随），Go 地板 1.26
+  同升（mcp 无 replace（go.work 本地协同）、require 版本行随 tag 人工跟随），Go 地板 1.26
   低于本仓 1.27.4 无 toolchain 动作。
 
 ## 规则二：公共契约红线
@@ -371,6 +371,8 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
 - **`mcp/` 是独立 go module**：主模块的 `go test ./...` /
   `golangci-lint run ./...` 不覆盖它，必须在 `mcp/` 里单独 build / test /
   lint / govulncheck。goimports 用 `-local github.com/yi-nology/go-git-platform`。
+  根 `go.work` 已入库承接本地协同；CI 与 `make check` 用 `GOWORK=off` 保持
+  分模块验证，`make check-mcp` 走 workspace 模式测本地 SDK。
 - 测试夹具不得依赖本机 git 全局身份：
   `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test ./gitbackend/`。
 - git 行为先实测再钉测试（临时脚本验证语义后再写成集成测试）。

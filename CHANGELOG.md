@@ -4,6 +4,29 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security（MCP HTTP 监听加固——评审 P0 清零）
+
+- fix(mcp): **HTTP 模式默认绑定 loopback；显式非 loopback 地址无 `--http-token`
+  拒绝启动**——`--http ":port"` 只监听 `127.0.0.1`，绑到 `0.0.0.0` 或任何
+  非 loopback 地址必须同时提供 `--http-token`，否则进程拒绝启动；`--skip-tls`
+  与对外监听组合输出安全告警（监听器是明文 HTTP，提示前置 TLS 终结）。
+
+### Fixed（MCP toolRegistry 并发构造数据竞争）
+
+- fix(mcp): **`toolRegistry` 并发构造数据竞争**——包级台账加互斥锁 + 并发
+  构造 `-race` 回归测试。
+
+### Changed（mcp 模块独立分发 + CI 边界对齐）
+
+- build(mcp): **移除 `replace ../` 解锁独立分发**——`go install
+  github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@version` 可
+  独立安装；根 `go.work` 入库承接本地多模块开发，`make check`（`GOWORK=off`）
+  与 `make check-mcp`（workspace 模式）分模块入口保持验证边界。
+- ci: **mcp `go mod tidy` 改为漂移即失败校验**；新增独立安装验证 job
+  （`go install @ref`）；根 job `GOWORK=off` 保持分模块边界。
+
 ## [0.128.0] - 2026-11-12
 
 ### Changed（oekit 三件套拉齐 v0.46.0/v0.34.0/v0.10.0 + gongfeng v0.4.0——pkg v0.45 删 Errorf 的全链适配）

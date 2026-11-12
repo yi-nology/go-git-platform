@@ -73,6 +73,13 @@ HTTP 远程部署(对齐 GitHub 官方 MCP 的 remote server 形态):
 # MCP endpoint: http://host:8080/mcp (监听为明文 HTTP,公网请前置 TLS 反代)
 ```
 
+### HTTP 模式安全默认
+
+`--http ":port"` 只绑定 `127.0.0.1`;绑到 `0.0.0.0` 或任何非 loopback
+地址必须同时给 `--http-token`,否则进程拒绝启动。对外部署时请在前面再
+套 TLS 终结(监听器是明文 HTTP),`--skip-tls` 只应在自签内网实例调
+试时使用。
+
 ## 测试
 
 ```bash
