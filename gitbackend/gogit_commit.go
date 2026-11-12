@@ -190,8 +190,15 @@ func (b *GoGitBackend) applyChangesToWorktree(repoPath string, baseTree, sourceT
 
 		case merkletrie.Delete:
 			fullPath := filepath.Join(repoPath, change.From.Name)
-			_ = os.Remove(fullPath)
-			_, _ = wt.Remove(change.From.Name)
+			// 与上方 Modify 分支同规：删除的文件系统与索引写错误必须上抛——
+			// 索引写失败而静默继续会让已删文件仍留在索引里，随后 wt.Commit
+			// 把「还含该文件」的树照常提交（与截断文件被提交同类故障）。
+			if err := os.Remove(fullPath); err != nil {
+				return oekiterrors.Wrap(err, "remove file from worktree", "path", fullPath)
+			}
+			if _, err := wt.Remove(change.From.Name); err != nil {
+				return oekiterrors.Wrap(err, "remove file from index", "file", change.From.Name)
+			}
 		}
 	}
 	return nil
@@ -544,6 +551,8 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 	}
 
 	// Success — clean up state
+	// 操作已成功，清理仅为 best-effort：失败只残留状态目录（下次 Rebase
+	// 会覆盖写同名状态文件），上抛反而会把已成功的操作报成失败。
 	_ = os.RemoveAll(dir)
 	return nil
 }
@@ -584,6 +593,8 @@ func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error {
 		return newGitError("RebaseAbort", repoPath, "", err)
 	}
 
+	// 操作已成功，清理仅为 best-effort：失败只残留状态目录（下次 Rebase
+	// 会覆盖写同名状态文件），上抛反而会把已成功的操作报成失败。
 	_ = os.RemoveAll(dir)
 	return nil
 }
@@ -670,7 +681,7 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 	}
 
 	// Success — clean up state
-	// 重放已全部完成，清理仅为 best-effort：失败只残留状态目录（下次 Rebase
+	// 操作已成功，清理仅为 best-effort：失败只残留状态目录（下次 Rebase
 	// 会覆盖写同名状态文件），上抛反而会把已成功的操作报成失败。
 	_ = os.RemoveAll(dir)
 	return nil
