@@ -25,6 +25,10 @@ var (
 	ErrStashUnsupported  = oekiterrors.New("stash requires the native git backend")
 	// ErrBranchInUse 当前分支被占用(删/改它会让 HEAD 悬空 ⇒ 仓库不可用)。
 	ErrBranchInUse = oekiterrors.New("branch is currently checked out")
+	// ErrReferenceUnsupported 与 ErrStashUnsupported 同形态：reference clone
+	// （--reference/--dissociate，issue #148）是 native 独有能力——go-git v5
+	// 的 CloneOptions 没有跨仓借用对象库的能力，gogit 后端 fail-fast。
+	ErrReferenceUnsupported = oekiterrors.New("reference clone requires the native git backend")
 )
 
 // GitError is a structured error from a git operation.

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -168,6 +170,20 @@ func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult,
 }
 
 func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
+	// issue #148 前置校验与 native 同口径（无效路径/非法组合同形报错）。
+	if err := validateCloneReference(opts); err != nil {
+		return newGitError("Clone", opts.Path, "", err)
+	}
+	if opts.Reference != "" {
+		// gogit 边界：go-git v5 的 CloneOptions 没有 --reference（跨仓借用
+		// 对象库）能力——它只有 Shared，且借用对象来自被 clone 的本地 URL
+		// 自身（形态不同）；克隆完成后补写 objects/info/alternates 也不等价
+		// （省网络的关键是协商期就声明「我已有这些对象」，事后写文件只会
+		// 全量照旧再加一个误导性文件）。按 #148 验收口径 fail-fast，
+		// Clone Cache 等消费方走 native。
+		return newGitError("Clone", opts.Path, "",
+			oekiterrors.Wrap(ErrReferenceUnsupported, "CloneOptions.Reference is native-only", "reference", opts.Reference))
+	}
 	am, err := buildTransportAuth(opts.Auth)
 	if err != nil {
 		return newGitError("Clone", opts.Path, "", err)
