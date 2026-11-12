@@ -23,16 +23,18 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
 
 1. **错误处理**：需要保留 cause 链的包装一律
    `oekiterrors.Wrap(err, msg, kv...)`（nil-safe；动态上下文进 kv，不要格式化进
-   消息文本）。消息必须带动态值的格式化构造（含 `%w`，可多个）一律
-   `oekiterrors.Errorf`（pkg ≥v0.19.0，与 fmt.Errorf 同型：nil-safe、空串返
-   nil、多 `%w` 走 `Unwrap() []error`；需 kv 时先 Errorf 再 Wrap 叠加）。
-   `fmt.Errorf` 只允许一种残留形态：
-   - 纯 `%w` **双链**包装——`provider/errors.go` 的 3 处是**永久例外**（分类
-     哨兵 + 原始 cause 双链，oekit Wrap 单 cause 语义不覆盖），别再"迁移"它们。
-   （2026-11-04 起：无 cause 格式化错误的存量容忍区已取消——当日
-   「能用尽用」指令下 50 处主模块 + 9 处 mcp 全量迁移 `oekiterrors.Errorf`，
-   仅余上述 3 例外；此后 `fmt.Errorf` 在 SDK/mcp 源码中出现即违规。）
-   禁止 `%v` 包装、禁止 `_` 丢弃错误。
+   消息文本）。**格式化错误构造一律 stdlib `fmt.Errorf`**（含 `%w`，可多个，
+   多 `%w` 走 `Unwrap() []error`；需 kv 时先 fmt.Errorf 再 Wrap 叠加）。
+   **2026-11-12 起 `oekiterrors.Errorf` 已被上游删除**（pkg v0.45.0 #378
+   「普通错误包装统一 stdlib fmt.Errorf("%w")，本包只留 Wrap kv/Recovered/
+   MultiError 等 stdlib 没有的能力」）——本仓 72 处当日全量迁 stdlib（语义
+   落差实测为零：4 处 `%w` 点实参全非 nil），gongfeng v0.4.0 同步适配解锁
+   地板；「零引用」判词已提 [pkg#405](https://github.com/oekit/pkg/issues/405)
+   备案反证，**落地与否均不回迁**。历史沿革：2026-11-04 曾要求格式化错误
+   一律 oekiterrors.Errorf（当日 59 处迁移），provider/errors.go 3 处纯 `%w`
+   双链包装为「永久例外」——该例外随 Errorf 删除自然溶解（双链包装本就是
+   fmt.Errorf 标准形态，勿再当例外迁移）。禁止 `%v` 包装（丢 cause 链，
+   用 `%w`）、禁止 `_` 丢弃错误。
 2. **日志**：SDK 包面向 `provider.Logger` / `transport.Logger` 注入（默认
    noop）；需要接 oekit 生态时用 `NewLogxLogger(component)`（基于
    `logx.Delegating` 懒解析，component 标识子系统，service name 属于消费方）。
@@ -297,6 +299,48 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   **procx 维持不引入**：#359 随之无消费点（勿重复评估）。被动受益：logx
   v0.9.2 纯 floor sync（NewLogxLogger 桥线不动）；concurrency v0.32–33
   既有委托线（async/syncx/loop/retry）零变更。
+- **pkg v0.45–v0.46 / concurrency v0.34 / logx v0.10.0 增量审计与三连收编
+  （2026-11-12，先行审计再动工；本条即结论存档）**。本轮增量带一 BREAKING
+  与一硬耦合：**pkg v0.45.0 删除 `errors.Errorf`（#378，「零引用」判词被
+  下游 72 处反证）**——收编轮按上游哲学迁 stdlib `fmt.Errorf("%w")`（主仓
+  63 处 + mcp 9 处，59 处纯格式化零落差 + 4 处 `%w` 点核非 nil 逐点替换；
+  规则一 Errorf 条款同日反转），并向上游提
+  [pkg#405](https://github.com/oekit/pkg/issues/405) 备案「零引用」反证
+  与 nil-safe `%w`/空返 nil/非 error `%w` 三差异面，**落地与否均不回迁**；
+  **go-gongfeng v0.4.0 同步适配解锁地板**（4 处同迁，MVS 抬升会经依赖链
+  中段传递断裂——gongfeng#6 闭环）。**concurrency v0.34.0 go.mod 硬性要
+  求 pkg v0.45.0（panic 收编单源）——二者捆绑升级无独立空间**；logx
+  v0.9.2→v0.10.0 可独立升（零 pkg 耦合，ErrAttrs 走 duck-type kvCarrier，
+  core 仅 deprecated shutdown 子包引用不入本仓 go.mod）。**破坏性核查全
+  绿**：logx #171 BaseLogger.Level→AtomicLevel 零触达（桥接面
+  Delegating/Enabled(logx.Level)/WithService/SetDefault 逐项核对，本仓零
+  BaseLogger 字段访问）；concurrency 自宣零 BREAKING 实证（async.PanicError
+  兼容载体保留、FanInLimitCtx/Slot/loop.Config/httpx 三函数签名逐字不变）。
+  **收编三处**：① `pkg/errors.Recovered`（#381）——provider/ttlcache.go 回
+  源 winner 的手写 recover 双分支（error `%w`/非 error `%v`，正是 #381 点
+  名病灶）收编为 Recovered+Wrap，error 身份（Unwrap）+栈+`%T` 三收益，赢
+  家重 panic 路径不动；② 72 处 Errorf→fmt.Errorf 全量迁移（见规则一）；
+  ③ transport/retry.go wait 循环 `time.After`→NewTimer+Stop（#272 同形自
+  留点顺手清——retry core 既定不迁，此为 HTTP 特化自留地的 stdlib 形态
+  修复，非收编）。**定性不引入（无消费点，勿再评估）**：distlock（etcdx#123
+  后端中立契约包）；reflectx.DeepCopy*（仓内无手写深拷贝）；config
+  SetFromString/DurationType 导出（config 已定性）；urlguard #380 哨兵与
+  BlockedCIDRSpecs/IsBlockedIP/ParseCIDRList（SSRF 面维持不适用）；logx
+  NewStdLoggerWith/NewHlogLoggerWith/CtxOrBackground（hlog/std 选项面）；
+  concurrency singleflight/ratelimit/progress/group/batch-timewheel 内部
+  收敛面（#262/#260/#265/#269/#264）。**被动受益**：#261/#267/#268（async
+  panic 收编走 Recovered 单源、PanicError 补 Unwrap、GoSafeWithErrChannel
+  panic 分支裸 `%v`→*PanicError——batch item Err 与 mcp errCh 的 error 型
+  panic errors.Is 可穿透）；#263 FanInLimitCtx runSlot 收敛（batch 契约
+  panic→item Err 不变）；cache #373/#374（ttlcache Peek/Set/Del/Stats 面
+  与 Stats 五字段逐字不变）；webhook #376（空密钥 fail-closed panic 双侧
+  保留，contracttest 负对照安全）；timex #377（ParseFirst 单行委托
+  nil loc→UTC 与 time.Parse 逐字等价）；logx #169/#170/#172 经 NewLogxLogger
+  桥被动受益。**#353 ttlcache 自建单飞维持**（v0.45 cache 收敛未触注入路
+  径）；**测试夹具手写 HMAC 保留独立对照**（不变）。logx #176–#181 仍
+  open（不在 v0.10.0），下轮增量再审。升级落点：主模块+mcp 双 go.mod 三行
+  同升（mcp replace ../ 不动、require 版本行随 tag 人工跟随），Go 地板 1.26
+  低于本仓 1.27.4 无 toolchain 动作。
 
 ## 规则二：公共契约红线
 
