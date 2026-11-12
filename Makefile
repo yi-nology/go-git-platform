@@ -46,11 +46,11 @@ cover-html: test
 
 ## lint runs golangci-lint with the project's configuration.
 lint:
-	$(GOLANGCI_LINT) run ./...
+	GOWORK=$(GOWORK) $(GOLANGCI_LINT) run ./...
 
 ## fmt formats every Go file with gofmt and goimports.
 fmt:
-	$(GO) fmt ./...
+	GOWORK=$(GOWORK) $(GO) fmt ./...
 	@command -v goimports >/dev/null 2>&1 && goimports -w . || true
 
 ## vet runs the standard go vet checks.
