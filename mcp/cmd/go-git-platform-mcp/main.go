@@ -16,10 +16,12 @@
 //	--read-only   mount only read tools (recommended for untrusted agents)
 //	--toolsets    comma-separated subset (run with --help for the live
 //	              list; names come straight from the toolset registry)
-//	--http        serve streamable HTTP on this address (e.g. ":8080")
-//	              instead of stdio; the MCP endpoint lives at /mcp
+//	--http        serve streamable HTTP on this address instead of stdio.
+//	              ":port" binds 127.0.0.1; a non-loopback host additionally
+//	              requires --http-token or the server refuses to start.
+//	              The MCP endpoint lives at /mcp.
 //	--http-token  require "Authorization: Bearer <token>" on the HTTP
-//	              endpoint (strongly recommended when binding non-localhost)
+//	              endpoint (required for non-loopback binds)
 //
 // The default transport is MCP over stdio, so a typical client config is:
 //
@@ -34,6 +36,7 @@ import (
 	"crypto/subtle"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -76,7 +79,7 @@ func run() error {
 		skipTLS   = flag.Bool("skip-tls", false, "skip TLS verification for self-hosted instances (not recommended)")
 		readOnly  = flag.Bool("read-only", false, "mount read tools only")
 		toolsets  = flag.String("toolsets", "", "comma-separated subset of "+strings.Join(mcpserver.ToolsetNames(), ",")+" (empty = all)")
-		httpAddr  = flag.String("http", "", "serve streamable HTTP on this address (e.g. \":8080\") instead of stdio")
+		httpAddr  = flag.String("http", "", "serve streamable HTTP on this address instead of stdio: \":port\" binds loopback only; non-loopback requires --http-token")
 		httpToken = flag.String("http-token", "", "require Authorization: Bearer <token> on the HTTP endpoint")
 	)
 	flag.Parse()
@@ -118,7 +121,15 @@ func run() error {
 	}
 
 	if *httpAddr != "" {
-		return serveHTTP(*httpAddr, *httpToken, srv)
+		listen, host, err := resolveListenAddr(*httpAddr, *httpToken != "")
+		if err != nil {
+			return err
+		}
+		if *skipTLS && !isLoopbackHost(host) {
+			logger.Warn("skip-tls with non-loopback HTTP listener: token and git traffic travel in plaintext on the network",
+				"addr", listen)
+		}
+		return serveHTTP(listen, *httpToken, srv)
 	}
 
 	ctx := context.Background()
@@ -126,6 +137,39 @@ func run() error {
 		return oekiterrors.Wrap(err, "mcp server")
 	}
 	return nil
+}
+
+// resolveListenAddr normalizes the --http listen address and enforces the
+// auth policy: a bare ":port" binds loopback only; an explicit non-loopback
+// host (wildcard, public IP, or hostname) refuses to start without
+// --http-token, so an anonymous remote client can never reach the git
+// credentials this process holds.
+func resolveListenAddr(addr string, hasToken bool) (listen, host string, err error) {
+	h, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid --http address %q: %w", addr, err)
+	}
+	if port == "" {
+		return "", "", fmt.Errorf("invalid --http address %q: missing port", addr)
+	}
+	if h == "" {
+		h = "127.0.0.1"
+	}
+	if !isLoopbackHost(h) && !hasToken {
+		return "", "", fmt.Errorf("--http address %q is not loopback: refusing to start without --http-token (anonymous remote clients would share this process's git credentials)", addr)
+	}
+	return net.JoinHostPort(h, port), h, nil
+}
+
+// isLoopbackHost reports whether host is a loopback literal (IP or
+// localhost name). Hostname form is intentionally conservative: only
+// "localhost" and "*.localhost" qualify; any other name must carry a token.
+func isLoopbackHost(host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	h := strings.ToLower(strings.TrimSuffix(host, "."))
+	return h == "localhost" || strings.HasSuffix(h, ".localhost")
 }
 
 // serveHTTP runs the MCP endpoint as streamable HTTP at /mcp. The stateful
