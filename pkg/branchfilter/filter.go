@@ -23,16 +23,18 @@
 //     a branch whose ref name contains a comma ("release,1.0" is a valid
 //     git ref name; git check-ref-format accepts it).
 //   - New("main,release-*"): the convenience string form splits on commas,
-//     trims whitespace, and skips empty items. The comma is ALWAYS a
-//     separator in this form — there is no escape — so a ref name that
-//     contains a comma cannot be expressed here; use NewPatterns.
+//     trims whitespace, and skips empty items (stringx.SplitCSVNonEmpty:
+//     RFC 4180 quoting, so an item opened with a double quote keeps its
+//     commas and loses the quotes). Outside quotes the comma is ALWAYS a
+//     separator; for a literal comma use NewPatterns.
 package branchfilter
 
 import (
 	"path"
-	"strings"
 
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/slicex"
+	"github.com/oekit/pkg/stringx"
 )
 
 // BranchFilter matches branch names against a set of comma-separated glob
@@ -44,10 +46,10 @@ type BranchFilter struct {
 // New creates a BranchFilter from a comma-separated list of glob patterns
 // (e.g. "main,release-*,feature/*"). An empty string matches everything.
 //
-// The comma is ALWAYS a separator in this form (whitespace around each
-// pattern is trimmed, empty items skipped) — there is no escape mechanism,
-// so a branch name containing a comma can never be expressed here; use
-// NewPatterns for that (issue #54).
+// The comma is a separator in this form (whitespace around each pattern is
+// trimmed, empty items skipped; splitting is stringx.SplitCSVNonEmpty, so a
+// double-quoted item keeps its commas and drops the quotes — RFC 4180).
+// For a literal comma in a pattern, use NewPatterns (issue #54).
 //
 // Each pattern is validated up front with path.Match; a malformed
 // pattern yields an error wrapping path.ErrBadPattern instead of a
@@ -57,15 +59,7 @@ func New(filterStr string) (*BranchFilter, error) {
 		return &BranchFilter{patterns: nil}, nil
 	}
 
-	raw := strings.Split(filterStr, ",")
-	patterns := make([]string, 0, len(raw))
-	for _, p := range raw {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		patterns = append(patterns, p)
-	}
+	patterns := stringx.SplitCSVNonEmpty(filterStr)
 	return newPatterns(patterns)
 }
 
@@ -129,13 +123,7 @@ func (f *BranchFilter) FilterBranches(branches []string) []string {
 		return branches
 	}
 
-	result := make([]string, 0, len(branches))
-	for _, b := range branches {
-		if f.Match(b) {
-			result = append(result, b)
-		}
-	}
-	return result
+	return slicex.Filter(branches, f.Match)
 }
 
 // IsEmpty reports whether the filter has no patterns (matches everything).

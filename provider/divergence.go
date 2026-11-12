@@ -2,6 +2,8 @@
 
 package provider
 
+import "github.com/oekit/pkg/slicex"
+
 // DivergenceKind classifies how a backend's behavior departs from the
 // unified provider semantics for a given method.
 type DivergenceKind string
@@ -42,16 +44,11 @@ type Divergence struct {
 
 // FindByMethod returns the ledger entries registered for method.
 func FindByMethod(divs []Divergence, method string) []Divergence {
-	var out []Divergence
-	for _, d := range divs {
-		if d.Method == method {
-			out = append(out, d)
-		}
-	}
-	return out
+	return slicex.Filter(divs, func(d Divergence) bool { return d.Method == method })
 }
 
 // Ignores reports whether the ledger registers an ignore of field on method.
+// 保留手写循环：slicex 无早退谓词原语（Any/FindFunc），Filter 会为一次布尔判定白分配全量结果。
 func Ignores(divs []Divergence, method, field string) bool {
 	for _, d := range divs {
 		if d.Method == method && d.Kind == DivergenceIgnore && d.Field == field {
@@ -62,6 +59,7 @@ func Ignores(divs []Divergence, method, field string) bool {
 }
 
 // Stubs reports whether the ledger registers method as a stub.
+// 同 Ignores：早退谓词无 slicex 原语对应，保留手写循环。
 func Stubs(divs []Divergence, method string) bool {
 	for _, d := range divs {
 		if d.Method == method && d.Kind == DivergenceStub {

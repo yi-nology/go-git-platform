@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"slices"
+
+	"github.com/oekit/pkg/slicex"
 )
 
 // EnsureAction reports what an Ensure* call did to converge the resource
@@ -78,12 +80,9 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		return "", nil, err
 	}
 
-	var matches []*PlatformWebhook
-	for _, h := range existing {
-		if h != nil && h.URL == opts.URL {
-			matches = append(matches, h)
-		}
-	}
+	matches := slicex.Filter(existing, func(h *PlatformWebhook) bool {
+		return h != nil && h.URL == opts.URL
+	})
 
 	if len(matches) == 1 && equalEvents(canonicalWebhookEvents(matches[0].Events), desired) {
 		// Secret write-only: the match says nothing about the stored
