@@ -19,6 +19,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Root jobs test only the root module: the committed go.work would
+    # otherwise widen their scope. The mcp job keeps workspace mode.
+    env:
+      GOWORK: 'off'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -38,6 +42,8 @@ jobs:
     name: Vulnerability check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GOWORK: 'off'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -60,6 +66,8 @@ jobs:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    env:
+      GOWORK: 'off'
     strategy:
       fail-fast: false
       matrix:
@@ -130,13 +138,14 @@ jobs:
           cache: true
           cache-dependency-path: mcp/go.sum
 
-      # Self-heal mcp/go.sum: root-module dependency bumps (e.g. dependabot
-      # PRs touching only the root go.mod) change the graph this module
-      # inherits via `replace ../`, leaving hashes stale. Tidy before
-      # building so the job tests code, not bookkeeping.
-      - name: Tidy
+      # 模块元数据漂移（根 go.mod 改动后 mcp require/go.sum 未跟随）必须
+      # 显式失败，而不是像旧配置那样在 CI 里被自动修复掩盖。GOWORK=off
+      # 让 tidy 走 require 版本行的发布解析路径——这正是它要校验的形态。
+      - name: Tidy check
         working-directory: mcp
-        run: go mod tidy
+        run: |
+          GOWORK=off go mod tidy
+          git diff --exit-code -- go.mod go.sum
 
       - name: Build
         working-directory: mcp
@@ -149,3 +158,23 @@ jobs:
       - name: Test
         working-directory: mcp
         run: go test -race -count=1 ./...
+
+  # 独立分发验证：go install pkg@ref 必须真实可用（评审 P1）。@ref 从
+  # proxy 拉取，GOWORK=off 确保 @version 语法不被 workspace 拦截。
+  mcp-install:
+    name: MCP standalone install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install from module proxy
+        env:
+          GOWORK: 'off'
+        run: go install github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Smoke the installed binary
+        run: '"$(go env GOPATH)/bin/go-git-platform-mcp" --help'
