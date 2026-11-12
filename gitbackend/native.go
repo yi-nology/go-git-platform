@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/shellx"
 )
 
 type NativeGitBackend struct {
@@ -284,9 +285,10 @@ func (b *NativeGitBackend) configureAuth(cmd *exec.Cmd, auth AuthConfig, hosts [
 		return sess.close, nil
 	case AuthSSH:
 		if auth.SSHKey != "" {
-			// %q keeps a caller-supplied key path from being interpreted by
-			// the shell GIT_SSH_COMMAND runs under (spaces, $, backticks).
-			sshCmd := fmt.Sprintf("ssh -i %q -o BatchMode=yes", auth.SSHKey)
+			// shellx.Quote 单引号化 key 路径：GIT_SSH_COMMAND 由 git 交给
+			// sh -c 执行，$ / 反引号 / 空格在双引号里仍会被 shell 解释
+			// （Go %q 不转义它们）——单引号内一切字面。
+			sshCmd := fmt.Sprintf("ssh -i %s -o BatchMode=yes", shellx.Quote(auth.SSHKey))
 			sshCmd += " " + sshHostKeyArgs(auth)
 			cmd.Env = append(cmd.Env, fmt.Sprintf("GIT_SSH_COMMAND=%s", sshCmd))
 		}
@@ -591,12 +593,12 @@ func sshHostKeyArgs(auth AuthConfig) string {
 		// 生成仅含期望指纹的临时 known_hosts 太重;用 yes + 指定文件,
 		// 由调用方把钉扎主机写进 KnownHostsPath。
 		if auth.KnownHostsPath != "" {
-			return fmt.Sprintf("-o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q", auth.KnownHostsPath)
+			return fmt.Sprintf("-o StrictHostKeyChecking=yes -o UserKnownHostsFile=%s", shellx.Quote(auth.KnownHostsPath))
 		}
 		return "-o StrictHostKeyChecking=yes"
 	}
 	if auth.KnownHostsPath != "" {
-		return fmt.Sprintf("-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=%q", auth.KnownHostsPath)
+		return fmt.Sprintf("-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=%s", shellx.Quote(auth.KnownHostsPath))
 	}
 	// Secure default: verify against the user's known_hosts and
 	// auto-accept new hosts on first use (MITM on a known host

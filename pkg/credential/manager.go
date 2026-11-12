@@ -3,6 +3,8 @@ package credential
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/oekit/pkg/shellx"
 )
 
 // Manager provides helpers for constructing authenticated git remote URLs
@@ -50,7 +52,7 @@ func (m *Manager) BuildSSHCommand(sshKeyPath string) string {
 	if sshKeyPath == "" {
 		return ""
 	}
-	return fmt.Sprintf("ssh -i %q -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", sshKeyPath)
+	return fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", shellx.Quote(sshKeyPath))
 }
 
 // BuildSSHCommandInsecure returns a GIT_SSH_COMMAND value with host key
@@ -60,5 +62,5 @@ func (m *Manager) BuildSSHCommandInsecure(sshKeyPath string) string {
 	if sshKeyPath == "" {
 		return ""
 	}
-	return fmt.Sprintf("ssh -i %q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", sshKeyPath)
+	return fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", shellx.Quote(sshKeyPath))
 }

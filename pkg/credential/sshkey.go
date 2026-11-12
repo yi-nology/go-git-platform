@@ -14,6 +14,7 @@ import (
 
 	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
+	"github.com/oekit/pkg/shellx"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -94,14 +95,14 @@ func (h *SSHKeyHelper) CreateTempKeyFile(keyContent string) (string, error) {
 // with strict host key checking enabled (the secure default).
 // Use BuildSSHCommandInsecure for CI environments where known_hosts is unavailable.
 func (h *SSHKeyHelper) BuildSSHCommand(keyPath string) string {
-	return fmt.Sprintf("ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", keyPath)
+	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts", shellx.Quote(keyPath))
 }
 
 // BuildSSHCommandInsecure returns a GIT_SSH_COMMAND value with host key
 // checking disabled. Only suitable for CI/server environments where
 // known_hosts cannot be populated. Do NOT use in production.
 func (h *SSHKeyHelper) BuildSSHCommandInsecure(keyPath string) string {
-	return fmt.Sprintf("ssh -i %q -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", keyPath)
+	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", shellx.Quote(keyPath))
 }
 
 // CleanupTempFile removes a temporary key file. Safe to call with empty string.

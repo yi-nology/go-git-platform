@@ -123,3 +123,17 @@ func TestSSHKeyHelper_ProcessPrivateKey_PreservesCauseChain(t *testing.T) {
 		t.Errorf("friendly context missing from message: %q", err.Error())
 	}
 }
+
+// BuildSSHCommand 必须产出 POSIX shell 单词：key 路径含 $ / 反引号 / 空格
+// 时不得被 GIT_SSH_COMMAND 的 sh -c 展开（Go %q 不转义 $ 与反引号——
+// 旧实现的保护声明不实，shellx.Quote 单引号化才是真保护）。
+func TestSSHKeyHelper_BuildSSHCommand_ShellMetacharPath(t *testing.T) {
+	h := &SSHKeyHelper{}
+	got := h.BuildSSHCommand("/tmp/$HOME `id` key")
+	if !strings.Contains(got, `'/tmp/$HOME `+"`id`"+` key'`) {
+		t.Fatalf("key path not single-quoted: %s", got)
+	}
+	if strings.Contains(got, `"/tmp/$HOME`) {
+		t.Fatalf("Go %%q double-quote form leaked: %s", got)
+	}
+}
