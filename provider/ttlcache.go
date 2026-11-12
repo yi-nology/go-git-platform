@@ -3,9 +3,11 @@ package provider
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/oekit/pkg/cache"
+	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -38,9 +40,13 @@ type ttlCache[V any] struct {
 	inner *cache.LocalCache[V]        // 装饰器未透传 Clear/Size/Sweep，走内层
 	sf    *cache.SingleFlightCache[V] // 读路径 + 计数 + 回填
 
-	flightsMu sync.Mutex
-	flights   map[string]*ttlFlight[V] // 按 key 收敛的回源 flight（赢家构造、等待者共享）
-	gen       uint64                   // 失效世代：remove/purge 推进（issue #135）
+	// 按 key 收敛的回源 flight（赢家构造、等待者共享）。容器层互斥
+	// 取代手写 flightsMu（oekit 收编；自建 flight 语义不变——#353
+	// 存档只禁委托 SingleFlightCache，不禁换容器）。
+	flights *container.SafeMap[string, *ttlFlight[V]]
+	// 失效世代：remove/purge 推进（issue #135）。原子计数取代与
+	// flights 共用的互斥段——捕获/比较语义与锁版逐点等价。
+	gen atomic.Uint64
 
 	mu       sync.Mutex
 	baseline cache.Stats // ResetStats 时刻的计数基线（对外按差值暴露）
@@ -67,8 +73,9 @@ func newTTLCache[V any](ttl time.Duration, maxSize int) *ttlCache[V] {
 		NoBackgroundSweep: true,
 	})
 	return &ttlCache[V]{
-		inner: inner,
-		sf:    cache.NewSingleFlightCache[V](inner),
+		inner:   inner,
+		sf:      cache.NewSingleFlightCache[V](inner),
+		flights: container.NewSafeMap[string, *ttlFlight[V]](),
 	}
 }
 
@@ -100,13 +107,10 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 		return *value, nil
 	}
 
-	// 按 key 单飞：赢家构造并回填，等待者等 done 共享结果。
-	c.flightsMu.Lock()
-	if c.flights == nil {
-		c.flights = make(map[string]*ttlFlight[V])
-	}
-	if f, ok := c.flights[key]; ok {
-		c.flightsMu.Unlock()
+	// 按 key 单飞：GetOrSet 原子收敛——不存在则写入新 flight 并当赢家，
+	// 已存在则取既有 flight 等 done（与旧「查+存持锁一步」逐点等价）。
+	f, loaded := c.flights.GetOrSet(key, &ttlFlight[V]{done: make(chan struct{})})
+	if loaded {
 		<-f.done
 		if f.err != nil {
 			var zero V
@@ -114,9 +118,6 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 		}
 		return f.v, nil
 	}
-	f := &ttlFlight[V]{done: make(chan struct{})}
-	c.flights[key] = f
-	c.flightsMu.Unlock()
 
 	// 赢家路径。build panic 时：等待者共享为错误、赢家自身照旧向上抛
 	// （recover 后重 panic，panic 值原样传递）。
@@ -129,18 +130,14 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 			f.err = oekiterrors.Wrap(oekiterrors.Recovered(r), "provider: 回源构造 panic（同 key 等待者共享同一失败）")
 		}
 		close(f.done)
-		c.flightsMu.Lock()
-		delete(c.flights, key)
-		c.flightsMu.Unlock()
+		c.flights.Delete(key)
 		if r != nil {
 			panic(r)
 		}
 	}()
 
 	// 捕获起飞世代（issue #135）：build 执行期间 remove/purge 会推进世代。
-	c.flightsMu.Lock()
-	gen := c.gen
-	c.flightsMu.Unlock()
+	gen := c.gen.Load()
 
 	f.v, f.err = build()
 	if f.err != nil {
@@ -152,9 +149,7 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 	// build 执行期间该 key 被 remove/purge（Manager.Remove/Purge 删旧实例）
 	// ⇒ 本次回填放弃，旧实例不得复活——「Remove 后必须重建」在并发窗口内
 	// 也成立。返回值仍给调用方（与上游口径一致：在途构造的结果不丢）。
-	c.flightsMu.Lock()
-	stale := c.gen != gen
-	c.flightsMu.Unlock()
+	stale := c.gen.Load() != gen
 	if !stale {
 		// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
 		_ = c.sf.Set(ctx, key, &f.v)
@@ -164,17 +159,13 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 
 // remove 丢弃一个条目。
 func (c *ttlCache[V]) remove(key string) {
-	c.flightsMu.Lock()
-	c.gen++
-	c.flightsMu.Unlock()
+	c.gen.Add(1)
 	_ = c.sf.Del(context.Background(), key)
 }
 
 // purge 丢弃全部条目。
 func (c *ttlCache[V]) purge() {
-	c.flightsMu.Lock()
-	c.gen++
-	c.flightsMu.Unlock()
+	c.gen.Add(1)
 	c.inner.Clear()
 }
 
