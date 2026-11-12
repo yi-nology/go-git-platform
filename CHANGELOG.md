@@ -4,6 +4,42 @@ All notable changes to this project are documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.128.0] - 2026-11-12
+
+### Changed（oekit 三件套拉齐 v0.46.0/v0.34.0/v0.10.0 + gongfeng v0.4.0——pkg v0.45 删 Errorf 的全链适配）
+
+**BREAKING 源**：pkg v0.45.0（#378）删除 `errors.Errorf`（上游口径：「普通
+错误包装统一 stdlib fmt.Errorf("%w")，本包只留 Wrap kv/Recovered/MultiError
+等 stdlib 没有的能力」）。收编轮全链适配（先行增量审计再动工，结论存档
+AGENTS.md）：
+
+- deps: **双模块拉齐**——pkg v0.44.0→**v0.46.0**、concurrency v0.33.0→
+  **v0.34.0**（go.mod 硬依赖 pkg v0.45，捆绑升级无独立空间）、logx
+  v0.9.2→**v0.10.0**（#171 BaseLogger.Level→AtomicLevel 经逐项核查零触达）、
+  go-gongfeng v0.3.1→**v0.4.0**（其 4 处同迁适配，依赖链中段解锁）。
+- refactor: **72 处 `oekiterrors.Errorf` → stdlib `fmt.Errorf`**（主仓 63 +
+  mcp 9）——59 处纯格式化零落差，4 处 `%w` 点实参全非 nil，语义落差实测为
+  零（迁移前后全量测试绿）；`oekiterrors.Wrap/New` 保留（v0.46 仍提供）。
+  **迁移说明**：依赖本库传递 pkg 且使用 `errors.Errorf` 的消费方需同步迁
+  stdlib fmt.Errorf（或随 go-gongfeng v0.4.0 适配）；规则一 Errorf 条款同日
+  反转（AGENTS.md，「3 处双 %w 永久例外」随删除自然溶解）。
+- feat(provider): **ttlcache 回源 panic 收编 `pkg/errors.Recovered`（#381）**
+  ——手写 recover 双分支（error `%w`/非 error `%v`）删除，error 身份
+  （Unwrap）+goroutine 栈+`%T` 类型三收益，赢家重 panic 路径不动。
+- fix(transport): retry wait 循环 **`time.After`→NewTimer+Stop**（#272 同形
+  自留点顺手清：ctx 早退时计时器不再滞留到点才回收）。
+- 上游备案 [pkg#405](https://github.com/oekit/pkg/issues/405)：#378「零引用」
+  判词反证（go-git-platform 72 处 + go-gongfeng 4 处现场）+ Errorf 三差异面
+  （nil-safe `%w`/空串返 nil/非 error `%w` 渲染）提请复核——落地与否均不回迁。
+- 被动受益（消费面逐项核查零行为变化）：async panic 收编（#261/#267/#268
+  ——PanicError 补 Unwrap、GoSafeWithErrChannel panic 裸 `%v`→*PanicError，
+  batch item Err 与 mcp errCh 的 error 型 panic errors.Is 可穿透）、
+  FanInLimitCtx runSlot 收敛（#263）、cache 单源收敛（#373/#374）、webhook
+  构造期校验（#376，空密钥 fail-closed 双侧保留）、timex ParseFirst 单行
+  委托（#377）。
+- 定性不引入存档（无消费点，勿再评估）：distlock、reflectx、config 导出面、
+  urlguard #380 哨兵/CIDR 导出、logx 选项构造面、concurrency 内部收敛面。
+
 ## [0.127.0] - 2026-11-12
 
 ### Changed（依赖/工具链）
