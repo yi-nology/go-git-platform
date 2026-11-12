@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.129.0] - 2026-11-12
+
 ### Security（MCP HTTP 监听加固——评审 P0 清零）
 
 - fix(mcp): **HTTP 模式默认绑定 loopback；显式非 loopback 地址无 `--http-token`
