@@ -229,8 +229,19 @@ func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts 
 		return nil
 	}
 
-	headCommit, _ := repo.CommitObject(head.Hash())
-	branchCommit, _ := repo.CommitObject(ref.Hash())
+	// commit 对象缺失（对象被 gc/prune、对象库损坏、shallow/partial 克隆中断、
+	// 悬空 ref）时返回 error 而不是把 nil 带到后面的 .Tree() 解引用——旧实现
+	// 丢弃这两处错误，nil commit 在 Merge 内一路走到 headCommit.Tree() 直接
+	// 空指针崩溃打穿宿主进程；native 后端同场景经 git 自身报 error（issue #141，
+	// 对齐 fail-fast）。快进块的 nil 守卫保留为防御性写法。
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return newGitError("Merge", repoPath, "", err)
+	}
+	branchCommit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		return newGitError("Merge", repoPath, "", err)
+	}
 
 	if headCommit != nil && branchCommit != nil {
 		isAncestor, _ := headCommit.IsAncestor(branchCommit)

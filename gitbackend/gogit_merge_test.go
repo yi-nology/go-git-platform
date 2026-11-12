@@ -256,3 +256,46 @@ func TestGoGit_Merge_PreservesExecMode(t *testing.T) {
 		t.Errorf("expected a clean worktree after the merge commit, got %+v", status)
 	}
 }
+
+// removeLooseObject 删掉一个 loose object 文件（构造对象库不完整的仓库）：
+// git commit 落的是 loose object，哈希前两位是目录名。
+func removeLooseObject(t *testing.T, dir, hash string) {
+	t.Helper()
+	objPath := filepath.Join(dir, ".git", "objects", hash[:2], hash[2:])
+	if _, err := os.Stat(objPath); err != nil {
+		// 对象被打包（gc 后）时无法按文件删——本测试的夹具仓库不会走到这
+		t.Skipf("loose object %s not found: %v", hash, err)
+	}
+	if err := os.Remove(objPath); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGoGit_Merge_MissingCommitObjectReturnsError 回归（issue #141）：commit
+// 对象缺失时必须返回 error 而不是 panic。旧实现丢弃 CommitObject 的错误，
+// nil commit 在非快进路径上一路走到 .Tree() 解引用，空指针崩溃打穿宿主
+// 进程；native 后端同场景（git 自身）只报 error。两条根因路径（HEAD commit
+// 缺失 / 目标分支 commit 缺失）都要 fail-fast。
+func TestGoGit_Merge_MissingCommitObjectReturnsError(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		branch func(repo string) string // 返回被删对象对应的 rev
+	}{
+		{"missing HEAD commit object", func(repo string) string { return headHash(t, repo) }},
+		{"missing branch commit object", func(repo string) string { return gitOutput(t, repo, "rev-parse", "feature") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := newTestGoGitBackend(t)
+			repo := divergedRepo(t) // main 与 feature 分叉：走非快进路径
+			removeLooseObject(t, repo, tc.branch(repo))
+
+			err := b.Merge(context.Background(), repo, "feature", MergeOptions{AllowUnrelated: true})
+			if err == nil {
+				t.Fatal("want error for missing commit object, got nil (old code panicked here)")
+			}
+			if strings.Contains(err.Error(), "runtime error") {
+				t.Fatalf("unexpected panic-derived error: %v", err)
+			}
+		})
+	}
+}

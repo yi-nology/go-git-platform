@@ -14,6 +14,8 @@ import (
 
 	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/shellx"
+
+	"github.com/yi-nology/go-git-platform/pkg/credential"
 )
 
 type NativeGitBackend struct {
@@ -167,8 +169,12 @@ func (b *NativeGitBackend) runGitEnv(ctx context.Context, repoPath string, args 
 		cmd.Dir = repoPath
 	}
 
-	// resolveAuth may create a temp key file for SSHKeyContent; cleanup after run.
-	resolvedAuth, cleanupKey := b.resolveAuth(auth)
+	// resolveAuth may create a temp key file for SSHKeyContent (and decrypt a
+	// passphrase-protected key, issue #142); cleanup after run.
+	resolvedAuth, cleanupKey, keyErr := b.resolveAuth(auth)
+	if keyErr != nil {
+		return "", "", newGitError("resolveAuth", repoPath, "", keyErr)
+	}
 	// SSH 指纹钉扎（native 路径 v0.70.0 起真正校验）：keyscan 预校验 +
 	// 临时 known_hosts；fail-closed——指纹不匹配/无法校验直接报错。
 	pinAuth, cleanupPin, pinErr := b.resolveSSHPin(ctx, repoPath, args, resolvedAuth)
@@ -212,25 +218,71 @@ func withInsecureArgs(auth AuthConfig, args []string) []string {
 	return args
 }
 
-// resolveAuth handles SSHKeyContent by writing it to a temp file so that
-// the native git command can use it via GIT_SSH_COMMAND. Returns the resolved
-// AuthConfig (with SSHKey pointing to the temp file) and a cleanup function.
-func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
+// resolveAuth handles SSH key material for the native git command:
+//   - SSHKeyContent（DB 存 key 的用法）落 0600 临时文件供 GIT_SSH_COMMAND 使用；
+//   - Passphrase 非空时先用 pkg/credential 的 ProcessPrivateKey **在进程内解密
+//     成明文 PEM 再落盘**（issue #142）：native 把 key 经 GIT_SSH_COMMAND
+//     交给 ssh 且带 `-o BatchMode=yes`，ssh 永远没有询问口令的机会——旧实现
+//     原样落盘仍带口令的私钥被 ssh 静默跳过，认证以 Permission denied 失败
+//     且看不出 passphrase 被丢了；gogit 后端（xssh.NewPublicKeys）消费同一份
+//     AuthConfig.Passphrase，跨后端行为分叉。带文件路径的 SSHKey 同样处理：
+//     读入 + 解密 + 临时文件，绝不改写用户的原始 key 文件。
+//
+// 口令错误/私钥损坏时返回 error（fail-fast），不再带着坏 key 走完认证流程。
+// Returns the resolved AuthConfig (with SSHKey pointing to the temp file),
+// a cleanup function and an error.
+func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func(), error) {
 	cleanup := func() {}
 
-	if auth.Type == AuthSSH && auth.SSHKeyContent != "" && auth.SSHKey == "" {
+	if auth.Type != AuthSSH {
+		return auth, cleanup, nil
+	}
+
+	switch {
+	case auth.SSHKeyContent != "" && auth.SSHKey == "":
+		keyContent := auth.SSHKeyContent
+		if auth.Passphrase != "" {
+			decrypted, err := credential.NewSSHKeyHelper().ProcessPrivateKey(keyContent, auth.Passphrase)
+			if err != nil {
+				return auth, cleanup, err
+			}
+			keyContent = decrypted
+		}
 		tmpFile, err := os.CreateTemp("", "git_ssh_key_*")
 		if err != nil {
-			return auth, cleanup
+			return auth, cleanup, err
 		}
-		keyContent := auth.SSHKeyContent
 		if !strings.HasSuffix(keyContent, "\n") {
 			keyContent += "\n"
 		}
 		if _, err := tmpFile.WriteString(keyContent); err != nil {
 			_ = tmpFile.Close()
 			_ = os.Remove(tmpFile.Name())
-			return auth, cleanup
+			return auth, cleanup, err
+		}
+		_ = tmpFile.Close()
+		_ = os.Chmod(tmpFile.Name(), 0o600)
+
+		auth.SSHKey = tmpFile.Name()
+		cleanup = func() { _ = os.Remove(tmpFile.Name()) }
+	case auth.SSHKey != "" && auth.Passphrase != "":
+		// 口令保护的用户侧 key 文件：解密进临时文件（原文件不动）。
+		raw, err := os.ReadFile(auth.SSHKey)
+		if err != nil {
+			return auth, cleanup, err
+		}
+		decrypted, err := credential.NewSSHKeyHelper().ProcessPrivateKey(string(raw), auth.Passphrase)
+		if err != nil {
+			return auth, cleanup, err
+		}
+		tmpFile, err := os.CreateTemp("", "git_ssh_key_*")
+		if err != nil {
+			return auth, cleanup, err
+		}
+		if _, err := tmpFile.WriteString(decrypted); err != nil {
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpFile.Name())
+			return auth, cleanup, err
 		}
 		_ = tmpFile.Close()
 		_ = os.Chmod(tmpFile.Name(), 0o600)
@@ -239,7 +291,7 @@ func (b *NativeGitBackend) resolveAuth(auth AuthConfig) (AuthConfig, func()) {
 		cleanup = func() { _ = os.Remove(tmpFile.Name()) }
 	}
 
-	return auth, cleanup
+	return auth, cleanup, nil
 }
 
 // configureAuth 为 git 命令注入认证环境。
