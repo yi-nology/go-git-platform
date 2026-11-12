@@ -170,17 +170,16 @@ type rateLimitedMarker interface {
 // walkErrorChain visits every error reachable from err — both the
 // `Unwrap() error` chain and every branch of `Unwrap() []error`（多 %w /
 // errors.Join 节点）—— in depth-first preorder, the same order stdlib
-// errors.Is/As traverse. visit returning true stops the walk; its boolean
-// result reports whether that happened.
+// errors.Is/As traverse. visit returning true stops the walk.
 //
 // 本仓 house 先例（issue #132、timeparse.go）：多 %w 走 Unwrap() []error，
 // cause 链随哨兵一路保留。stdlib 的 errors.Unwrap 只认单分支——遇多 %w
 // 节点返回 nil，手写链遍历到此为止，而 errors.Is/As 却能穿透（issue #146）：
 // 同一条链上「是不是限流」判得出、「要等多久」取不到，观测面自相矛盾。
 // 链遍历一律走本 helper，与 stdlib 同口径。seen 按错误值身份剪环。
-func walkErrorChain(err error, visit func(error) bool) bool {
+func walkErrorChain(err error, visit func(error) bool) {
 	if err == nil {
-		return false
+		return
 	}
 	seen := make(map[error]bool)
 	var walk func(error) bool
@@ -205,7 +204,7 @@ func walkErrorChain(err error, visit func(error) bool) bool {
 		}
 		return false
 	}
-	return walk(err)
+	walk(err)
 }
 
 // classifyProviderStatus 在裸状态码分类之上叠加下层的限流判定（见
