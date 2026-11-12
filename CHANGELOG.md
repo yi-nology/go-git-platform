@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.130.0] - 2026-11-13
+
 ### Security（敏感 query 词表合并——strip/redact 双向补齐 15 项超集）
 
 - fix(transport): **敏感 query 参数词表合并为 15 项超集单一真源**——跨 host
