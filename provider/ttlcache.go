@@ -152,6 +152,7 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 	stale := c.gen.Load() != gen
 	if !stale {
 		// 回填 TTL 由内层按构造期 TTL 落（cfg.TTL；ttl <= 0 = 永不过期）。
+		// best-effort 回填：值已构造并返回调用方，写失败只损失下次命中率。
 		_ = c.sf.Set(ctx, key, &f.v)
 	}
 	return f.v, nil
@@ -160,6 +161,8 @@ func (c *ttlCache[V]) getOrBuild(key string, build func() (V, error)) (V, error)
 // remove 丢弃一个条目。
 func (c *ttlCache[V]) remove(key string) {
 	c.gen.Add(1)
+	// best-effort 删除：remove 无错误通道（Manager.Remove 契约为 void），
+	// 失败仅条目残留至 TTL 过期或清扫回收，世代已推进不会被在途回填复活。
 	_ = c.sf.Del(context.Background(), key)
 }
 

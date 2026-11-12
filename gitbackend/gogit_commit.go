@@ -498,11 +498,21 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 
 	// Save rebase state
 	dir := rebaseStateDir(repoPath)
-	_ = os.MkdirAll(dir, 0o750)
-	_ = writeRebaseStateFile(repoPath, "orig-head", head.Hash().String())
-	_ = writeRebaseStateFile(repoPath, "onto", ontoHash.String())
-	_ = writeRebaseStateFile(repoPath, "head-name", head.Name().String())
-	_ = writeRebaseStateFile(repoPath, "end", strconv.Itoa(len(commits)))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return oekiterrors.Wrap(err, "mkdir rebase state dir", "path", dir)
+	}
+	if err := writeRebaseStateFile(repoPath, "orig-head", head.Hash().String()); err != nil {
+		return oekiterrors.Wrap(err, "write rebase state", "file", "orig-head")
+	}
+	if err := writeRebaseStateFile(repoPath, "onto", ontoHash.String()); err != nil {
+		return oekiterrors.Wrap(err, "write rebase state", "file", "onto")
+	}
+	if err := writeRebaseStateFile(repoPath, "head-name", head.Name().String()); err != nil {
+		return oekiterrors.Wrap(err, "write rebase state", "file", "head-name")
+	}
+	if err := writeRebaseStateFile(repoPath, "end", strconv.Itoa(len(commits))); err != nil {
+		return oekiterrors.Wrap(err, "write rebase state", "file", "end")
+	}
 
 	// Move HEAD to onto and align the worktree and index with it — the
 	// replayed commits must apply on top of onto's state, not the old
@@ -521,7 +531,9 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 
 	// Re-play each commit
 	for i, ci := range commits {
-		_ = writeRebaseStateFile(repoPath, "msgnum", strconv.Itoa(i))
+		if err := writeRebaseStateFile(repoPath, "msgnum", strconv.Itoa(i)); err != nil {
+			return oekiterrors.Wrap(err, "write rebase state", "file", "msgnum")
+		}
 
 		if err := b.applyRebaseCommit(repoPath, repo, ci.Hash); err != nil {
 			if err == ErrMergeConflict {
@@ -645,7 +657,9 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 
 	// Continue with remaining commits
 	for i := msgnum + 1; i < end; i++ {
-		_ = writeRebaseStateFile(repoPath, "msgnum", strconv.Itoa(i))
+		if err := writeRebaseStateFile(repoPath, "msgnum", strconv.Itoa(i)); err != nil {
+			return oekiterrors.Wrap(err, "write rebase state", "file", "msgnum")
+		}
 
 		if err := b.applyRebaseCommit(repoPath, repo, commits[i].Hash); err != nil {
 			if err == ErrMergeConflict {
@@ -656,6 +670,8 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 	}
 
 	// Success — clean up state
+	// 重放已全部完成，清理仅为 best-effort：失败只残留状态目录（下次 Rebase
+	// 会覆盖写同名状态文件），上抛反而会把已成功的操作报成失败。
 	_ = os.RemoveAll(dir)
 	return nil
 }

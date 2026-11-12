@@ -35,6 +35,10 @@ func ConvertHooks(h *provider.Hooks) *transport.Hooks {
 		}
 		rhCopy := rh
 		out.AddRequest(func(ctx context.Context, req *http.Request) error {
+			// provider.RequestHook 返回 context 而非 error——钩子没有错误
+			// 通道，天然 advisory（失败无从表达）；返回的 ctx 在 transport.
+			// RequestHook 签名中无处安放（只回 error），故丢弃。恒返 nil：
+			// 请求不因钩子中断。
 			_ = rhCopy(ctx, req)
 			return nil
 		})

@@ -43,6 +43,8 @@ func (c *IDCache) Get(key string) (int64, bool) {
 // Put stores id under key with a fresh TTL.
 func (c *IDCache) Put(key string, id int64) {
 	value := id
+	// best-effort 回填：Put 契约无错误通道，写失败仅少一次缓存命中
+	//（下次写入会重新解析），不影响正确性。
 	_ = c.cache.Set(context.Background(), key, &value)
 }
 

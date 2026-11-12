@@ -153,6 +153,9 @@ func (b *GoGitBackend) GetTree(ctx context.Context, repoPath, ref, dirPath strin
 
 	var entries []TreeEntry
 	if recursive {
+		// 回调恒返 nil（仅收集条目），回调侧无错误可传播；ForEach 的 error
+		// 只可能来自底层对象遍历读取——此处有意 best-effort：读取失败时返回
+		// 已收集条目，不因此否定整个列举。
 		_ = tree.Files().ForEach(func(f *object.File) error {
 			entries = append(entries, TreeEntry{
 				Name: filepath.Base(f.Name),

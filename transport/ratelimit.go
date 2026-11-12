@@ -76,6 +76,8 @@ func NewRateLimiter(opts ...RateLimiterOption) *RateLimiter {
 // configured RPS cap and the adaptive throttling based on remaining quota.
 // Use WaitContext if you need cancellation support.
 func (rl *RateLimiter) Wait() {
+	// 后台等待：context.Background() 不可取消，WaitContext 的错误仅在 ctx
+	// 取消时产生——此路径不可达，丢弃无损失；需要取消语义的调用方用 WaitContext。
 	_ = rl.WaitContext(context.Background())
 }
 
