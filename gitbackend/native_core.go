@@ -185,7 +185,9 @@ func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	// 复制对象断开借用。参数直通 git；前置校验走 validateCloneReference
 	// （无效路径 fail-fast，不静默退化成普通克隆）。
 	if err := validateCloneReference(opts); err != nil {
-		return err
+		// newGitError 契约(backend.go):两后端错误同形——native 校验失败
+		// 也要可 errors.As(*GitError),不能裸 Wrap(#152)。
+		return newGitError("Clone", opts.Path, "", err)
 	}
 	if opts.Reference != "" {
 		args = append(args, "--reference", opts.Reference)

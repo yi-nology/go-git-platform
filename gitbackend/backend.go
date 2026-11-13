@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	oekiterrors "github.com/oekit/pkg/errors"
 )
@@ -180,11 +181,19 @@ type CloneOptions struct {
 // validateCloneReference 在任何后端动手之前统一执行 issue #148 的契约：
 //   - Dissociate 脱离 Reference 单独为真是无效组合（git 的 --dissociate
 //     只与 --reference 配套）；
-//   - Reference 指向的目录必须存在且是 git 仓（bare：顶层 HEAD；
-//     worktree：.git 子目录）——缺失/非仓 fail-fast（ErrNotAGitRepo），
-//     绝不静默退化成普通克隆。
+//   - Reference 必须指向真实 git 仓形状——缺失/非仓 fail-fast
+//     （ErrNotAGitRepo），绝不静默退化成普通克隆。
 //
-// 共享校验保证两个后端对同一份非法 CloneOptions 给出同形错误。
+// 形状判定按真实仓结构收深（审计 #153：只查「有 HEAD 文件」的浅探针会被
+// 伪造 HEAD 的空壳穿透，穿透后 git 自己报错、哨兵丢失）：
+//   - bare：顶层 HEAD 文件 + objects/ + refs/ 三件齐（clone --bare/--mirror
+//     /--no-checkout 产物皆此形）；
+//   - worktree：.git/ 子目录含 HEAD；
+//   - gitfile：.git 是文件且 gitdir: 指向的目标含 HEAD（被掏空共享仓的
+//     残骸形态在此拒绝）。
+//
+// 共享校验保证两个后端对同一份非法 CloneOptions 给出同形错误
+// （errors.Is 哨兵 + errors.As *GitError，见 newGitError 契约）。
 func validateCloneReference(opts CloneOptions) error {
 	if opts.Dissociate && opts.Reference == "" {
 		return oekiterrors.Wrap(ErrInvalidGitArg, "--dissociate requires Reference")
@@ -197,14 +206,52 @@ func validateCloneReference(opts CloneOptions) error {
 	if err != nil || !st.IsDir() {
 		return oekiterrors.Wrap(ErrNotAGitRepo, "reference repository does not exist", "path", refPath)
 	}
-	// bare 仓（HEAD/objects/refs 直在顶层）或 worktree 仓（.git 子目录）
-	if _, err := os.Stat(filepath.Join(refPath, "HEAD")); err == nil {
+	// bare 形状:HEAD 文件 + objects/ + refs/ 三件齐
+	if isPath(filepath.Join(refPath, "HEAD")) && isDir(filepath.Join(refPath, "objects")) && isDir(filepath.Join(refPath, "refs")) {
 		return nil
 	}
-	if _, err := os.Stat(filepath.Join(refPath, ".git")); err == nil {
+	// worktree 形状:.git/HEAD
+	if isPath(filepath.Join(refPath, ".git", "HEAD")) {
+		return nil
+	}
+	// gitfile 形状:.git 文件解析 gitdir:,目标含 HEAD
+	if target, ok := readGitdirTarget(refPath); ok && isPath(filepath.Join(target, "HEAD")) {
 		return nil
 	}
 	return oekiterrors.Wrap(ErrNotAGitRepo, "reference path is not a git repository", "path", refPath)
+}
+
+// isPath 判断路径存在(文件或目录均可)。
+func isPath(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+func isDir(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && st.IsDir()
+}
+
+// readGitdirTarget 解析 worktree/.git 文件里的 "gitdir: <path>" 行;
+// 相对路径按 git 规范相对该文件所在目录。返回 (解析后的绝对/相对目标, 是否成功)。
+func readGitdirTarget(worktree string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(worktree, ".git"))
+	if err != nil {
+		return "", false
+	}
+	line := strings.TrimSpace(strings.SplitN(string(data), "\n", 2)[0])
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	target := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if target == "" {
+		return "", false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(worktree, target)
+	}
+	return target, true
 }
 
 // MergeOptions contains options for merging a branch into HEAD.

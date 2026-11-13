@@ -6,6 +6,32 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed（reference clone 深挖清零——审计 #150-#154，全部探针亲验）
+
+- **#152 两后端错误形态同形**：native 校验失败改包 `newGitError`（与
+  gogit 一致），`errors.As(*GitError)` 双后端成立——探针实证修复前
+  native=false / gogit=true 的不对称已消除。
+- **#153 校验器形状收深**：bare 须 `HEAD+objects+refs` 三件齐、worktree
+  须 `.git/HEAD`、gitfile 解析 `gitdir:` 指向含 HEAD 的目标——伪造 HEAD
+  空壳与被掏空 gitfile 残骸不再穿透（探针：`Is(ErrNotAGitRepo)`
+  false→true）；fail-fast 表参数化到两后端（gogit 的 ErrNotAGitRepo
+  路径从零覆盖到全覆盖）。
+- **#151 重言式断言拆除**：增量 fetch 测试改钉新提交 `cat-file` 可达 +
+  `rev-list count == 3`（原 `out == ""` 恒真，fetch 空转也能过）。
+- **#154 dissociate 自包含真义**：删共享仓后 `cat-file` + `fsck --full`
+  必须通过，并以未 dissociate 的借用仓作反面对照（读取必须失败）。
+- **#150 生命周期探针钉测**：共享仓删除后三事实入测试——借来对象读取
+  失败、fetch exit 0 不失败、fetch 后历史重下读取恢复。夹具切 `file://`
+  生产形态（实测纯本地路径克隆走硬链优化对象全自有 own=4，借不到东西）。
+
+### Changed
+
+- **reference clone 生命周期警示精确化**（doc.go / CloneOptions.Reference
+  godoc）：修正「共享仓删除后不可再 fetch」的不实表述——探针实证 fetch
+  exit 0 静默成功（仅 unable-to-normalize 告警 + 整段历史重下进自有库，
+  仅存在于共享仓的旧对象读取失败）；健康检查不能拿 fetch 当信号，
+  推荐执行前显式检出 alternates 悬空即清 workdir 重建。
+
 ## [0.132.0] - 2026-11-13
 
 ### Added（Clone Cache 铺路——reference clone，#148/#149）
