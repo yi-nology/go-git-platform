@@ -18,7 +18,8 @@ const (
 	OutcomeUnchanged MutationOutcome = "unchanged" // 已达期望态，零写入
 	// OutcomeConflict 是唯一同时携带 outcome 与非 nil error 的分支
 	// （并发冲突 409，err 经 IsConflict 可判）；其余 outcome 错误一律
-	// ("", nil, err)。
+	// ("", nil, err)。实体是写前快照（pre-write snapshot），冲突浮出时
+	// 可能已被并发改动/删除——以 err 为准。
 	OutcomeConflict MutationOutcome = "conflict"
 )
 
