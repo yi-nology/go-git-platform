@@ -37,6 +37,16 @@ func TestGitee_Contract(t *testing.T) {
 				`"milestone":{"id":1,"number":1,"title":"v1"},"html_url":"https://gitee.com/owner/repo/issues/I1AB2C","created_at":"2026-08-15T10:00:00+08:00","updated_at":"2026-08-15T11:00:00+08:00"}`,
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"id":1,"login":"dev","name":"Dev"},"created_at":"2026-08-15T10:30:00+08:00","updated_at":"2026-08-15T10:35:00+08:00"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
+			// 2A 三态能力矩阵：Gitee 四字段全 A 级——csv 字段空串照上
+			// wire（*string 非 nil 穿过 omitempty，issue #88），milestone
+			// 清空走 wire 0（*int omitempty，null 不可达）。assignee 是
+			// 单数 wire 键（UpdateIssueOptions.Assignee）。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "body"},
+				"assignees": {BodyField: "assignee"},
+				"labels":    {BodyField: "labels"},
+				"milestone": {BodyField: "milestone"},
+			},
 		},
 		// Gitee release shape (raw transport; the SDK model mis-types the
 		// payload — see backends/gitee/releases.go): github-like keys with
@@ -67,11 +77,21 @@ func TestGitee_Contract(t *testing.T) {
 			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
 		},
 		// CR suite fixtures (issue #63): Gitee pull shape — number-addressed,
-		// head/base keys, open state.
+		// head/base keys, open state. GetResponse seeds one current
+		// assignee (alice): the assignees clear runs the RMW remove side,
+		// and the suite asserts the side endpoint is the last request —
+		// without a current assignee the diff is empty and no remove fires.
 		CRs: &contracttest.CRHarnessConfig{
 			ListResponse:   `[{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}]`,
-			GetResponse:    `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}`,
+			GetResponse:    `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"assignees":[{"id":2,"login":"alice","name":"Alice"}],"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}`,
 			MutateResponse: `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"user":{"id":1,"login":"dev"},"created_at":"2026-01-01T00:00:00+08:00","updated_at":"2026-01-01T00:00:00+08:00"}`,
+			// 2A 三态：描述 wire 键是 body；assignee 走独立 add/remove
+			// 端点——清空 = RMW 删光（dispatchClear 断言最后一条请求命中
+			// 侧端点 path），无 body 字段可断言（remove 参数走 query）。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "body"},
+				"assignees":   {PathContains: "assignees"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:  `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","html_url":"https://gitee.com/owner/repo/releases/v1.0.0","draft":false,"prerelease":false,"created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,

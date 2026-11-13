@@ -82,27 +82,39 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	updateOpts := &gitee.UpdateIssueOptions{
 		Repo: gitee.String(repo),
 	}
+	// Title/State 守卫不动（legacy "" = 不变；State 无三态面）。
 	if opts.Title != "" {
 		updateOpts.Title = gitee.String(opts.Title)
 	}
-	if opts.Body != "" {
-		updateOpts.Body = gitee.String(opts.Body)
+	// 三态收编（2A）：Resolve* 非 specified 不动；specified 空值即清空。
+	// go-gitee 的选项字段是 *string+omitempty，omitempty 只省略 nil 指针
+	// ——gitee.String("") 非 nil ⇒ 空串照上 wire（issue #88）——csv
+	// 字段（body/assignee/labels）清空 ⇒ "":""（真实 API 拒收时空串
+	// 422 也是诚实失败）。
+	if body, ok := opts.ResolveBody(); ok {
+		updateOpts.Body = gitee.String(body)
 	}
 	if opts.State != "" {
 		updateOpts.State = gitee.String(string(opts.State))
 	}
-	if len(opts.Assignees) > 0 {
-		updateOpts.Assignee = gitee.String(strings.Join(opts.Assignees, ","))
+	if as, ok := opts.ResolveAssignees(); ok {
+		updateOpts.Assignee = gitee.String(strings.Join(as, ",")) // 清空 ⇒ ""
 	}
-	if len(opts.Labels) > 0 {
-		updateOpts.Labels = gitee.String(strings.Join(opts.Labels, ","))
+	if ls, ok := opts.ResolveLabels(); ok {
+		updateOpts.Labels = gitee.String(strings.Join(ls, ",")) // 清空 ⇒ ""
 	}
-	if opts.Milestone != "" {
-		m, err := strconv.Atoi(opts.Milestone)
-		if err != nil {
-			return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q", opts.Milestone)
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			// 清空 ⇒ wire "milestone":0（字段 *int+omitempty：非 nil 指针
+			// 穿过 omitempty，0 照上；null 在本 SDK 不可达）。
+			updateOpts.Milestone = gitee.Int(0)
+		} else {
+			mi, err := strconv.Atoi(m)
+			if err != nil {
+				return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q", m)
+			}
+			updateOpts.Milestone = gitee.Int(mi)
 		}
-		updateOpts.Milestone = gitee.Int(m)
 	}
 	issue, _, err := p.client.Issues.Edit(ctx, backendutil.Esc(owner), number, updateOpts)
 	if err != nil {
