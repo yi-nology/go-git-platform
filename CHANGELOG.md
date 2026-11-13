@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file. The format 
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.135.0] - 2026-11-14
+
+### Added（Update 三态语义——patch 字段族 + 清空哨兵，2A）
+
+- **feat(provider)**：`UpdateIssueOptions`/`UpdateCROptions` 新增 `XxxPatch`
+  指针字段族（nil=不动、非 nil=全量替换、空值=显式清空，双字段同设 patch
+  优先）；新增 `provider.ErrClearNotSupported` 哨兵——平台 wire 无法表达清空的
+  B 级组合用它显式拒绝（仅 patch 字段触发，旧字段路径行为逐字保留）。7 后端
+  接线（github/gitlab/gitea/forgejo/gitee/gitcode/tencentcode）+ contracttest
+  三态行为契约（unset/legacy set/patch set/per-field clear 四面）。
+  **迁移说明**：新代码请用 `XxxPatch`；旧字段语义不变，无需迁移。
+
+### Fixed
+
+- **fix(github)**：`UpdateIssue` 静默丢弃 `opts.State`——补齐 state 映射
+  （其余 6 后端均映射，无 divergence 登记属契约违约；CloseIssue/ReopenIssue
+  仍是独立方法）。
+
+### Changed
+
+- **分歧台账**新增 GitCode 四条 B 级登记（`BodyPatch`/`MilestonePatch`/
+  CR `DescriptionPatch` patch 清空返回、CR `AssigneesPatch` patch 任意指定
+  （含置值）均返回 `ErrClearNotSupported`）+ GitHub milestone 一条
+  （`MilestonePatch` patch 清空返回 `ErrClearNotSupported`）；TencentCode
+  labels no-op 条目 reason 同步 2A 清空语义。
+
 ## [0.134.0] - 2026-11-13
 
 ### Changed（**BREAKING**：oekit/pkg 地板 v0.46.0 → v0.48.0）
@@ -43,30 +71,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   exit 0 静默成功（仅 unable-to-normalize 告警 + 整段历史重下进自有库，
   仅存在于共享仓的旧对象读取失败）；健康检查不能拿 fetch 当信号，
   推荐执行前显式检出 alternates 悬空即清 workdir 重建。
-
-### Added（Update 三态语义——patch 字段族 + 清空哨兵，2A）
-
-- **feat(provider)**：`UpdateIssueOptions`/`UpdateCROptions` 新增 `XxxPatch`
-  指针字段族（nil=不动、非 nil=全量替换、空值=显式清空，双字段同设 patch
-  优先）；新增 `provider.ErrClearNotSupported` 哨兵——平台 wire 无法表达清空的
-  B 级组合用它显式拒绝（仅 patch 字段触发，旧字段路径行为逐字保留）。7 后端
-  接线（github/gitlab/gitea/forgejo/gitee/gitcode/tencentcode）+ contracttest
-  三态行为契约（unset/legacy set/patch set/per-field clear 四面）。
-  **迁移说明**：新代码请用 `XxxPatch`；旧字段语义不变，无需迁移。
-
-### Fixed
-
-- **fix(github)**：`UpdateIssue` 静默丢弃 `opts.State`——补齐 state 映射
-  （其余 6 后端均映射，无 divergence 登记属契约违约；CloseIssue/ReopenIssue
-  仍是独立方法）。
-
-### Changed
-
-- **分歧台账**新增 GitCode 四条 B 级登记（`BodyPatch`/`MilestonePatch`/
-  CR `DescriptionPatch` patch 清空返回、CR `AssigneesPatch` patch 任意指定
-  （含置值）均返回 `ErrClearNotSupported`）+ GitHub milestone 一条
-  （`MilestonePatch` patch 清空返回 `ErrClearNotSupported`）；TencentCode
-  labels no-op 条目 reason 同步 2A 清空语义。
 
 ## [0.132.0] - 2026-11-13
 
