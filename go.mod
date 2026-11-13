@@ -10,7 +10,7 @@ require (
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.34.0
 	github.com/oekit/logx v0.10.0
-	github.com/oekit/pkg v0.46.0
+	github.com/oekit/pkg v0.48.0
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.16.0
 	github.com/yi-nology/go-gongfeng v0.4.0
