@@ -102,7 +102,9 @@ func testIssuesSuite(t *testing.T, h Harness) {
 // CommentsResponse; GET containing labels (not issues) → LabelsResponse;
 // other GET → ListResponse; POST → 201 + MutateResponse (a POST to a labels
 // path — adding labels to an issue — returns LabelsResponse, since
-// GitHub-shaped APIs answer with the label array); PATCH/PUT →
+// GitHub-shaped APIs answer with the label array); PUT to a labels path —
+// replacing an issue's labels — likewise returns LabelsResponse (an issue
+// object there breaks the []*Label parse); PATCH/PUT →
 // MutateResponse; DELETE → 204. Requests are recorded for wire assertions.
 func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 	newIM := func(t *testing.T) (provider.IssueManager, *[]recordedRequest) {
@@ -612,6 +614,11 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 			// Adding labels to an issue: GitHub-shaped APIs answer with the
 			// label array (e.g. []*Label), not a single issue object.
 			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(h.LabelsResponse))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "labels"):
+			// Replacing an issue's labels (side-endpoint PUT): same
+			// label-array answer as the POST add above — an issue object
+			// here breaks the []*Label parse.
 			_, _ = w.Write([]byte(h.LabelsResponse))
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
