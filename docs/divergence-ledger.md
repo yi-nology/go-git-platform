@@ -155,7 +155,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReviewManager | RequestReviewers |  | ignore | The platform exposes no reviewer-request surface the SDK can drive; the call succeeds without effect. |
 | ReviewManager | DismissReview |  | stub | The platform exposes no review-dismissal surface. |
 | IssueManager | ListIssues | opts.Assignee | ignore | The Gongfeng issue list endpoint takes no assignee filter; the option is accepted but ignored. |
-| IssueManager | RemoveIssueLabel |  | mapping | Label deletion routes through replace semantics; removing the last label is a no-op. |
+| IssueManager | RemoveIssueLabel |  | mapping | Label deletion routes through replace semantics; removing the last label is a no-op. 2A 起 UpdateIssueOptions.LabelsPatch 的清空请求同样返回 provider.ErrClearNotSupported（结构性空串不可达的登记面一致）。 |
 | IssueManager | ListIssues | WebURL, ClosedAt | mapping | The API exposes no issue web URL and no closed-at timestamp. |
 | IssueManager | GetIssue | WebURL, ClosedAt | mapping | See ListIssues. |
 | LabelManager | ListLabels | Label.ID | mapping | Label IDs are not exposed by the wire; Label.ID is always 0. |

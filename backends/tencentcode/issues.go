@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -115,21 +116,27 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	return convertIssue(issue), nil
 }
 
-// UpdateIssue implements provider.IssueManager. Empty option fields stay
-// absent from the PUT body, leaving the issue unchanged; state changes
+// UpdateIssue implements provider.IssueManager. Unspecified option fields
+// stay absent from the PUT body, leaving the issue unchanged; state changes
 // travel as 工蜂's state_event verbs. opts.Assignees resolves to the
 // assignee_ids csv through the Users API (see CreateIssue).
+//
+// 三态收编（2A）：Resolve* 非 specified 不动，specified 空值即清空。
+// 选项字段是 *T+omitempty——omitempty 只省略 nil 指针，指向零值的指针
+// 照上 wire：body ⇒ "description":""、assignees ⇒ "assignee_ids":""
+// （csv 空串在场）、milestone ⇒ "milestone_id":0。labels 清空返回
+// provider.ErrClearNotSupported——既有登记 no-op（空 csv 结构性不可上
+// wire）尊重之，不凭结构分析推翻（divergence.go 的 RemoveIssueLabel
+// 条目）。
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	updateOpts := &gongfeng.UpdateIssueOptions{}
+	// Title/State 既有守卫不动（legacy "" = 不变；State 无三态面）。
 	if opts.Title != "" {
 		updateOpts.Title = gongfeng.Ptr(opts.Title)
-	}
-	if opts.Body != "" {
-		updateOpts.Description = gongfeng.Ptr(opts.Body)
 	}
 	if opts.State != "" {
 		event := "close"
@@ -138,22 +145,44 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		}
 		updateOpts.StateEvent = gongfeng.Ptr(event) // IssueState → state_event verb
 	}
-	if len(opts.Labels) > 0 {
-		updateOpts.Labels = gongfeng.Ptr(strings.Join(opts.Labels, ","))
+	if body, ok := opts.ResolveBody(); ok {
+		updateOpts.Description = gongfeng.Ptr(body) // 清空 ⇒ "description":""
 	}
-	if opts.Milestone != "" {
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "UpdateIssue", opts.Milestone)
-		if err != nil {
-			return nil, err
+	// labels B 级哨兵先于 assignees 解析（Global Constraint：B 级处置在
+	// 任何 HTTP 之前——组合调用 labels 清空 + 未知指派人时零请求失败，
+	// 不做 users-lookup 读）。body/milestone 无哨兵（milestone 置值解析
+	// 纯本地），无需让位。
+	if ls, ok := opts.ResolveLabels(); ok {
+		if len(ls) == 0 {
+			// 既有登记 no-op（divergence.go 的 RemoveIssueLabel 条目：空
+			// csv 不可上 wire）：尊重之，不凭结构分析推翻——返回哨兵，
+			// 整调用零请求。
+			return nil, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear labels",
+				"platform", "tencentcode", "field", "labels")
 		}
-		updateOpts.MilestoneID = gongfeng.Ptr(int(m64))
+		updateOpts.Labels = gongfeng.Ptr(strings.Join(ls, ",")) // 既有
 	}
-	if len(opts.Assignees) > 0 {
-		ids, err := p.resolveUserIDs(ctx, "UpdateIssue", opts.Assignees)
-		if err != nil {
-			return nil, err
+	if as, ok := opts.ResolveAssignees(); ok {
+		if len(as) == 0 {
+			updateOpts.AssigneeIDs = gongfeng.Ptr("") // csv 空串在场
+		} else {
+			ids, err := p.resolveUserIDs(ctx, "UpdateIssue", as) // 既有
+			if err != nil {
+				return nil, err
+			}
+			updateOpts.AssigneeIDs = gongfeng.Ptr(assigneeIDsCSV(ids))
 		}
-		updateOpts.AssigneeIDs = gongfeng.Ptr(assigneeIDsCSV(ids))
+	}
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			updateOpts.MilestoneID = gongfeng.Ptr(0) // "milestone_id":0
+		} else {
+			m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "UpdateIssue", m)
+			if err != nil {
+				return nil, err
+			}
+			updateOpts.MilestoneID = gongfeng.Ptr(int(m64))
+		}
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, updateOpts)
 	if err != nil {

@@ -183,6 +183,10 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
+//
+// 三态收编（2A）：Resolve* 非 specified 不动，specified 空值即清空。
+// 描述 ⇒ "description":""（*string+omitempty：非 nil 指针穿过 omitempty，
+// 空串照上 wire）；指派单值面 ⇒ "assignee_id":0（Phase 3 验服务端）。
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "UpdateCR", number)
 	if err != nil {
@@ -190,24 +194,29 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	pid := owner + "/" + repo
 	updateOpts := &gongfeng.UpdateMergeRequestOptions{}
+	// Title/TargetBranch 既有守卫不动（legacy "" = 不变）。
 	if opts.Title != "" {
 		updateOpts.Title = gongfeng.Ptr(opts.Title)
-	}
-	if opts.Description != "" {
-		updateOpts.Description = gongfeng.Ptr(opts.Description)
 	}
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = gongfeng.Ptr(opts.TargetBranch)
 	}
+	if desc, ok := opts.ResolveDescription(); ok {
+		updateOpts.Description = gongfeng.Ptr(desc) // 清空 ⇒ "description":""
+	}
 	// 工蜂的 MR 线路只收单个 assignee_id——多派取第一个（mapping 分歧已
-	// 登记）。nil/空 = 不变（len>0 才落线，见 UpdateCROptions）。
-	if len(opts.Assignees) > 0 {
-		ids, err := p.resolveUserIDs(ctx, "UpdateCR", opts.Assignees[:1])
-		if err != nil {
-			return nil, err
-		}
-		if len(ids) > 0 {
-			updateOpts.AssigneeID = gongfeng.Ptr(ids[0])
+	// 登记）。三态：非 specified 不动；specified 空集 ⇒ 0 在场。
+	if as, ok := opts.ResolveAssignees(); ok {
+		if len(as) == 0 {
+			updateOpts.AssigneeID = gongfeng.Ptr(0) // 单值面：0 在场（Phase 3 验服务端）
+		} else {
+			ids, err := p.resolveUserIDs(ctx, "UpdateCR", as[:1]) // 既有 first-login mapping 不变
+			if err != nil {
+				return nil, err
+			}
+			if len(ids) > 0 {
+				updateOpts.AssigneeID = gongfeng.Ptr(ids[0])
+			}
 		}
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
