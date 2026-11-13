@@ -180,6 +180,19 @@ func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error {
 	if opts.Submodules {
 		args = append(args, "--recurse-submodules")
 	}
+	// Reference clone（issue #148）：--reference <path> 让 git 经 alternates
+	// 借用共享仓对象库（网络只拉差异、磁盘只增元数据），--dissociate 克隆后
+	// 复制对象断开借用。参数直通 git；前置校验走 validateCloneReference
+	// （无效路径 fail-fast，不静默退化成普通克隆）。
+	if err := validateCloneReference(opts); err != nil {
+		return err
+	}
+	if opts.Reference != "" {
+		args = append(args, "--reference", opts.Reference)
+		if opts.Dissociate {
+			args = append(args, "--dissociate")
+		}
+	}
 	args = append(args, opts.URL, opts.Path)
 
 	auth := mergeInsecure(opts.Auth, opts.InsecureSkipTLS)

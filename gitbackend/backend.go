@@ -2,6 +2,10 @@ package gitbackend
 
 import (
 	"io"
+	"os"
+	"path/filepath"
+
+	oekiterrors "github.com/oekit/pkg/errors"
 )
 
 // This file defines the public surface of the gitbackend package: the
@@ -150,6 +154,53 @@ type CloneOptions struct {
 	Filter string
 	// Submodules clone 后递归初始化子模块
 	Submodules bool
+	// Reference 本地仓库路径：以该仓库为对象库共享源（等价 git clone
+	// --reference <path>，workdir 经 objects/info/alternates 借用其对象，
+	// 网络只拉共享仓没有的新对象、磁盘只增元数据）。空 = 无共享（现状）。
+	// 指向的目录不存在或非 git 仓 ⇒ 明确报错（ErrNotAGitRepo），不静默
+	// 退化成普通克隆（issue #148）。
+	//
+	// 生命周期警示：workdir 的 objects/info/alternates 指向共享仓，
+	// **共享仓被删除后该 workdir 不可再 fetch**——需要自包含产物时用
+	// Dissociate，或由调用方管理共享仓生命周期（Clone Cache 场景即
+	// sync.clone_cache_dir 的职责）。
+	//
+	// 仅 native 后端支持（gogit 报 ErrReferenceUnsupported，见该哨兵注释）。
+	Reference string
+	// Dissociate 克隆后断开 alternates、把借用的对象复制进自身（等价
+	// --dissociate），产物自包含；仅在 Reference 非空时有意义，单独为真
+	// 报错（ErrInvalidGitArg）。
+	Dissociate bool
+}
+
+// validateCloneReference 在任何后端动手之前统一执行 issue #148 的契约：
+//   - Dissociate 脱离 Reference 单独为真是无效组合（git 的 --dissociate
+//     只与 --reference 配套）；
+//   - Reference 指向的目录必须存在且是 git 仓（bare：顶层 HEAD；
+//     worktree：.git 子目录）——缺失/非仓 fail-fast（ErrNotAGitRepo），
+//     绝不静默退化成普通克隆。
+//
+// 共享校验保证两个后端对同一份非法 CloneOptions 给出同形错误。
+func validateCloneReference(opts CloneOptions) error {
+	if opts.Dissociate && opts.Reference == "" {
+		return oekiterrors.Wrap(ErrInvalidGitArg, "--dissociate requires Reference")
+	}
+	if opts.Reference == "" {
+		return nil
+	}
+	refPath := opts.Reference
+	st, err := os.Stat(refPath)
+	if err != nil || !st.IsDir() {
+		return oekiterrors.Wrap(ErrNotAGitRepo, "reference repository does not exist", "path", refPath)
+	}
+	// bare 仓（HEAD/objects/refs 直在顶层）或 worktree 仓（.git 子目录）
+	if _, err := os.Stat(filepath.Join(refPath, "HEAD")); err == nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(refPath, ".git")); err == nil {
+		return nil
+	}
+	return oekiterrors.Wrap(ErrNotAGitRepo, "reference path is not a git repository", "path", refPath)
 }
 
 // MergeOptions contains options for merging a branch into HEAD.

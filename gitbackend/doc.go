@@ -51,4 +51,12 @@
 // CloneOptions supports partial clones (Filter, e.g. "blob:none" for
 // on-demand blob fetch) and recursive submodule initialization — together
 // these cut wall time and bandwidth dramatically on big monorepos.
+// Reference clone (issue #148) borrows a local repository's object store
+// via objects/info/alternates (--reference, optional --dissociate for
+// self-contained output), so N sync tasks against one source pay one full
+// fetch instead of N. 两后端差异（机器可读登记）：native 全量支持；
+// gogit 收到 Reference/Dissociate 时 fail-fast 报 ErrReferenceUnsupported
+// （go-git v5 无跨仓借用能力），共享校验 validateCloneReference 两后端
+// 同形。共享仓删除后借它的 workdir 不可再 fetch——Dissociate 或调用方
+// 管理共享仓生命周期。
 package gitbackend
