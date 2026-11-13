@@ -584,6 +584,30 @@ func (h IssuesHarness) commentsPage(r *http.Request) []byte {
 	}
 }
 
+// writeUserLookup answers a username→ID resolution lookup: echo the
+// requested username back under a fixed numeric ID. GitLab's ListUsers
+// filter arrives as ?username= on a bare /users path and expects an
+// array; 工蜂's GetUser arrives as /users/{username} and expects a
+// single object.
+func writeUserLookup(w http.ResponseWriter, r *http.Request) {
+	if name := r.URL.Query().Get("username"); name != "" {
+		resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": name}})
+		_, _ = w.Write(resp)
+		return
+	}
+	resp, _ := json.Marshal(map[string]any{"id": 101, "username": path.Base(r.URL.Path), "name": "Developer"})
+	_, _ = w.Write(resp)
+}
+
+// labelsPage serves the repository-labels list fixture: page one carries
+// LabelsResponse, later pages are empty (the walk terminator).
+func (h IssuesHarness) labelsPage(r *http.Request) []byte {
+	if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
+		return []byte(`[]`)
+	}
+	return []byte(h.LabelsResponse)
+}
+
 // issueStubServer returns the method/shape-routed recording mock.
 func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 	var mu sync.Mutex
@@ -598,18 +622,7 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodGet && usersLookupPath.MatchString(r.URL.Path):
-			// Username→ID resolution lookup: echo the requested username
-			// back under a fixed numeric ID. GitLab's ListUsers filter
-			// arrives as ?username= on a bare /users path and expects an
-			// array; 工蜂's GetUser arrives as /users/{username} and
-			// expects a single object.
-			if name := r.URL.Query().Get("username"); name != "" {
-				resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": name}})
-				_, _ = w.Write(resp)
-			} else {
-				resp, _ := json.Marshal(map[string]any{"id": 101, "username": path.Base(r.URL.Path), "name": "Developer"})
-				_, _ = w.Write(resp)
-			}
+			writeUserLookup(w, r)
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "labels"):
 			// Adding labels to an issue: GitHub-shaped APIs answer with the
 			// label array (e.g. []*Label), not a single issue object.
@@ -630,11 +643,7 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case strings.Contains(r.URL.Path, "comments"), strings.Contains(r.URL.Path, "notes"):
 			_, _ = w.Write(h.commentsPage(r))
 		case strings.Contains(r.URL.Path, "labels") && !strings.Contains(r.URL.Path, "issues"):
-			if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
-				_, _ = w.Write([]byte(`[]`))
-			} else {
-				_, _ = w.Write([]byte(h.LabelsResponse))
-			}
+			_, _ = w.Write(h.labelsPage(r))
 		default:
 			// X-Total: 999 pins the total-semantics contract (issue #51):
 			// a platform total that differs from the served page's item
