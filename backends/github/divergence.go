@@ -26,6 +26,8 @@ var divergences = []provider.Divergence{
 		Reason: "A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline."},
 	{Capability: "RepoManager", Method: "ListRepos", Field: "opts.Owner", Kind: provider.DivergenceMapping,
 		Reason: "GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (same org-first/user-fallback shape the gitea family registers — issue #92 retired its old search-based form)."},
+	{Capability: "IssueManager", Method: "UpdateIssue", Field: "opts.MilestonePatch", Kind: provider.DivergenceStub,
+		Reason: "go-github Milestone *int+omitempty 发不出 null 且无 detach 端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。"},
 }
 
 // Divergences returns the registered divergence ledger for the GitHub backend.

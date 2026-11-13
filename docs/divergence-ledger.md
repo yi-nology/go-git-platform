@@ -65,6 +65,7 @@ This document is generated from the backends' registered divergence ledgers
 | WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline. |
 | RepoManager | ListRepos | opts.Owner | mapping | GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (same org-first/user-fallback shape the gitea family registers — issue #92 retired its old search-based form). |
+| IssueManager | UpdateIssue | opts.MilestonePatch | stub | go-github Milestone *int+omitempty 发不出 null 且无 detach 端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。 |
 
 ## gitee
 

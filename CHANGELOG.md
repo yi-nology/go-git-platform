@@ -25,9 +25,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **分歧台账**新增 GitCode 四条 B 级登记（`BodyPatch`/`MilestonePatch`/
-  CR `DescriptionPatch`/CR `AssigneesPatch` patch 清空返回
-  `ErrClearNotSupported`）；TencentCode labels no-op 条目 reason 同步
-  2A 清空语义。
+  CR `DescriptionPatch` patch 清空返回、CR `AssigneesPatch` patch 任意指定
+  （含置值）均返回 `ErrClearNotSupported`）+ GitHub milestone 一条
+  （`MilestonePatch` patch 清空返回 `ErrClearNotSupported`）；TencentCode
+  labels no-op 条目 reason 同步 2A 清空语义。
 
 ## [0.132.0] - 2026-11-13
 
