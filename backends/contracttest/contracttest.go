@@ -15,10 +15,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -417,6 +419,158 @@ func stubHandler(h Harness) http.HandlerFunc {
 func beyondFirstPage(r *http.Request) bool {
 	page := r.URL.Query().Get("page")
 	return page != "" && page != "1"
+}
+
+// --- 2A 三态 wire 断言辅助（ClearExpect 期望驱动，issues/CR 两侧共用）---
+
+// assertBodyLacks 断言自 after 起记录的每条请求 body 都不含任一 key——
+// unset（全零 options）面：写请求一旦携带字段就是「空值也下发」的违约；
+// 短路到 GET 的平台（gitea/forgejo 的 issues 全空短路）GET 无 body，
+// 天然通过——只要求「产生写请求时 body 干净」。
+func assertBodyLacks(t *testing.T, requests *[]recordedRequest, after int, keys ...string) {
+	t.Helper()
+	for i := after; i < len(*requests); i++ {
+		r := (*requests)[i]
+		for _, k := range keys {
+			if v, ok := r.Body[k]; ok {
+				t.Errorf("unset: %s %s body carries %q=%v — 全零 options 不得携带字段", r.Method, r.Path, k, v)
+			}
+		}
+	}
+}
+
+// assertBodyHasEmpty 断言自 after 起第一条携带 field 的请求其值为空形态
+// （null / "" / 空数组 / 空对象 / 0）；一条都不携带即失败——缺席正是三态
+// 规格要消灭的静默 no-op。after 之前的置值请求不参与（其非空值不会污染
+// 清空判定）。
+func assertBodyHasEmpty(t *testing.T, requests *[]recordedRequest, after int, field string) {
+	t.Helper()
+	for i := after; i < len(*requests); i++ {
+		r := (*requests)[i]
+		v, ok := r.Body[field]
+		if !ok {
+			continue
+		}
+		if !isEmptyBodyValue(v) {
+			t.Errorf("%s %s: %s = %#v, want empty — 清空必须落到 wire", r.Method, r.Path, field, v)
+		}
+		return
+	}
+	t.Errorf("index %d 之后没有任何请求携带 %q — 清空静默 no-op；requests=%v", after, field, (*requests)[after:])
+}
+
+// assertBodyHasNonEmpty 断言自 after 起第一条携带 field 的请求其值非空——
+// 置值回归的跨平台形态：GitLab/工蜂 把用户名解析成数字 ID 上线
+// （assignee_ids），用户名字面值不可跨平台比对，「键在场且非空」即置值
+// 已落线（缺席 = 静默丢弃，正是本断言要钉的）。
+func assertBodyHasNonEmpty(t *testing.T, requests *[]recordedRequest, after int, field string) {
+	t.Helper()
+	for i := after; i < len(*requests); i++ {
+		r := (*requests)[i]
+		v, ok := r.Body[field]
+		if !ok {
+			continue
+		}
+		if isEmptyBodyValue(v) {
+			t.Errorf("%s %s: %s = %#v, want non-empty — 置值必须落到 wire", r.Method, r.Path, field, v)
+		}
+		return
+	}
+	t.Errorf("index %d 之后没有任何请求携带 %q — 置值被静默丢弃；requests=%v", after, field, (*requests)[after:])
+}
+
+// isEmptyBodyValue 判定解码后的 body 值是否为空形态：JSON null、""、
+// 空数组、空对象或数值 0——各平台「清空」的 wire 词表全覆盖
+// （""/[]/{}/null/0）。
+func isEmptyBodyValue(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case float64:
+		return x == 0
+	case map[string]any:
+		return len(x) == 0
+	case []any:
+		return len(x) == 0
+	}
+	return false
+}
+
+// clearKey 取某字段清空/置值断言的 wire 键：平台在 ClearExpect.BodyField
+// 声明的词表优先；未声明（或 B 级条目不带 BodyField）回落 fallback。
+func clearKey(clears map[string]ClearExpect, field, fallback string) string {
+	if ce, ok := clears[field]; ok && ce.BodyField != "" {
+		return ce.BodyField
+	}
+	return fallback
+}
+
+// unsetKeys 汇总 unset 断言要排查的键：canonical 键 ∪ 各平台声明的 wire
+// BodyField（词表差异：GitLab 的 description/assignee_ids 等），去重后
+// 返回（GitHub 这类 canonical 与 BodyField 同名的平台不重复报错）。
+func unsetKeys(clears map[string]ClearExpect, canonical ...string) []string {
+	seen := make(map[string]bool, len(canonical)*2)
+	keys := make([]string, 0, len(canonical)*2)
+	add := func(k string) {
+		if k == "" || seen[k] {
+			return
+		}
+		seen[k] = true
+		keys = append(keys, k)
+	}
+	for _, k := range canonical {
+		add(k)
+	}
+	for _, k := range canonical {
+		if ce, ok := clears[k]; ok {
+			add(ce.BodyField)
+		}
+	}
+	return keys
+}
+
+// dispatchClear 执行一次清空调用并按 ClearExpect 分派断言——issues 与 CR
+// 两侧的同构单源（避免两份分派逻辑漂移）：
+//
+//   - Unsupported=true（B 级）：必须返回 ErrClearNotSupported 且零新请求；
+//   - 否则：请求必须发出（静默 no-op 是三态要修的缺陷）、Method（"" =
+//     PATCH/PUT 不约束）与 PathContains 命中、BodyField 在场为空值。
+//
+// before 是本次调用前的请求条数，用于圈定本次调用产生的请求。
+func dispatchClear(t *testing.T, clears map[string]ClearExpect, field string, requests *[]recordedRequest, before int, do func() error) {
+	t.Helper()
+	want, ok := clears[field]
+	if !ok {
+		want = ClearExpect{} // 未声明 = 全 A 级：方法不约束、body 不断言
+	}
+	err := do()
+	if want.Unsupported {
+		if !errors.Is(err, provider.ErrClearNotSupported) {
+			t.Errorf("%s clear: want ErrClearNotSupported, got err=%v", field, err)
+		}
+		if len(*requests) != before {
+			t.Errorf("%s clear: B 级必须零请求，多出 %d 条", field, len(*requests)-before)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("%s clear: %v", field, err)
+	}
+	if len(*requests) == before {
+		t.Fatalf("%s clear: 没有发出请求（静默 no-op 是三态要修的缺陷）", field)
+	}
+	last := (*requests)[len(*requests)-1]
+	if want.Method != "" && last.Method != want.Method {
+		t.Errorf("%s clear: method = %s, want %s", field, last.Method, want.Method)
+	}
+	if want.PathContains != "" && !strings.Contains(last.Path, want.PathContains) {
+		t.Errorf("%s clear: path %q missing %q", field, last.Path, want.PathContains)
+	}
+	if want.BodyField != "" {
+		assertBodyHasEmpty(t, requests, before, want.BodyField)
+	}
 }
 
 // VersionProxy returns a test server that responds to /api/v1/version with

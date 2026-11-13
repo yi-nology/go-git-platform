@@ -16,6 +16,17 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
+// ClearExpect 声明某字段「清空请求」的期望形态（2A A/B 能力矩阵）。
+// Unsupported=true：B 级——必须返回 ErrClearNotSupported 且零新请求；
+// 否则：请求必须发出，BodyField 在场为空值（""/[]/{}/null/0）、
+// PathContains 命中（侧端点定位）、Method 为 "" 时 PATCH/PUT 皆可。
+type ClearExpect struct {
+	Unsupported  bool
+	Method       string // "" = PATCH 或 PUT
+	BodyField    string // "" = 不断言 body（无 body 的侧端点，如 DELETE）
+	PathContains string // "" = 不断言路径
+}
+
 // IssuesHarnessConfig carries the fixtures a backend's main Harness needs to
 // auto-mount the issue-management suite via Harness.Issues.
 type IssuesHarnessConfig struct {
@@ -47,6 +58,9 @@ type IssuesHarnessConfig struct {
 	// issues/1/notes/1, so a swap of the number and commentID plumbing
 	// fails instead of passing on the body assertion alone.
 	UpdateCommentViaIssue bool
+	// IssueClear 声明各字段清空请求的期望（键：body/assignees/labels/
+	// milestone）。nil = 四字段全部必须可清空（全 A 级平台可不设）。
+	IssueClear map[string]ClearExpect
 }
 
 // IssuesHarness is the full harness RunIssuesSuite consumes; auto-mounting
@@ -157,6 +171,7 @@ func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 	t.Run("Update_PatchesTitle", func(t *testing.T) {
 		im, requests := newIM(t)
 		assertIssueUpdateWire(t, im, requests)
+		assertIssueUpdateTriState(t, im, requests, h.IssueClear)
 	})
 	t.Run("CloseAndReopen_Succeed", func(t *testing.T) {
 		im, _ := newIM(t)
@@ -257,6 +272,69 @@ func assertIssueUpdateWire(t *testing.T, im provider.IssueManager, requests *[]r
 		t.Errorf("expected a PATCH/PUT update, recorded %s", methodsOf(*requests))
 	}
 	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "title", "bug-2") // PUT also accepted
+}
+
+// assertIssueUpdateTriState 钉 UpdateIssue 三态（2A spec）：unset 不得携带
+// 字段、legacy 置值回归、patch 置值与 legacy 同形、每字段清空按 ClearExpect
+// 分派（B 级哨兵 + 零请求 / A 级 wire 在场空值）。
+//
+// wire 键取平台 ClearExpect.BodyField（T3-T7 配置），未声明回落 canonical：
+// 清空与置值走同一 wire 字段。置值回归用正文（跨平台唯一值保持字段——
+// GitLab/工蜂 上线 description、其余 body）钉精确值；指派人因 ID 解析
+// （assignee_ids）只能钉「键在场且非空」。
+func assertIssueUpdateTriState(t *testing.T, im provider.IssueManager, requests *[]recordedRequest, clears map[string]ClearExpect) {
+	t.Helper()
+	ctx := context.Background()
+
+	bodyKey := clearKey(clears, "body", "body")
+	assigneesKey := clearKey(clears, "assignees", "assignees")
+
+	// 1) unset：全零 options——若产生写请求，body 不得携带四字段
+	//    （外加平台声明的 wire 键）。
+	before := len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{}); err != nil {
+		t.Fatalf("unset UpdateIssue: %v", err)
+	}
+	assertBodyLacks(t, requests, before, unsetKeys(clears, "body", "assignees", "labels", "milestone")...)
+
+	// 2) legacy 置值回归（旧行为不许破）。
+	before = len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{
+		Body: "legacy-body", Assignees: []string{"alice"},
+	}); err != nil {
+		t.Fatalf("legacy set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, bodyKey, "legacy-body")
+	assertBodyHasNonEmpty(t, requests, before, assigneesKey)
+
+	// 3) patch 置值与 legacy 同形。
+	before = len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{
+		BodyPatch: new("patch-body"), AssigneesPatch: &[]string{"bob"},
+	}); err != nil {
+		t.Fatalf("patch set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, bodyKey, "patch-body")
+	assertBodyHasNonEmpty(t, requests, before, assigneesKey)
+
+	// 4) 逐字段清空（B/A 分派见 dispatchClear）。
+	clearSteps := []struct {
+		field string
+		opts  provider.UpdateIssueOptions
+	}{
+		{"body", provider.UpdateIssueOptions{BodyPatch: new("")}},
+		{"assignees", provider.UpdateIssueOptions{AssigneesPatch: &[]string{}}},
+		{"labels", provider.UpdateIssueOptions{LabelsPatch: &[]string{}}},
+		{"milestone", provider.UpdateIssueOptions{MilestonePatch: new("")}},
+	}
+	for i := range clearSteps {
+		step := &clearSteps[i]
+		stepBefore := len(*requests)
+		dispatchClear(t, clears, step.field, requests, stepBefore, func() error {
+			_, err := im.UpdateIssue(ctx, "owner", "repo", "1", step.opts)
+			return err
+		})
+	}
 }
 
 // assertIssueCloseReopen checks that both state transitions succeed.

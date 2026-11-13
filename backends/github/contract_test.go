@@ -1,7 +1,10 @@
 package github_test
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	sdkgithub "github.com/google/go-github/v93/github"
@@ -37,6 +40,14 @@ func TestGitHub_Contract(t *testing.T) {
 			MutateResponse:   `{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"number":1,"title":"v1"},"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// 2A 三态能力矩阵：GitHub 四字段中三字段 A 级、milestone B 级
+			// （go-github Milestone *int omitempty 发不出 null）。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "body"},
+				"assignees": {BodyField: "assignees"},
+				"labels":    {BodyField: "labels"},
+				"milestone": {Unsupported: true},
+			},
 		},
 		Reviews: &contracttest.ReviewsHarnessConfig{
 			ListResponse:   `[{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}]`,
@@ -83,6 +94,11 @@ func TestGitHub_Contract(t *testing.T) {
 			ListResponse:   `[{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// 2A 三态：PR wire 的描述字段名是 body；assignees 走 issues 线。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "body"},
+				"assignees":   {BodyField: "assignees"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
@@ -134,6 +150,48 @@ func TestGitHub_Contract(t *testing.T) {
 			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
 		},
 	})
+}
+
+// TestGitHub_UpdateIssueStateWire 钉 UpdateIssueOptions.State 的 wire 映射
+// （2A 违约修复的钉子）：CloseIssue/ReopenIssue 是独立方法，但 State 是
+// UpdateIssueOptions 的公共契约——本后端此前在 UpdateIssue 里静默丢弃，
+// 其余 6 后端都映射（无 divergence 登记属违约）。
+func TestGitHub_UpdateIssueStateWire(t *testing.T) {
+	var (
+		method string
+		got    map[string]any
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"number":1,"title":"bug","state":"closed","user":{"login":"dev"}}`))
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewProvider(provider.Config{
+		Platform: provider.PlatformGitHub,
+		BaseURL:  srv.URL + "/api/v3",
+		Token:    "test",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	im, ok := p.(provider.IssueManager)
+	if !ok {
+		t.Fatal("provider does not implement provider.IssueManager")
+	}
+	if _, err := im.UpdateIssue(context.Background(), "owner", "repo", "1", provider.UpdateIssueOptions{
+		State: provider.IssueStateClosed,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(State): %v", err)
+	}
+	if method != http.MethodPatch {
+		t.Errorf("update method = %s, want PATCH", method)
+	}
+	if got["state"] != "closed" {
+		t.Errorf("update wire state = %v, want \"closed\" — opts.State was silently dropped", got["state"])
+	}
 }
 
 func githubNonEmptyList() string {
