@@ -39,6 +39,14 @@ func TestGitLab_Contract(t *testing.T) {
 			MutateResponse:        `{"id":1,"iid":1,"title":"bug","state":"opened","author":{"id":1,"username":"dev","name":"dev"},"milestone":{"id":1,"title":"v1"},"labels":["bug"],"web_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			CommentsResponse:      `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:        `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// 2A 三态能力矩阵：GitLab 四字段全 A 级——正文/指派人/标签/里程碑
+			// 清空全部落 wire（里程碑走 ResetMilestoneID 字面 null）。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "description"}, // GitLab wire 字段名
+				"assignees": {BodyField: "assignee_ids"},
+				"labels":    {BodyField: "labels"},
+				"milestone": {BodyField: "milestone_id"}, // null 在场
+			},
 		},
 		Reviews: &contracttest.ReviewsHarnessConfig{
 			// GitLab approval-state shape: ListReviews/GetReview hit the
@@ -98,6 +106,12 @@ func TestGitLab_Contract(t *testing.T) {
 			ListResponse:   `[{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// 2A 三态：GitLab MR wire 的描述字段名是 description（非 GitHub
+			// 的 body）；assignees 走 assignee_ids（清空发 []）。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "description"},
+				"assignees":   {BodyField: "assignee_ids"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"tag_name":"v1.0.0","name":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z","released_at":"2026-01-01T00:00:00Z","_links":{"self":"https://gitlab.example.com/owner/repo/-/releases/v1.0.0"}}`,

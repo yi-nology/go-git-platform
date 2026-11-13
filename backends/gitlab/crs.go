@@ -153,20 +153,26 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.Title != "" {
 		updateOpts.Title = new(opts.Title)
 	}
-	if opts.Description != "" {
-		updateOpts.Description = new(opts.Description)
+	// 三态收编（2A）：ResolveDescription 非 specified 不动；specified
+	// 空值即清空。
+	if desc, ok := opts.ResolveDescription(); ok {
+		updateOpts.Description = new(desc) // 清空 ⇒ new("") ⇒ "description":""
 	}
 	if opts.TargetBranch != "" {
 		updateOpts.TargetBranch = new(opts.TargetBranch)
 	}
 	// assignees 经 Users API 精确匹配解析为用户 ID（GitLab 线路收 ID 不收
-	// login）；nil/空 = 不变（len>0 才落线，见 UpdateCROptions）。
-	if len(opts.Assignees) > 0 {
-		assigneeIDs, err := p.resolveUserIDs(ctx, "UpdateCR", opts.Assignees)
-		if err != nil {
-			return nil, err
+	// login）；三态同线：清空时跳过 resolve 直接空集 ⇒ "assignee_ids":[]。
+	if as, ok := opts.ResolveAssignees(); ok {
+		ids := []int64{}
+		if len(as) > 0 {
+			var err error
+			ids, err = p.resolveUserIDs(ctx, "UpdateCR", as)
+			if err != nil {
+				return nil, err
+			}
 		}
-		updateOpts.AssigneeIDs = &assigneeIDs
+		updateOpts.AssigneeIDs = &ids
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
