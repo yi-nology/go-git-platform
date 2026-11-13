@@ -57,6 +57,11 @@
 // fetch instead of N. 两后端差异（机器可读登记）：native 全量支持；
 // gogit 收到 Reference/Dissociate 时 fail-fast 报 ErrReferenceUnsupported
 // （go-git v5 无跨仓借用能力），共享校验 validateCloneReference 两后端
-// 同形。共享仓删除后借它的 workdir 不可再 fetch——Dissociate 或调用方
-// 管理共享仓生命周期。
+// 同形。共享仓生命周期警示（探针实测 2026-11-13）：共享仓被删后 workdir
+// 的 fetch **并不失败**（exit 0）——对象访问打 unable-to-normalize 告警、
+// 整段历史被重新下载进 workdir 自有对象库（省流效果归零），仅存在于
+// 共享仓的旧对象读取失败，悬空 alternates 持续告警。要么 Dissociate
+// 产出自包含副本，要么调用方管好共享仓生命周期：推荐执行前显式检查
+// alternates 目标存在性、悬空即清 workdir 全量重建（git-ferry-core
+// cloneFetchStage 即此模式）。
 package gitbackend

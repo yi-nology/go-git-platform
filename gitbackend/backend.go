@@ -160,10 +160,14 @@ type CloneOptions struct {
 	// 指向的目录不存在或非 git 仓 ⇒ 明确报错（ErrNotAGitRepo），不静默
 	// 退化成普通克隆（issue #148）。
 	//
-	// 生命周期警示：workdir 的 objects/info/alternates 指向共享仓，
-	// **共享仓被删除后该 workdir 不可再 fetch**——需要自包含产物时用
-	// Dissociate，或由调用方管理共享仓生命周期（Clone Cache 场景即
-	// sync.clone_cache_dir 的职责）。
+	// 生命周期警示（探针实测 2026-11-13）：workdir 的 objects/info/alternates
+	// 指向共享仓；**共享仓被删除后 fetch 并不失败**（exit 0），对象访问时
+	// 打 "unable to normalize alternate object path" 告警并把整段历史重新
+	// 下载进 workdir 自有对象库（省流效果归零），仅存在于共享仓的旧对象
+	// 读取失败，悬空文件持续告警。需要自包含产物时用 Dissociate；否则由
+	// 调用方管理共享仓生命周期——推荐执行前显式检查 alternates 目标存在
+	// 性、悬空即清 workdir 全量重建（git-ferry-core cloneFetchStage 即此
+	// 模式；Clone Cache 场景即 sync.clone_cache_dir 的职责）。
 	//
 	// 仅 native 后端支持（gogit 报 ErrReferenceUnsupported，见该哨兵注释）。
 	Reference string
