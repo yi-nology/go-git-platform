@@ -8,19 +8,35 @@ import (
 	"github.com/oekit/pkg/slicex"
 )
 
-// EnsureAction reports what an Ensure* call did to converge the resource
-// onto its desired state.
-type EnsureAction string
+// MutationOutcome 是统一变更结果（2B spec 2026-11-14-phase2b）：自动化按
+// outcome 分支，不必解析错误文本或比对返回对象。
+type MutationOutcome string
 
-// Ensure* outcomes.
+const (
+	OutcomeCreated   MutationOutcome = "created"   // 资源原本不存在，已创建
+	OutcomeUpdated   MutationOutcome = "updated"   // 存在且发生了写入
+	OutcomeUnchanged MutationOutcome = "unchanged" // 已达期望态，零写入
+	// OutcomeConflict 是唯一同时携带 outcome 与非 nil error 的分支
+	// （并发冲突 409，err 经 IsConflict 可判）；其余 outcome 错误一律
+	// ("", nil, err)。
+	OutcomeConflict MutationOutcome = "conflict"
+)
+
+// EnsureAction 是 MutationOutcome 的既有名——类型别名，源码完全兼容；
+// 既有 EnsureCreated/EnsureUpdated/EnsureUnchanged 常量保留（新代码
+// 优先用 Outcome* 名）。
+type EnsureAction = MutationOutcome
+
+// Ensure* outcomes (aliases of the Outcome* names, kept for source
+// compatibility).
 const (
 	// EnsureCreated: the resource did not exist and was created.
-	EnsureCreated EnsureAction = "created"
+	EnsureCreated = OutcomeCreated
 	// EnsureUpdated: the resource existed with different content and was
 	// updated (for webhooks and deploy keys: replaced, see below).
-	EnsureUpdated EnsureAction = "updated"
+	EnsureUpdated = OutcomeUpdated
 	// EnsureUnchanged: the resource already matched the desired state.
-	EnsureUnchanged EnsureAction = "unchanged"
+	EnsureUnchanged = OutcomeUnchanged
 )
 
 // EnsureSecretMode controls how EnsureWebhook treats a matching hook's
@@ -97,6 +113,9 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 	// Drift (or duplicates): replace every matching hook with one fresh one.
 	for _, h := range matches {
 		if err := p.DeleteWebhook(ctx, opts.Owner, opts.Repo, h.ID); err != nil {
+			if IsConflict(err) {
+				return OutcomeConflict, matches[0], err
+			}
 			return "", nil, err
 		}
 	}
@@ -105,6 +124,13 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		Secret: opts.Secret, Events: events,
 	})
 	if err != nil {
+		if IsConflict(err) {
+			var prior *PlatformWebhook
+			if len(matches) > 0 {
+				prior = matches[0]
+			}
+			return OutcomeConflict, prior, err
+		}
 		return "", nil, err
 	}
 	if len(matches) == 0 {
@@ -172,6 +198,9 @@ func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebho
 	secret := opts.Secret
 	out, err := wcm.UpdateWebhook(ctx, opts.Owner, opts.Repo, hook.ID, UpdateWebhookOptions{Secret: &secret})
 	if err != nil {
+		if IsConflict(err) {
+			return OutcomeConflict, hook, err
+		}
 		return "", nil, err
 	}
 	return EnsureUpdated, out, nil
@@ -199,6 +228,9 @@ func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, ow
 			AllowDeletions:           &opts.AllowDeletions,
 		})
 		if err != nil {
+			if IsConflict(err) {
+				return OutcomeConflict, cur, err
+			}
 			return "", nil, err
 		}
 		return EnsureUpdated, out, nil
@@ -208,6 +240,9 @@ func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, ow
 	}
 	out, err := bpm.CreateBranchProtection(ctx, owner, repo, opts)
 	if err != nil {
+		if IsConflict(err) {
+			return OutcomeConflict, nil, err
+		}
 		return "", nil, err
 	}
 	return EnsureCreated, out, nil
@@ -233,16 +268,25 @@ func EnsureDeployKey(ctx context.Context, dkm DeploymentKeyManager, owner, repo 
 			return EnsureUnchanged, k, nil
 		}
 		if err := dkm.DeleteDeployKey(ctx, owner, repo, k.ID); err != nil {
+			if IsConflict(err) {
+				return OutcomeConflict, k, err
+			}
 			return "", nil, err
 		}
 		out, err := dkm.AddDeployKey(ctx, owner, repo, opts)
 		if err != nil {
+			if IsConflict(err) {
+				return OutcomeConflict, k, err
+			}
 			return "", nil, err
 		}
 		return EnsureUpdated, out, nil
 	}
 	out, err := dkm.AddDeployKey(ctx, owner, repo, opts)
 	if err != nil {
+		if IsConflict(err) {
+			return OutcomeConflict, nil, err
+		}
 		return "", nil, err
 	}
 	return EnsureCreated, out, nil

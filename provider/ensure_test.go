@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -397,9 +398,13 @@ func TestEnsureBranchProtectionLifecycle(t *testing.T) {
 func TestEnsureBranchProtectionPropagatesRealErrors(t *testing.T) {
 	boom := errors.New("boom")
 	f := &fakeBranchProtection{getFails: boom}
-	_, _, err := EnsureBranchProtection(t.Context(), f, "o", "r", CreateBranchProtectionOptions{BranchName: "main"})
+	// 读路径错误（GET 非 404）不动：零 outcome + nil 实体，逐字上抛。
+	outcome, entity, err := EnsureBranchProtection(t.Context(), f, "o", "r", CreateBranchProtectionOptions{BranchName: "main"})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want boom", err)
+	}
+	if outcome != "" || entity != nil {
+		t.Fatalf("outcome = %q entity = %+v, want zero outcome/nil（读路径非变更冲突）", outcome, entity)
 	}
 }
 
@@ -471,5 +476,257 @@ func TestEnsureWebhook_VocabularyMismatchConverges(t *testing.T) {
 	}
 	if action3 != EnsureUpdated {
 		t.Fatalf("extra family must be drift, action = %q", action3)
+	}
+}
+
+// --- conflict outcomes (2B T1) ---
+
+// conflictWebhookMgr 是写操作撞 409 的桩：List 返回现场 hooks，写方法返回
+// 包 ErrConflict（409 分类）的错误——与 provider.Wrap 后上抛的形态一致。
+// 嵌入 nil WebhookManager 仅满足未覆写的方法（ParseWebhookEvent 等在这些
+// 测试里不会被调用）。
+type conflictWebhookMgr struct {
+	WebhookManager
+	hooks  []*PlatformWebhook
+	delErr error // 非 nil 时 DeleteWebhook 返回它（默认 409 冲突）
+}
+
+func (m conflictWebhookMgr) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
+	return m.hooks, nil
+}
+
+func (m conflictWebhookMgr) DeleteWebhook(context.Context, string, string, int64) error {
+	if m.delErr != nil {
+		return m.delErr
+	}
+	return fmt.Errorf("delete: %w", ErrConflict)
+}
+
+func (m conflictWebhookMgr) CreateWebhook(context.Context, CreateWebhookOptions) (*PlatformWebhook, error) {
+	return nil, fmt.Errorf("create: %w", ErrConflict)
+}
+
+// GetWebhook/UpdateWebhook 让桩同时满足 WebhookConfigManager（always-update
+// 路径的类型断言）；实际只有 UpdateWebhook 会被调用。
+func (m conflictWebhookMgr) GetWebhook(_ context.Context, _ string, _ string, id int64) (*PlatformWebhook, error) {
+	for _, h := range m.hooks {
+		if h.ID == id {
+			return h, nil
+		}
+	}
+	return nil, fmt.Errorf("get: %w", ErrConflict)
+}
+
+func (m conflictWebhookMgr) UpdateWebhook(context.Context, string, string, int64, UpdateWebhookOptions) (*PlatformWebhook, error) {
+	return nil, fmt.Errorf("update: %w", ErrConflict)
+}
+
+// TestEnsureWebhook_ConflictOutcome：无命中钩子（既有 URL 不同）→ 直接
+// create 撞 409 → (OutcomeConflict, nil, err)——err 经 IsConflict 可判，
+// outcome 必须是 OutcomeConflict（唯一同时带 outcome 与非 nil error 的分支）。
+func TestEnsureWebhook_ConflictOutcome(t *testing.T) {
+	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 1, URL: "https://a", Events: []string{"push"}}}}
+	outcome, entity, err := EnsureWebhook(t.Context(), m,
+		CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push"}})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != nil {
+		t.Fatalf("entity = %+v, want nil（无既有实体）", entity)
+	}
+}
+
+// 删除路径：URL 命中但事件漂移 → delete 撞 409 → (OutcomeConflict, matches[0], err)。
+func TestEnsureWebhook_DeleteConflictOutcome(t *testing.T) {
+	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}}}
+	outcome, entity, err := EnsureWebhook(t.Context(), m,
+		CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push", "pull_request"}})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity == nil || entity.ID != 1 {
+		t.Fatalf("entity = %+v, want matches[0] (ID 1)", entity)
+	}
+}
+
+// secret 补写路径：URL+事件全匹配 + always-update → UpdateWebhook 撞 409 →
+// (OutcomeConflict, 该钩子, err)。
+func TestEnsureWebhook_SecretUpdateConflictOutcome(t *testing.T) {
+	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 7, URL: "https://b", Events: []string{"push", "pull_request"}}}}
+	outcome, entity, err := EnsureWebhook(t.Context(), m, CreateWebhookOptions{
+		Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push", "pull_request"},
+		Secret: "rotated", EnsureSecretMode: EnsureSecretAlwaysUpdate,
+	})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity == nil || entity.ID != 7 {
+		t.Fatalf("entity = %+v, want the patched hook (ID 7)", entity)
+	}
+}
+
+// 只有 409 翻 outcome：非冲突写错误逐字保持 ("", nil, err)。
+func TestEnsureWebhook_NonConflictWriteErrorKeepsZeroOutcome(t *testing.T) {
+	boom := errors.New("boom")
+	m := conflictWebhookMgr{
+		hooks:  []*PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}},
+		delErr: boom,
+	}
+	outcome, entity, err := EnsureWebhook(t.Context(), m,
+		CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push", "pull_request"}})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want boom", err)
+	}
+	if outcome != "" || entity != nil {
+		t.Fatalf("outcome = %q entity = %+v, want zero outcome/nil（仅 409 翻 outcome）", outcome, entity)
+	}
+}
+
+// conflictBranchProtection：Get 返回 cur（nil = 未找到，→ ErrNotFound），
+// 写操作一律撞 409。
+type conflictBranchProtection struct {
+	cur *BranchProtection
+}
+
+func (m conflictBranchProtection) ListBranchProtections(context.Context, string, string) ([]*BranchProtection, error) {
+	return nil, nil
+}
+
+func (m conflictBranchProtection) GetBranchProtection(context.Context, string, string, string) (*BranchProtection, error) {
+	if m.cur == nil {
+		return nil, &ProviderError{Op: "GetBranchProtection", Cause: ErrNotFound}
+	}
+	return m.cur, nil
+}
+
+func (m conflictBranchProtection) CreateBranchProtection(context.Context, string, string, CreateBranchProtectionOptions) (*BranchProtection, error) {
+	return nil, fmt.Errorf("create: %w", ErrConflict)
+}
+
+func (m conflictBranchProtection) UpdateBranchProtection(context.Context, string, string, string, UpdateBranchProtectionOptions) (*BranchProtection, error) {
+	return nil, fmt.Errorf("update: %w", ErrConflict)
+}
+
+func (m conflictBranchProtection) DeleteBranchProtection(context.Context, string, string, string) error {
+	return nil
+}
+
+// 更新路径：已有规则与期望不符 → Update 撞 409 → (OutcomeConflict, cur, err)。
+func TestEnsureBranchProtection_UpdateConflictOutcome(t *testing.T) {
+	cur := &BranchProtection{BranchName: "main", RequiredApprovingReviews: 1}
+	m := conflictBranchProtection{cur: cur}
+	outcome, entity, err := EnsureBranchProtection(t.Context(), m, "o", "r",
+		CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 2})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != cur {
+		t.Fatalf("entity = %+v, want cur %+v", entity, cur)
+	}
+}
+
+// 创建路径：规则不存在 → Create 撞 409 → (OutcomeConflict, nil, err)（无既有实体）。
+func TestEnsureBranchProtection_CreateConflictOutcome(t *testing.T) {
+	m := conflictBranchProtection{}
+	outcome, entity, err := EnsureBranchProtection(t.Context(), m, "o", "r",
+		CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 2})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != nil {
+		t.Fatalf("entity = %+v, want nil（无既有实体）", entity)
+	}
+}
+
+// conflictDeployKeys：写操作按配置返回错误，deleteErr/addErr 为 nil 即成功。
+type conflictDeployKeys struct {
+	keys      []*DeployKey
+	deleteErr error
+	addErr    error
+}
+
+func (m conflictDeployKeys) ListDeployKeys(context.Context, string, string) ([]*DeployKey, error) {
+	return m.keys, nil
+}
+
+func (m conflictDeployKeys) AddDeployKey(context.Context, string, string, AddDeployKeyOptions) (*DeployKey, error) {
+	if m.addErr != nil {
+		return nil, m.addErr
+	}
+	return &DeployKey{ID: 99, Title: "replaced"}, nil
+}
+
+func (m conflictDeployKeys) DeleteDeployKey(context.Context, string, string, int64) error {
+	return m.deleteErr
+}
+
+// 删除路径：标题命中但材料不同 → Delete 撞 409 → (OutcomeConflict, 旧键 k, err)。
+func TestEnsureDeployKey_DeleteConflictOutcome(t *testing.T) {
+	k := &DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
+	m := conflictDeployKeys{
+		keys:      []*DeployKey{k},
+		deleteErr: fmt.Errorf("delete: %w", ErrConflict),
+	}
+	outcome, entity, err := EnsureDeployKey(t.Context(), m, "o", "r",
+		AddDeployKeyOptions{Title: "ci", Key: "ssh-new"})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != k {
+		t.Fatalf("entity = %+v, want old key %+v", entity, k)
+	}
+}
+
+// 替换路径：删除成功后 re-add 撞 409 → (OutcomeConflict, 旧键 k, err)。
+func TestEnsureDeployKey_ReplaceAddConflictOutcome(t *testing.T) {
+	k := &DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
+	m := conflictDeployKeys{
+		keys:   []*DeployKey{k},
+		addErr: fmt.Errorf("add: %w", ErrConflict),
+	}
+	outcome, entity, err := EnsureDeployKey(t.Context(), m, "o", "r",
+		AddDeployKeyOptions{Title: "ci", Key: "ssh-new"})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != k {
+		t.Fatalf("entity = %+v, want old key %+v", entity, k)
+	}
+}
+
+// 新建路径：无同名键 → Add 撞 409 → (OutcomeConflict, nil, err)（无既有实体）。
+func TestEnsureDeployKey_CreateConflictOutcome(t *testing.T) {
+	m := conflictDeployKeys{addErr: fmt.Errorf("add: %w", ErrConflict)}
+	outcome, entity, err := EnsureDeployKey(t.Context(), m, "o", "r",
+		AddDeployKeyOptions{Title: "ci", Key: "ssh-new"})
+	if !IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if outcome != OutcomeConflict {
+		t.Fatalf("outcome = %q, want conflict", outcome)
+	}
+	if entity != nil {
+		t.Fatalf("entity = %+v, want nil（无既有实体）", entity)
 	}
 }
