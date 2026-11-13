@@ -137,6 +137,10 @@ This document is generated from the backends' registered divergence ledgers
 | DiffManager | CreateDiscussion | opts.BaseSHA, opts.StartSHA, opts.StartNewLine | ignore | GitCode's inline-comment wire takes path/line/side/commit_id only: FilePath/NewLine/OldLine/HeadSHA anchor the comment, but the base/start SHA pair and multi-line ranges have no fields and are dropped. |
 | ChangeRequestManager | UpdateCR | opts.Assignees | ignore | GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped. |
 | CILogManager | ListFailedJobLogs |  | mapping | The v8 wire has no head_sha filter on the runs list; the SDK's FindActionRunByHeadSHA scans newest-first and returns only the single newest run matching the SHA, so failed jobs in other workflows' runs for the same commit are not attributed (GitHub/Gitea collect the latest run per workflow). Job status vocabulary is asserted case-insensitively (SDK fixtures show UPPERCASE COMPLETED/RUNNING; the failure word is inferred as FAILED); live validation of the vocabulary and the download-log route is pending. |
+| IssueManager | UpdateIssue | opts.BodyPatch | stub | GitCode 的 issue-update wire 是 string+omitempty，空串不可表达且无 body 侧端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。 |
+| IssueManager | UpdateIssue | opts.MilestonePatch | stub | GitCode 无 milestone detach 端点（int64+omitempty 丢 0）——patch 清空返回 provider.ErrClearNotSupported。 |
+| ChangeRequestManager | UpdateCR | opts.DescriptionPatch | stub | 同 body 面：string+omitempty 丢空串——patch 清空返回 ErrClearNotSupported。 |
+| ChangeRequestManager | UpdateCR | opts.AssigneesPatch | stub | pull-update wire 无 assignee 字段（既有 ignore 针对旧字段静默丢弃）——patch 任意指定均返回 ErrClearNotSupported。 |
 
 ## tencent_code
 
