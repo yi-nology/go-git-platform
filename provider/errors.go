@@ -32,6 +32,11 @@ var (
 	ErrWebhookValidation    = errors.New("webhook validation failed")
 	ErrConnectionFailed     = errors.New("connection failed")
 	ErrPlatformNotSupported = errors.New("platform not supported")
+	// ErrClearNotSupported 是三态 Update 的 B 级哨兵（2A 能力矩阵）：
+	// 调用方经 XxxPatch 显式要求清空，但该平台+字段的 wire 无法表达
+	// 清空（结构不可表达且无侧端点，或既有登记 no-op）。只由 patch
+	// 字段触发；旧字段路径永不返回。kv 携带 platform/op/field。
+	ErrClearNotSupported = errors.New("clear not supported on this platform")
 )
 
 // ProviderError is a structured error from a provider operation. It carries
