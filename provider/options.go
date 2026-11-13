@@ -8,9 +8,10 @@ import "time"
 // scan a single file to see the cross-platform API surface.
 //
 // Option field conventions:
-//   - Update*Options (e.g. UpdateIssueOptions, UpdateCROptions): zero-value
-//     fields (empty string, false bool) are treated as "leave unchanged".
-//     There is no way to explicitly set a field to its zero value.
+//   - Update*Options（e.g. UpdateIssueOptions, UpdateCROptions）：旧字段
+//     的零值（空串、false）仍表示 "leave unchanged"。2A 起配套 XxxPatch
+//     指针字段提供三态：nil = 不动、非 nil = 全量替换（空值 = 显式清空），
+//     双字段同设时 patch 优先——见 provider/patch.go ResolvePatch。
 //   - Update*Options with pointer fields (e.g. UpdateLabelOptions,
 //     UpdateMilestoneOptions): nil means "leave unchanged", non-nil means
 //     "set to this value" (including zero values like "" or false).
@@ -98,12 +99,27 @@ type MergeCROptions struct {
 
 // UpdateCROptions contains options for updating a change request.
 type UpdateCROptions struct {
-	Title        string `json:"title,omitempty"`
+	Title string `json:"title,omitempty"`
+	// DescriptionPatch 三态描述（2A）：nil = 不动；非 nil = 全量替换，"" = 清空。
+	// 与 Description 同设时本字段优先。平台无法表达清空（A/B 矩阵 B 级）时
+	// UpdateCR 返回 ErrClearNotSupported。
+	DescriptionPatch *string `json:"description_patch,omitempty"`
+	// AssigneesPatch 三态指派人：nil = 不动；非 nil = 全量替换，
+	// 空切片 = 清空。语义同 DescriptionPatch。
+	AssigneesPatch *[]string `json:"assignees_patch,omitempty"`
+	//
+	// 三态（2A 起）：清空/置空用 DescriptionPatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
 	Description  string `json:"description,omitempty"`
 	TargetBranch string `json:"target_branch,omitempty"`
 	// Assignees 全量替换 CR 指派人（logins；后端按平台词表解析为 ID/单值线）。
 	// 空（nil 或空切片）= 指派人不变。**清空不可表达**——与
 	// UpdateIssueOptions.Assignees 同款口径（len>0 才落线）。
+	//
+	// 三态（2A 起）：清空/置空用 AssigneesPatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
 	Assignees []string `json:"assignees,omitempty"`
 }
 
@@ -397,12 +413,41 @@ type CreateIssueOptions struct {
 
 // UpdateIssueOptions contains options for updating an issue.
 type UpdateIssueOptions struct {
-	Title     string     `json:"title,omitempty"`
-	Body      string     `json:"body,omitempty"`
-	State     IssueState `json:"state,omitempty"`
-	Assignees []string   `json:"assignees,omitempty"`
-	Labels    []string   `json:"labels,omitempty"`
-	Milestone string     `json:"milestone,omitempty"` // milestone number/ID as a string; "" = leave unchanged
+	Title string `json:"title,omitempty"`
+	// BodyPatch 三态正文（2A）：nil = 不动；非 nil = 全量替换，"" = 清空。
+	// 与 Body 同设时本字段优先。平台无法表达清空（A/B 矩阵 B 级）时
+	// UpdateIssue 返回 ErrClearNotSupported。
+	BodyPatch *string `json:"body_patch,omitempty"`
+	// AssigneesPatch 三态指派人：nil = 不动；非 nil = 全量替换，
+	// 空切片 = 清空。语义同 BodyPatch。
+	AssigneesPatch *[]string `json:"assignees_patch,omitempty"`
+	// LabelsPatch 三态标签：nil = 不动；非 nil = 全量替换，空 = 清空。
+	LabelsPatch *[]string `json:"labels_patch,omitempty"`
+	// MilestonePatch 三态里程碑：nil = 不动；非 nil = 全量替换，
+	// "" = 清空（各平台映射 null/0，见能力矩阵）。
+	MilestonePatch *string `json:"milestone_patch,omitempty"`
+	//
+	// 三态（2A 起）：清空/置空用 BodyPatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
+	Body  string     `json:"body,omitempty"`
+	State IssueState `json:"state,omitempty"`
+	//
+	// 三态（2A 起）：清空/置空用 AssigneesPatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
+	Assignees []string `json:"assignees,omitempty"`
+	//
+	// 三态（2A 起）：清空/置空用 LabelsPatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
+	Labels []string `json:"labels,omitempty"`
+	// milestone number/ID as a string; "" = leave unchanged
+	//
+	// 三态（2A 起）：清空/置空用 MilestonePatch（见上）；本字段语义不变
+	// （空 = 不动），保留为兼容路径——MCP 工具「参数未提供 = 不变」
+	// 即此语义。
+	Milestone string `json:"milestone,omitempty"`
 }
 
 // --- Labels ---

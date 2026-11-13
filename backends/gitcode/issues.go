@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	oekiterrors "github.com/oekit/pkg/errors"
+
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
@@ -76,32 +78,113 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 }
 
 // UpdateIssue implements provider.IssueManager.
+//
+// 三态接线（2A T6）：body/milestone 是 B 级——issue-update wire 是
+// string/int64 + omitempty，空值不可表达且没有清空侧端点，patch 清空在
+// 任何 HTTP 之前返回 provider.ErrClearNotSupported（整调用失败，零请
+// 求）；labels/assignees 是 A 级——置值进主 update（omitempty 裁零），
+// 清空走侧端点（PUT ReplaceIssueLabels / DELETE RemoveIssueAssignees）。
+//
+// 顺序裁定（brief Step 2）：先发主 update（携带全部置值字段），再发侧
+// 端点清空——混合 set+clear 的一次调用两个请求都会到，且侧端点是最后
+// 一条请求（harness dispatchClear 按「最后一条」断言侧端点形态）。
 func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
 	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
-	updateOpts := gitcode.UpdateIssueOptions{
-		Title:     opts.Title,
-		Body:      opts.Body,
-		Assignees: opts.Assignees,
-		Labels:    opts.Labels,
+	plan, err := planIssueUpdate(opts)
+	if err != nil {
+		return nil, err
 	}
-	if opts.Milestone != "" {
-		m, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "UpdateIssue", opts.Milestone)
-		if err != nil {
-			return nil, err
-		}
-		updateOpts.Milestone = m
-	}
-	if opts.State != "" {
-		updateOpts.State = gitcode.IssueState(opts.State)
-	}
-	issue, err := p.client.UpdateIssue(ctx, owner, repo, n, updateOpts)
+	// 顺序裁定：主 update 先（携带全部置值字段），侧端点清空后。
+	issue, err := p.client.UpdateIssue(ctx, owner, repo, n, plan.update)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
 	}
+	if err := p.applyIssueClears(ctx, owner, repo, n, plan); err != nil {
+		return nil, err
+	}
 	return convertIssue(issue), nil
+}
+
+// issueUpdatePlan 是 UpdateIssue 的三态解析产物（planIssueUpdate 纯函
+// 数、零 HTTP）：update 承载全部置值字段（omitempty 裁零），两个 pending
+// 标记把 A 级清空挂到侧端点（主 update 之后执行）。
+type issueUpdatePlan struct {
+	update         gitcode.UpdateIssueOptions
+	clearLabels    bool
+	clearAssignees bool
+}
+
+// planIssueUpdate 把 provider 三态选项翻译成 wire 选项。B 级字段
+// （body/milestone）的 patch 清空在这里就返回 ErrClearNotSupported——
+// 调用方在任何 HTTP 之前失败，整调用零请求。
+func planIssueUpdate(opts provider.UpdateIssueOptions) (issueUpdatePlan, error) {
+	var plan issueUpdatePlan
+	// Title/State 既有无条件形态保留（omitempty 裁零；State 无三态面）。
+	plan.update.Title = opts.Title
+	if opts.State != "" {
+		plan.update.State = gitcode.IssueState(opts.State)
+	}
+	// B 级：string omitempty 丢 "" 且无 body 侧端点。
+	if body, ok := opts.ResolveBody(); ok {
+		if body == "" {
+			return plan, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear body",
+				"platform", "gitcode", "field", "body")
+		}
+		plan.update.Body = body
+	}
+	// A 级：置值进主 update；清空挂侧端点（主 update 之后执行）。
+	if ls, ok := opts.ResolveLabels(); ok {
+		if len(ls) == 0 {
+			plan.clearLabels = true
+		} else {
+			plan.update.Labels = ls
+		}
+	}
+	// B 级：milestone 是 int64+omitempty，0 不可表达且无 detach 端点。
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			return plan, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear milestone",
+				"platform", "gitcode", "field", "milestone")
+		}
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "UpdateIssue", m)
+		if err != nil {
+			return plan, err
+		}
+		plan.update.Milestone = m64
+	}
+	// A 级：置值走 update 的 omitempty；清空走侧端点 DELETE。
+	if as, ok := opts.ResolveAssignees(); ok {
+		if len(as) == 0 {
+			plan.clearAssignees = true
+		} else {
+			plan.update.Assignees = as
+		}
+	}
+	return plan, nil
+}
+
+// applyIssueClears 执行 plan 挂起的侧端点清空（labels 先、assignees
+// 后；顺序裁定要求它们都在主 update 之后到达）。
+func (p *Provider) applyIssueClears(ctx context.Context, owner, repo string, n int, plan issueUpdatePlan) error {
+	if plan.clearLabels {
+		// A：侧端点 PUT——SDK 把 labels 数组本身作为 body（裸 JSON
+		// 数组 []，GitHub 形态 wire，非 {"labels":[]} 对象）。恒传非
+		// nil 空集：规范化的 [] 而非 null（patch 传 &nil 切片时
+		// Resolve 返回 nil）。
+		if err := p.client.ReplaceIssueLabels(ctx, owner, repo, n, []string{}); err != nil {
+			return provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
+		}
+	}
+	if plan.clearAssignees {
+		// A：侧端点 DELETE {"assignees":[]}（删光当前指派人）。
+		if _, err := p.client.RemoveIssueAssignees(ctx, owner, repo, n, []string{}); err != nil {
+			return provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
+		}
+	}
+	return nil
 }
 
 // CloseIssue implements provider.IssueManager.

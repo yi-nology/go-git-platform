@@ -112,8 +112,9 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if opts.Title != "" {
 		updateOpts.Title = new(opts.Title)
 	}
-	if opts.Body != "" {
-		updateOpts.Description = new(opts.Body)
+	// 三态收编（2A）：Resolve* 非 specified 不动；specified 空值即清空。
+	if body, ok := opts.ResolveBody(); ok {
+		updateOpts.Description = new(body) // 清空 ⇒ "description":""
 	}
 	if opts.State != "" {
 		event := "close"
@@ -122,23 +123,34 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		}
 		updateOpts.StateEvent = new(event) // IssueState → state_event 动词
 	}
-	if len(opts.Labels) > 0 {
-		lo := gitlab.LabelOptions(opts.Labels)
+	if ls, ok := opts.ResolveLabels(); ok {
+		lo := gitlab.LabelOptions(ls) // 清空 ⇒ 非 nil 空 ⇒ marshal ""
 		updateOpts.Labels = &lo
 	}
-	if len(opts.Assignees) > 0 {
-		assigneeIDs, err := p.resolveUserIDs(ctx, "UpdateIssue", opts.Assignees)
-		if err != nil {
-			return nil, err
+	if as, ok := opts.ResolveAssignees(); ok {
+		ids := []int64{} // 清空：跳过 resolve 直接空集 ⇒ "assignee_ids":[]
+		if len(as) > 0 {
+			var err error
+			ids, err = p.resolveUserIDs(ctx, "UpdateIssue", as)
+			if err != nil {
+				return nil, err
+			}
 		}
-		updateOpts.AssigneeIDs = &assigneeIDs
+		updateOpts.AssigneeIDs = &ids
 	}
-	if opts.Milestone != "" {
-		m, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "UpdateIssue", opts.Milestone)
-		if err != nil {
-			return nil, err
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			// 一等公民（矩阵全 A）：ResetMilestoneID 发字面
+			// "milestone_id":null；与 MilestoneID 互斥——clear 分支不得同时
+			// 设 MilestoneID。
+			updateOpts.ResetMilestoneID = true
+		} else {
+			m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "UpdateIssue", m)
+			if err != nil {
+				return nil, err
+			}
+			updateOpts.MilestoneID = new(m64)
 		}
-		updateOpts.MilestoneID = new(m)
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {

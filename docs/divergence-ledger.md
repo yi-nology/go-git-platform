@@ -65,6 +65,7 @@ This document is generated from the backends' registered divergence ledgers
 | WebhookConfigManager | UpdateWebhook | opts.Events (empty) | ignore | go-github marshals Hook.Events with omitempty, so an empty slice is indistinguishable from "unchanged" on the wire — clearing every event is not expressible here (other platforms send explicit empty event sets). |
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple workflow runs (one per workflow file); failed jobs are collected from the latest run per workflow (runs return newest-first, first sighting wins) instead of a single pipeline. |
 | RepoManager | ListRepos | opts.Owner | mapping | GitHub serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (same org-first/user-fallback shape the gitea family registers — issue #92 retired its old search-based form). |
+| IssueManager | UpdateIssue | opts.MilestonePatch | stub | go-github Milestone *int+omitempty 发不出 null 且无 detach 端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。 |
 
 ## gitee
 
@@ -137,6 +138,10 @@ This document is generated from the backends' registered divergence ledgers
 | DiffManager | CreateDiscussion | opts.BaseSHA, opts.StartSHA, opts.StartNewLine | ignore | GitCode's inline-comment wire takes path/line/side/commit_id only: FilePath/NewLine/OldLine/HeadSHA anchor the comment, but the base/start SHA pair and multi-line ranges have no fields and are dropped. |
 | ChangeRequestManager | UpdateCR | opts.Assignees | ignore | GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped. |
 | CILogManager | ListFailedJobLogs |  | mapping | The v8 wire has no head_sha filter on the runs list; the SDK's FindActionRunByHeadSHA scans newest-first and returns only the single newest run matching the SHA, so failed jobs in other workflows' runs for the same commit are not attributed (GitHub/Gitea collect the latest run per workflow). Job status vocabulary is asserted case-insensitively (SDK fixtures show UPPERCASE COMPLETED/RUNNING; the failure word is inferred as FAILED); live validation of the vocabulary and the download-log route is pending. |
+| IssueManager | UpdateIssue | opts.BodyPatch | stub | GitCode 的 issue-update wire 是 string+omitempty，空串不可表达且无 body 侧端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。 |
+| IssueManager | UpdateIssue | opts.MilestonePatch | stub | GitCode 无 milestone detach 端点（int64+omitempty 丢 0）——patch 清空返回 provider.ErrClearNotSupported。 |
+| ChangeRequestManager | UpdateCR | opts.DescriptionPatch | stub | 同 body 面：string+omitempty 丢空串——patch 清空返回 ErrClearNotSupported。 |
+| ChangeRequestManager | UpdateCR | opts.AssigneesPatch | stub | pull-update wire 无 assignee 字段（既有 ignore 针对旧字段静默丢弃）——patch 任意指定均返回 ErrClearNotSupported。 |
 
 ## tencent_code
 
@@ -151,7 +156,7 @@ This document is generated from the backends' registered divergence ledgers
 | ReviewManager | RequestReviewers |  | ignore | The platform exposes no reviewer-request surface the SDK can drive; the call succeeds without effect. |
 | ReviewManager | DismissReview |  | stub | The platform exposes no review-dismissal surface. |
 | IssueManager | ListIssues | opts.Assignee | ignore | The Gongfeng issue list endpoint takes no assignee filter; the option is accepted but ignored. |
-| IssueManager | RemoveIssueLabel |  | mapping | Label deletion routes through replace semantics; removing the last label is a no-op. |
+| IssueManager | RemoveIssueLabel |  | mapping | Label deletion routes through replace semantics; removing the last label is a no-op. 2A 起 UpdateIssueOptions.LabelsPatch 的清空请求同样返回 provider.ErrClearNotSupported（结构性空串不可达的登记面一致）。 |
 | IssueManager | ListIssues | WebURL, ClosedAt | mapping | The API exposes no issue web URL and no closed-at timestamp. |
 | IssueManager | GetIssue | WebURL, ClosedAt | mapping | See ListIssues. |
 | LabelManager | ListLabels | Label.ID | mapping | Label IDs are not exposed by the wire; Label.ID is always 0. |

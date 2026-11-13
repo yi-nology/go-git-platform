@@ -45,11 +45,20 @@ func TestTencentCode_Contract(t *testing.T) {
 			CreateIssueAssigneesByID: true,
 			// Note edits route through the issue (issues/{iid}/notes/{id}).
 			UpdateCommentViaIssue: true,
-			ListResponse:          `[{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
-			GetResponse:           `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
-			MutateResponse:        `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
-			CommentsResponse:      `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
-			LabelsResponse:        `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// 2A 三态清空期望（T7）：工蜂 wire 词表 description/
+			// assignee_ids/milestone_id（0 在场）；labels 尊重既有 no-op
+			// 登记——清空返回 ErrClearNotSupported、零请求。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "description"},
+				"assignees": {BodyField: "assignee_ids"},
+				"labels":    {Unsupported: true}, // 既有 no-op 登记尊重
+				"milestone": {BodyField: "milestone_id"},
+			},
+			ListResponse:     `[{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:      `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse:   `{"id":1,"iid":1,"title":"bug","description":"broke","state":"opened","author":{"id":1,"username":"dev","name":"Developer"},"labels":["bug","enhancement"],"milestone":{"id":1,"title":"v1"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			CommentsResponse: `[{"id":1,"body":"a comment","author":{"id":1,"username":"dev","name":"Developer"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			LabelsResponse:   `[{"name":"bug","color":"#4cc917","description":"something broke"}]`,
 		},
 		// Gongfeng review-note shape (GitLab-shaped notes carrying the
 		// review): id/body/author/created_at with system bookkeeping notes
@@ -102,6 +111,12 @@ func TestTencentCode_Contract(t *testing.T) {
 			GetResponse:    `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			PageZeroWalks:  true,
+			// 2A 三态清空期望（T7）：描述 wire "description"；指派单值面
+			// 清空 = "assignee_id":0 在场（Phase 3 验服务端）。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "description"},
+				"assignees":   {BodyField: "assignee_id"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:              `{"id":1,"tag":"v1.0.0","title":"v1.0.0","description":"release notes","created_at":"2026-01-01T00:00:00Z"}`,

@@ -113,14 +113,11 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 		return nil, err
 	}
 	// Gitee 的 assignee 线路是独立的 add/remove 端点（PATCH pull 不带
-	// assignee 字段）——全量替换走读改写收敛差集。nil/空 = 不变（len>0
-	// 才落线，见 UpdateCROptions）。并发编辑下有丢更新窗口（mapping 分歧
-	// 已登记）。
-	if len(opts.Assignees) > 0 {
-		if err := p.setCRAssignees(ctx, owner, repo, n, opts.Assignees); err != nil {
-			return nil, err
-		}
-	}
+	// assignee 字段）——全量替换走读改写收敛差集。三态（2A）：
+	// ResolveAssignees 非 specified 不动；specified 空集 = 删光当前
+	// ——setCRAssignees 无内部 len 门，assigneeDiff 对空目标产出全量
+	// toRemove 逐个 remove。并发编辑下有丢更新窗口（mapping 分歧已
+	// 登记）。
 	// 「"" = 不变」逐字段兑现（issue #88）：go-gitee 的选项字段是
 	// *string+omitempty，omitempty 只省略 nil 指针——gitee.String("") 非
 	// nil ⇒ 空串照上 wire，单字段更新会清空对侧字段（或 422）。与同文件
@@ -129,31 +126,54 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.Title != "" {
 		patchOpts.Title = gitee.String(opts.Title)
 	}
-	if opts.Description != "" {
-		patchOpts.Body = gitee.String(opts.Description)
+	if desc, ok := opts.ResolveDescription(); ok {
+		patchOpts.Body = gitee.String(desc) // 清空 ⇒ "body":""
+	}
+	var rmw *provider.ChangeRequest
+	if as, ok := opts.ResolveAssignees(); ok {
+		if rmw, err = p.setCRAssignees(ctx, owner, repo, n, as); err != nil {
+			return nil, err
+		}
+	}
+	// 编辑面无变更、指派走 patch 线：RMW 即完整更新，跳过尾随空 PATCH
+	// ——giteafamily T4「labels 侧端点后跳过尾随 EditIssue」同形（契约
+	// 断言以侧端点为最后一条请求）。AssigneesPatch 非 nil ⇒
+	// ResolveAssignees 必 specified ⇒ setCRAssignees 必已调用且成功路径
+	// 恒返回非 nil。legacy Assignees 线保留既有「RMW 后必落 PATCH」
+	// wire（TestUpdateCRAssignees_RMWDiff 钉住），故本门只 gate patch 线。
+	if patchOpts.Title == nil && patchOpts.Body == nil && opts.AssigneesPatch != nil {
+		return rmw, nil
 	}
 	return p.patchCR(ctx, owner, repo, number, patchOpts, "UpdateCR")
 }
 
 // setCRAssignees converges the CR's assignee set to target via the platform's
-// add/remove endpoints (each call comma-joins its batch).
-func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int, target []string) error {
+// add/remove endpoints (each call comma-joins its batch). An empty target
+// removes every current assignee: there is no internal len(target)>0 gate —
+// assigneeDiff yields the full toRemove set. Returns the CR as of the last
+// write (or the read snapshot when the diff is empty) so callers that skip a
+// trailing no-op PATCH can still return a value.
+func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int, target []string) (*provider.ChangeRequest, error) {
 	cr, err := p.GetCR(ctx, owner, repo, strconv.Itoa(n))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	toAdd, toRemove := assigneeDiff(cr.Assignees, target)
 	if len(toAdd) > 0 {
-		if _, _, err := p.client.PullRequests.AddAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toAdd); err != nil {
-			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+		pr, _, err := p.client.PullRequests.AddAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toAdd)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
 		}
+		cr = convertPullRequest(pr)
 	}
 	if len(toRemove) > 0 {
-		if _, _, err := p.client.PullRequests.RemoveAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toRemove); err != nil {
-			return provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+		pr, _, err := p.client.PullRequests.RemoveAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toRemove)
+		if err != nil {
+			return nil, provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
 		}
+		cr = convertPullRequest(pr)
 	}
-	return nil
+	return cr, nil
 }
 
 // assigneeDiff computes the add/remove batches that converge the current

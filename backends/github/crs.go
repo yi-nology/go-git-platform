@@ -152,16 +152,19 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if opts.Title != "" {
 		pr.Title = new(opts.Title)
 	}
-	if opts.Description != "" {
-		pr.Body = new(opts.Description)
+	// 三态收编（2A）：ResolveDescription 非 specified 不动；specified
+	// 空值即清空。
+	if desc, ok := opts.ResolveDescription(); ok {
+		pr.Body = new(desc) // 清空 ⇒ new("") ⇒ "body":""
 	}
 	if opts.TargetBranch != "" {
 		pr.Base = &github.PullRequestBranch{Ref: new(opts.TargetBranch)}
 	}
 	// PR 编号即 issue 编号：assignees 走 issue 线（PullRequests.Edit 的 wire
-	// 不带 assignee 字段）。nil/空 = 不变（len>0 才落线，见 UpdateCROptions）。
-	if len(opts.Assignees) > 0 {
-		issue := github.UpdateIssueRequest{Assignees: opts.Assignees}
+	// 不带 assignee 字段）——三态同线：清空时 []string{} 经 omitzero 发
+	// "assignees":[]。
+	if as, ok := opts.ResolveAssignees(); ok {
+		issue := github.UpdateIssueRequest{Assignees: as}
 		if _, _, err := p.client.Issues.Update(ctx, owner, repo, n, issue); err != nil {
 			return nil, provider.Wrap(provider.PlatformGitHub, "UpdateCR", err)
 		}

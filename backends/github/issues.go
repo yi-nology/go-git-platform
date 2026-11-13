@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v93/github"
+	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 
@@ -92,21 +93,33 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	if opts.Title != "" {
 		req.Title = new(opts.Title)
 	}
-	if opts.Body != "" {
-		req.Body = new(opts.Body)
+	// 三态收编（2A）：Resolve* 非 specified 不动；specified 空值即清空。
+	if body, ok := opts.ResolveBody(); ok {
+		req.Body = new(body)
 	}
-	if len(opts.Assignees) > 0 {
-		req.Assignees = opts.Assignees
+	if as, ok := opts.ResolveAssignees(); ok {
+		req.Assignees = as // 清空时为非空 nil-free 的 []string{} ⇒ omitzero 发 []
 	}
-	if len(opts.Labels) > 0 {
-		req.Labels = opts.Labels
+	if ls, ok := opts.ResolveLabels(); ok {
+		req.Labels = ls
 	}
-	if opts.Milestone != "" {
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateIssue", opts.Milestone)
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			// A/B 矩阵 B 级：go-github Milestone *int omitempty 发不出 null。
+			return nil, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear milestone", "platform", "github", "field", "milestone")
+		}
+		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateIssue", m)
 		if err != nil {
 			return nil, err
 		}
 		req.Milestone = new(int(m64))
+	}
+	// State 静默丢弃修复（2A 附带，勘察违约实锤）：其余 6 后端都映射，
+	// 本函数此前漏掉——CloseIssue/ReopenIssue 是独立方法，但 State 是
+	// UpdateIssueOptions 公共契约。
+	if opts.State != "" {
+		s := string(opts.State)
+		req.State = new(s)
 	}
 	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, *req)
 	if err != nil {

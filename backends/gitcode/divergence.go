@@ -37,6 +37,22 @@ var divergences = []provider.Divergence{
 		Reason: "GitCode's pull-update wire has no assignee field, and its /pulls/{n}/assignees routes manage reviewers (Assign/UnassignPullRequestReviewers), not assignees; a non-empty opts.Assignees is accepted and dropped."},
 	{Capability: "CILogManager", Method: "ListFailedJobLogs", Field: "", Kind: provider.DivergenceMapping,
 		Reason: "The v8 wire has no head_sha filter on the runs list; the SDK's FindActionRunByHeadSHA scans newest-first and returns only the single newest run matching the SHA, so failed jobs in other workflows' runs for the same commit are not attributed (GitHub/Gitea collect the latest run per workflow). Job status vocabulary is asserted case-insensitively (SDK fixtures show UPPERCASE COMPLETED/RUNNING; the failure word is inferred as FAILED); live validation of the vocabulary and the download-log route is pending."},
+	// 2A 三态 B 级（T6）：四处 patch 清空/置空在任何 HTTP 之前返回
+	// provider.ErrClearNotSupported（整调用失败、零请求）——wire 结构
+	// 不可表达且无清空侧端点。Kind 取 stub（能力缺席：错误 + 不碰
+	// wire）而非 ignore（其 doc 是「调用成功且静默丢弃」，与哨兵失败
+	// 形态相反）；field 级条目在 contracttest/divergence.go 的行为检查
+	// 中按 Field != "" 豁免，ErrNotImplemented 口径由 Reason 点名
+	// ErrClearNotSupported 覆盖。legacy 字段路径不受影响（旧字段
+	// 置值照常上线、CR 指派人维持既有 ignore 的静默丢弃）。
+	{Capability: "IssueManager", Method: "UpdateIssue", Field: "opts.BodyPatch", Kind: provider.DivergenceStub,
+		Reason: "GitCode 的 issue-update wire 是 string+omitempty，空串不可表达且无 body 侧端点——patch 清空返回 provider.ErrClearNotSupported（非静默丢弃）。"},
+	{Capability: "IssueManager", Method: "UpdateIssue", Field: "opts.MilestonePatch", Kind: provider.DivergenceStub,
+		Reason: "GitCode 无 milestone detach 端点（int64+omitempty 丢 0）——patch 清空返回 provider.ErrClearNotSupported。"},
+	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.DescriptionPatch", Kind: provider.DivergenceStub,
+		Reason: "同 body 面：string+omitempty 丢空串——patch 清空返回 ErrClearNotSupported。"},
+	{Capability: "ChangeRequestManager", Method: "UpdateCR", Field: "opts.AssigneesPatch", Kind: provider.DivergenceStub,
+		Reason: "pull-update wire 无 assignee 字段（既有 ignore 针对旧字段静默丢弃）——patch 任意指定均返回 ErrClearNotSupported。"},
 }
 
 // Divergences returns the registered divergence ledger for the GitCode backend.

@@ -16,6 +16,17 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
+// ClearExpect 声明某字段「清空请求」的期望形态（2A A/B 能力矩阵）。
+// Unsupported=true：B 级——必须返回 ErrClearNotSupported 且零新请求；
+// 否则：请求必须发出，BodyField 在场为空值（""/[]/{}/null/0）、
+// PathContains 命中（侧端点定位）、Method 为 "" 时 PATCH/PUT 皆可。
+type ClearExpect struct {
+	Unsupported  bool
+	Method       string // "" = PATCH 或 PUT
+	BodyField    string // "" = 不断言 body（无 body 的侧端点，如 DELETE）
+	PathContains string // "" = 不断言路径
+}
+
 // IssuesHarnessConfig carries the fixtures a backend's main Harness needs to
 // auto-mount the issue-management suite via Harness.Issues.
 type IssuesHarnessConfig struct {
@@ -47,6 +58,9 @@ type IssuesHarnessConfig struct {
 	// issues/1/notes/1, so a swap of the number and commentID plumbing
 	// fails instead of passing on the body assertion alone.
 	UpdateCommentViaIssue bool
+	// IssueClear 声明各字段清空请求的期望（键：body/assignees/labels/
+	// milestone）。nil = 四字段全部必须可清空（全 A 级平台可不设）。
+	IssueClear map[string]ClearExpect
 }
 
 // IssuesHarness is the full harness RunIssuesSuite consumes; auto-mounting
@@ -88,7 +102,9 @@ func testIssuesSuite(t *testing.T, h Harness) {
 // CommentsResponse; GET containing labels (not issues) → LabelsResponse;
 // other GET → ListResponse; POST → 201 + MutateResponse (a POST to a labels
 // path — adding labels to an issue — returns LabelsResponse, since
-// GitHub-shaped APIs answer with the label array); PATCH/PUT →
+// GitHub-shaped APIs answer with the label array); PUT to a labels path —
+// replacing an issue's labels — likewise returns LabelsResponse (an issue
+// object there breaks the []*Label parse); PATCH/PUT →
 // MutateResponse; DELETE → 204. Requests are recorded for wire assertions.
 func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 	newIM := func(t *testing.T) (provider.IssueManager, *[]recordedRequest) {
@@ -157,6 +173,7 @@ func RunIssuesSuite(t *testing.T, h IssuesHarness) {
 	t.Run("Update_PatchesTitle", func(t *testing.T) {
 		im, requests := newIM(t)
 		assertIssueUpdateWire(t, im, requests)
+		assertIssueUpdateTriState(t, im, requests, h.IssueClear)
 	})
 	t.Run("CloseAndReopen_Succeed", func(t *testing.T) {
 		im, _ := newIM(t)
@@ -257,6 +274,69 @@ func assertIssueUpdateWire(t *testing.T, im provider.IssueManager, requests *[]r
 		t.Errorf("expected a PATCH/PUT update, recorded %s", methodsOf(*requests))
 	}
 	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "title", "bug-2") // PUT also accepted
+}
+
+// assertIssueUpdateTriState 钉 UpdateIssue 三态（2A spec）：unset 不得携带
+// 字段、legacy 置值回归、patch 置值与 legacy 同形、每字段清空按 ClearExpect
+// 分派（B 级哨兵 + 零请求 / A 级 wire 在场空值）。
+//
+// wire 键取平台 ClearExpect.BodyField（T3-T7 配置），未声明回落 canonical：
+// 清空与置值走同一 wire 字段。置值回归用正文（跨平台唯一值保持字段——
+// GitLab/工蜂 上线 description、其余 body）钉精确值；指派人因 ID 解析
+// （assignee_ids）只能钉「键在场且非空」。
+func assertIssueUpdateTriState(t *testing.T, im provider.IssueManager, requests *[]recordedRequest, clears map[string]ClearExpect) {
+	t.Helper()
+	ctx := context.Background()
+
+	bodyKey := clearKey(clears, "body", "body")
+	assigneesKey := clearKey(clears, "assignees", "assignees")
+
+	// 1) unset：全零 options——若产生写请求，body 不得携带四字段
+	//    （外加平台声明的 wire 键）。
+	before := len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{}); err != nil {
+		t.Fatalf("unset UpdateIssue: %v", err)
+	}
+	assertBodyLacks(t, requests, before, unsetKeys(clears, "body", "assignees", "labels", "milestone")...)
+
+	// 2) legacy 置值回归（旧行为不许破）。
+	before = len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{
+		Body: "legacy-body", Assignees: []string{"alice"},
+	}); err != nil {
+		t.Fatalf("legacy set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, bodyKey, "legacy-body")
+	assertBodyHasNonEmpty(t, requests, before, assigneesKey)
+
+	// 3) patch 置值与 legacy 同形。
+	before = len(*requests)
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{
+		BodyPatch: new("patch-body"), AssigneesPatch: &[]string{"bob"},
+	}); err != nil {
+		t.Fatalf("patch set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, bodyKey, "patch-body")
+	assertBodyHasNonEmpty(t, requests, before, assigneesKey)
+
+	// 4) 逐字段清空（B/A 分派见 dispatchClear）。
+	clearSteps := []struct {
+		field string
+		opts  provider.UpdateIssueOptions
+	}{
+		{"body", provider.UpdateIssueOptions{BodyPatch: new("")}},
+		{"assignees", provider.UpdateIssueOptions{AssigneesPatch: &[]string{}}},
+		{"labels", provider.UpdateIssueOptions{LabelsPatch: &[]string{}}},
+		{"milestone", provider.UpdateIssueOptions{MilestonePatch: new("")}},
+	}
+	for i := range clearSteps {
+		step := &clearSteps[i]
+		stepBefore := len(*requests)
+		dispatchClear(t, clears, step.field, requests, stepBefore, func() error {
+			_, err := im.UpdateIssue(ctx, "owner", "repo", "1", step.opts)
+			return err
+		})
+	}
 }
 
 // assertIssueCloseReopen checks that both state transitions succeed.
@@ -504,6 +584,30 @@ func (h IssuesHarness) commentsPage(r *http.Request) []byte {
 	}
 }
 
+// writeUserLookup answers a username→ID resolution lookup: echo the
+// requested username back under a fixed numeric ID. GitLab's ListUsers
+// filter arrives as ?username= on a bare /users path and expects an
+// array; 工蜂's GetUser arrives as /users/{username} and expects a
+// single object.
+func writeUserLookup(w http.ResponseWriter, r *http.Request) {
+	if name := r.URL.Query().Get("username"); name != "" {
+		resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": name}})
+		_, _ = w.Write(resp)
+		return
+	}
+	resp, _ := json.Marshal(map[string]any{"id": 101, "username": path.Base(r.URL.Path), "name": "Developer"})
+	_, _ = w.Write(resp)
+}
+
+// labelsPage serves the repository-labels list fixture: page one carries
+// LabelsResponse, later pages are empty (the walk terminator).
+func (h IssuesHarness) labelsPage(r *http.Request) []byte {
+	if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
+		return []byte(`[]`)
+	}
+	return []byte(h.LabelsResponse)
+}
+
 // issueStubServer returns the method/shape-routed recording mock.
 func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 	var mu sync.Mutex
@@ -518,22 +622,16 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case r.Method == http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
 		case r.Method == http.MethodGet && usersLookupPath.MatchString(r.URL.Path):
-			// Username→ID resolution lookup: echo the requested username
-			// back under a fixed numeric ID. GitLab's ListUsers filter
-			// arrives as ?username= on a bare /users path and expects an
-			// array; 工蜂's GetUser arrives as /users/{username} and
-			// expects a single object.
-			if name := r.URL.Query().Get("username"); name != "" {
-				resp, _ := json.Marshal([]map[string]any{{"id": 101, "username": name}})
-				_, _ = w.Write(resp)
-			} else {
-				resp, _ := json.Marshal(map[string]any{"id": 101, "username": path.Base(r.URL.Path), "name": "Developer"})
-				_, _ = w.Write(resp)
-			}
+			writeUserLookup(w, r)
 		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "labels"):
 			// Adding labels to an issue: GitHub-shaped APIs answer with the
 			// label array (e.g. []*Label), not a single issue object.
 			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(h.LabelsResponse))
+		case r.Method == http.MethodPut && strings.Contains(r.URL.Path, "labels"):
+			// Replacing an issue's labels (side-endpoint PUT): same
+			// label-array answer as the POST add above — an issue object
+			// here breaks the []*Label parse.
 			_, _ = w.Write([]byte(h.LabelsResponse))
 		case r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusCreated)
@@ -545,11 +643,7 @@ func issueStubServer(h IssuesHarness) (*httptest.Server, *[]recordedRequest) {
 		case strings.Contains(r.URL.Path, "comments"), strings.Contains(r.URL.Path, "notes"):
 			_, _ = w.Write(h.commentsPage(r))
 		case strings.Contains(r.URL.Path, "labels") && !strings.Contains(r.URL.Path, "issues"):
-			if page, _ := strconv.Atoi(r.URL.Query().Get("page")); page > 1 {
-				_, _ = w.Write([]byte(`[]`))
-			} else {
-				_, _ = w.Write([]byte(h.LabelsResponse))
-			}
+			_, _ = w.Write(h.labelsPage(r))
 		default:
 			// X-Total: 999 pins the total-semantics contract (issue #51):
 			// a platform total that differs from the served page's item

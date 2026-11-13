@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
@@ -125,13 +126,34 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
+//
+// 三态接线（2A T6）：description 是 B 级——pull-update wire 是
+// string+omitempty，空串不可表达，patch 清空在任何 HTTP 之前返回
+// provider.ErrClearNotSupported（整调用失败，零请求）；AssigneesPatch
+// 任意指定（置值或清空）也是 B 级——pull-update wire 根本没有 assignee
+// 字段（既有 divergence ignore 只登记旧字段 opts.Assignees 的静默丢弃，
+// legacy 路径维持不变：不报错、不上线）。
 func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
+	// desc 未 specified 时为 ""，与旧字段形态同 wire（omitempty 裁零）；
+	// specified 非空即置值（patch 与 legacy 同形上 wire）。
+	desc, ok := opts.ResolveDescription()
+	if ok && desc == "" {
+		// B：string omitempty 丢 ""。
+		return nil, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear description",
+			"platform", "gitcode", "field", "description")
+	}
+	if opts.AssigneesPatch != nil {
+		// B：wire 无 assignee 字段（既有 ignore 针对旧字段的静默丢弃
+		// 不变）——patch 任何形态（置值/清空）都诚实报错，不静默丢。
+		return nil, oekiterrors.Wrap(provider.ErrClearNotSupported, "update assignees",
+			"platform", "gitcode", "field", "assignees")
+	}
 	pr, err := p.client.UpdatePullRequest(ctx, owner, repo, n, gitcode.UpdatePullRequestOptions{
-		Title: opts.Title, Body: opts.Description, Base: opts.TargetBranch,
+		Title: opts.Title, Body: desc, Base: opts.TargetBranch,
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateCR", err)

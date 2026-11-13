@@ -1,6 +1,12 @@
 package gitcode_test
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
@@ -36,6 +42,21 @@ func TestGitCode_Contract(t *testing.T) {
 			MutateResponse:   `{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"id":1,"title":"v1"},"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917"}]`,
+			// 2A 三态能力矩阵（T6）：body/milestone B 级——issue-update
+			// wire 是 string/int64+omitempty，空值不可表达且无清空侧端
+			// 点（patch 清空零 HTTP 返回 ErrClearNotSupported）；
+			// labels/assignees A 级走侧端点。labels 的 BodyField 省略：
+			// SDK ReplaceIssueLabels 发裸 JSON 数组 []（GitHub 形态），
+			// harness 的 recorded body 只解 object、BodyField 断言不可
+			// 达——清空落线由 Method+Path 钉住，裸数组 wire 形态另由
+			// TestGitCode_TriStateSideEndpointWire 钉（body 恒为 []）。
+			// assignees 侧端点按 brief 不带 BodyField（Method+Path 钉）。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {Unsupported: true},
+				"assignees": {Method: http.MethodDelete, PathContains: "assignees"}, // 侧端点
+				"labels":    {Method: http.MethodPut, PathContains: "labels"},       // 侧端点，裸数组 body
+				"milestone": {Unsupported: true},
+			},
 		},
 		// GitCode review payloads are GitHub-shaped; the review author rides
 		// the "user" (fallback "author") key and the timestamp is created_at.
@@ -88,6 +109,19 @@ func TestGitCode_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x"},"base":{"ref":"main"},"author":{"id":"1","login":"dev"},"html_url":"https://example.com/pulls/1","draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// 2A 三态（T6）：GitCode 的 CR 面两字段均 B 级——description
+			// 的 wire 键是 body（string+omitempty 丢空串）；pull-update
+			// wire 无 assignee 字段，AssigneesPatch 任意指定均哨兵
+			// （legacy opts.Assignees 维持既有 ignore 静默丢弃）。
+			// T2 审查 Minor 3：B 级条目也带 BodyField——unset 断言的
+			// unsetKeys 词表由 canonical ∪ BodyField 构成，CR 的
+			// description→body 键错位若不声明，unset 面对 "body" 的覆盖
+			// 就只剩 gitcode omitempty 的运气（B 分支提前返回、
+			// BodyField 仅进 unsetKeys，零行为变化）。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {Unsupported: true, BodyField: "body"},
+				"assignees":   {Unsupported: true, BodyField: "assignees"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://gitcode.com/owner/repo/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
@@ -141,4 +175,88 @@ func TestGitCode_WebhookCorpus(t *testing.T) {
 		t.Fatalf("gitcode.New: %v", err)
 	}
 	contracttest.RunWebhookCorpus(t, provider.PlatformGitCode, p, "testdata/webhooks")
+}
+
+// TestGitCode_TriStateSideEndpointWire 钉侧端点清空的真实 wire 形态——补
+// harness recorded-body 只解 JSON object 的盲区（IssueClear.labels 因此
+// 省略 BodyField）：
+//
+//   - ReplaceIssueLabels 发裸 JSON 数组 []（SDK 把 labels 切片本身当
+//     body，GitHub 形态，不是 {"labels":[]} 对象）；
+//   - RemoveIssueAssignees 发 {"assignees":[]}。
+//
+// 同时钉顺序裁定：主 update（PATCH，携带置值字段）先到，侧端点清空后到
+// 且是本次调用的最后一条请求；B 级字段（body/milestone/CR 面）的零请求
+// 形态由 contracttest dispatchClear 断言，这里不重复。
+func TestGitCode_TriStateSideEndpointWire(t *testing.T) {
+	type rec struct{ method, path, body string }
+	var mu sync.Mutex
+	var got []rec
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got = append(got, rec{method: r.Method, path: r.URL.Path, body: string(raw)})
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodDelete:
+			w.WriteHeader(http.StatusNoContent) // SDK: 204 跳过响应解码
+		default:
+			_, _ = w.Write([]byte(`{"number":1,"title":"bug","state":"open"}`))
+		}
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	im, ok := p.(provider.IssueManager)
+	if !ok {
+		t.Fatal("provider does not implement provider.IssueManager")
+	}
+	ctx := context.Background()
+	drain := func() []rec {
+		mu.Lock()
+		defer mu.Unlock()
+		refs := append([]rec(nil), got...)
+		got = nil
+		return refs
+	}
+
+	// labels 清空：PATCH（空 update）→ PUT labels（裸 []）。
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{LabelsPatch: &[]string{}}); err != nil {
+		t.Fatalf("labels clear: %v", err)
+	}
+	if reqs := drain(); len(reqs) != 2 {
+		t.Fatalf("labels clear: want PATCH + PUT (main first, side clear last), got %d: %+v", len(reqs), reqs)
+	} else {
+		if reqs[0].method != http.MethodPatch || reqs[1].method != http.MethodPut {
+			t.Errorf("labels clear order: want PATCH then PUT, got %s then %s", reqs[0].method, reqs[1].method)
+		}
+		if !strings.Contains(reqs[1].path, "/labels") {
+			t.Errorf("labels clear: last path = %q, want .../labels", reqs[1].path)
+		}
+		if reqs[1].body != "[]" {
+			t.Errorf("labels clear wire body = %q, want bare JSON array []", reqs[1].body)
+		}
+	}
+
+	// assignees 清空：PATCH（空 update）→ DELETE {"assignees":[]}。
+	if _, err := im.UpdateIssue(ctx, "owner", "repo", "1", provider.UpdateIssueOptions{AssigneesPatch: &[]string{}}); err != nil {
+		t.Fatalf("assignees clear: %v", err)
+	}
+	if reqs := drain(); len(reqs) != 2 {
+		t.Fatalf("assignees clear: want PATCH + DELETE (main first, side clear last), got %d: %+v", len(reqs), reqs)
+	} else {
+		if reqs[0].method != http.MethodPatch || reqs[1].method != http.MethodDelete {
+			t.Errorf("assignees clear order: want PATCH then DELETE, got %s then %s", reqs[0].method, reqs[1].method)
+		}
+		if !strings.Contains(reqs[1].path, "/assignees") {
+			t.Errorf("assignees clear: last path = %q, want .../assignees", reqs[1].path)
+		}
+		if reqs[1].body != `{"assignees":[]}` {
+			t.Errorf("assignees clear wire body = %q, want {\"assignees\":[]}", reqs[1].body)
+		}
+	}
 }

@@ -25,7 +25,7 @@ var divergences = []provider.Divergence{
 	{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Assignee", Kind: provider.DivergenceIgnore,
 		Reason: "The Gongfeng issue list endpoint takes no assignee filter; the option is accepted but ignored."},
 	{Capability: "IssueManager", Method: "RemoveIssueLabel", Kind: provider.DivergenceMapping,
-		Reason: "Label deletion routes through replace semantics; removing the last label is a no-op."},
+		Reason: "Label deletion routes through replace semantics; removing the last label is a no-op. 2A 起 UpdateIssueOptions.LabelsPatch 的清空请求同样返回 provider.ErrClearNotSupported（结构性空串不可达的登记面一致）。"},
 	{Capability: "IssueManager", Method: "ListIssues", Field: "WebURL, ClosedAt", Kind: provider.DivergenceMapping,
 		Reason: "The API exposes no issue web URL and no closed-at timestamp."},
 	{Capability: "IssueManager", Method: "GetIssue", Field: "WebURL, ClosedAt", Kind: provider.DivergenceMapping,

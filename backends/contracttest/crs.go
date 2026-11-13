@@ -36,6 +36,9 @@ type CRHarnessConfig struct {
 	// against the ledger's ListCRs Page divergence, so a stale flag fails
 	// the run).
 	PageZeroWalks bool
+	// CRClear 声明各字段清空请求的期望（键：description/assignees）。
+	// nil = 两字段全部必须可清空（全 A 级平台可不设）。
+	CRClear map[string]ClearExpect
 }
 
 // CRHarness is the full harness RunCRSuite consumes.
@@ -118,6 +121,7 @@ func RunCRSuite(t *testing.T, h CRHarness) {
 	t.Run("Update_TitleWire", func(t *testing.T) {
 		cm, requests := newCM(t)
 		assertCRUpdateWire(t, cm, requests)
+		assertCRUpdateTriState(t, cm, requests, h.CRClear)
 	})
 
 	t.Run("Merge_Mutates", func(t *testing.T) {
@@ -345,6 +349,58 @@ func assertCRUpdateWire(t *testing.T, cm provider.ChangeRequestManager, requests
 		t.Fatalf("UpdateCR: %v", err)
 	}
 	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, "title", "renamed CR")
+}
+
+// assertCRUpdateTriState 钉 UpdateCR 三态（2A spec，issues 侧同构）：unset
+// 不得携带字段、legacy 置值回归、patch 置值与 legacy 同形、
+// description/assignees 清空按 ClearExpect 分派（B 级哨兵 + 零请求 /
+// A 级 wire 在场空值）。
+//
+// CR 描述的 wire 键两套词表：GitHub 家族 body、GitLab/工蜂 description——
+// 平台以 BodyField 声明，未声明回落 body（gitcode 的 B 级条目
+// description 也声明 BodyField:"body"，其 wire 正是 body）。
+func assertCRUpdateTriState(t *testing.T, cm provider.ChangeRequestManager, requests *[]recordedRequest, clears map[string]ClearExpect) {
+	t.Helper()
+	ctx := context.Background()
+
+	descKey := clearKey(clears, "description", "body")
+
+	// 1) unset：全零 options——若产生写请求，body 不得携带两字段
+	//    （外加平台声明的 wire 键）。
+	before := len(*requests)
+	if _, err := cm.UpdateCR(ctx, "owner", "repo", "1", provider.UpdateCROptions{}); err != nil {
+		t.Fatalf("unset UpdateCR: %v", err)
+	}
+	assertBodyLacks(t, requests, before, unsetKeys(clears, "description", "assignees")...)
+
+	// 2) legacy 置值回归（旧行为不许破）。
+	if _, err := cm.UpdateCR(ctx, "owner", "repo", "1", provider.UpdateCROptions{Description: "legacy-desc"}); err != nil {
+		t.Fatalf("legacy set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, descKey, "legacy-desc")
+
+	// 3) patch 置值与 legacy 同形。
+	if _, err := cm.UpdateCR(ctx, "owner", "repo", "1", provider.UpdateCROptions{DescriptionPatch: new("patch-desc")}); err != nil {
+		t.Fatalf("patch set: %v", err)
+	}
+	assertBodyHas(t, requests, http.MethodPatch, http.MethodPut, descKey, "patch-desc")
+
+	// 4) 逐字段清空（B/A 分派见 dispatchClear）。
+	clearSteps := []struct {
+		field string
+		opts  provider.UpdateCROptions
+	}{
+		{"description", provider.UpdateCROptions{DescriptionPatch: new("")}},
+		{"assignees", provider.UpdateCROptions{AssigneesPatch: &[]string{}}},
+	}
+	for i := range clearSteps {
+		step := &clearSteps[i]
+		stepBefore := len(*requests)
+		dispatchClear(t, clears, step.field, requests, stepBefore, func() error {
+			_, err := cm.UpdateCR(ctx, "owner", "repo", "1", step.opts)
+			return err
+		})
+	}
 }
 
 // assertCRMergeWire checks the merge reached a merge endpoint with a
