@@ -2,6 +2,8 @@ package giteafamily
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -150,7 +152,11 @@ func CreateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, c
 // Title (no omitempty), so a caller leaving fields empty would clear them;
 // the current title is backfilled via one GET, and an all-empty update
 // short-circuits to a plain GetIssue. opts.Labels replaces the issue's
-// labels via the dedicated endpoint.
+// labels via the dedicated endpoint; a labels-only update skips the
+// trailing EditIssue entirely — the side-endpoint PUT is the complete
+// update, and a PATCH after it would only rewrite the backfilled title
+// while leaking body:null/assignees:null onto the wire (T2 review
+// 放行条件②).
 //
 // KNOWN COST: when opts.Title is empty this issues one extra GET to backfill
 // the current title.
@@ -159,21 +165,26 @@ func UpdateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, c
 	if err != nil {
 		return nil, err
 	}
-	if opts.Title == "" && opts.Body == "" && opts.State == "" && len(opts.Assignees) == 0 && len(opts.Labels) == 0 && opts.Milestone == "" {
+	if issueUpdateAllEmpty(opts) {
 		return GetIssue(ctx, f, c, owner, repo, number)
 	}
-	edit, err := buildEditIssueOption(ctx, f, c, "UpdateIssue", owner, repo, n, opts)
+	edit, backfilled, err := buildEditIssueOption(ctx, f, c, "UpdateIssue", owner, repo, n, opts)
 	if err != nil {
 		return nil, err
 	}
-	if len(opts.Labels) > 0 {
-		ids, err := ResolveLabelIDs(ctx, f, labels, cache, "UpdateIssue", owner, repo, opts.Labels)
-		if err != nil {
-			return nil, err
+	ls, lsOK, err := applyIssueLabelsUpdate(ctx, f, c, labels, cache, owner, repo, n, opts)
+	if err != nil {
+		return nil, err
+	}
+	// T2 放行条件②：编辑面全零 ⇒ labels 侧端点 PUT 即完整更新，跳过尾随
+	// EditIssue（PATCH 只会回写 backfill 的原题并尾漏 body:null）。
+	if editIssueNoChange(opts, edit) {
+		issue := convertIssue(backfilled)
+		if lsOK && issue != nil {
+			// 快照取自 PUT 之前，把已落线的标签集回写到返回值上。
+			issue.Labels = slices.Clone(ls)
 		}
-		if err := c.ReplaceIssueLabels(ctx, owner, repo, n, IssueLabelsOption{Labels: ids}); err != nil {
-			return nil, provider.Wrap(f.Platform, "UpdateIssue", err)
-		}
+		return issue, nil
 	}
 	issue, err := c.EditIssue(ctx, owner, repo, n, edit)
 	if err != nil {
@@ -182,40 +193,108 @@ func UpdateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, c
 	return convertIssue(issue), nil
 }
 
+// issueUpdateAllEmpty reports whether every legacy and patch field of opts
+// is zero — the all-empty short-circuit (a plain GET, no write). The four
+// patch-nil checks matter: without them a patch-only update (e.g.
+// BodyPatch:&"") would degrade into the GET short-circuit and the clear
+// would silently no-op.
+func issueUpdateAllEmpty(opts provider.UpdateIssueOptions) bool {
+	return opts.Title == "" && opts.Body == "" && opts.State == "" &&
+		len(opts.Assignees) == 0 && len(opts.Labels) == 0 && opts.Milestone == "" &&
+		opts.BodyPatch == nil && opts.AssigneesPatch == nil &&
+		opts.LabelsPatch == nil && opts.MilestonePatch == nil
+}
+
+// applyIssueLabelsUpdate runs the labels side endpoint when ResolveLabels
+// specifies a set (三态收编 2A：非 specified 不动；specified 空集 ⇒ 不查
+// 直接 [] —— ResolveLabelIDs 对空输入零 API 调用 —— ⇒ wire
+// {"labels":[]} PUT). It returns the resolved name set for the caller's
+// return-value sync.
+func applyIssueLabelsUpdate(ctx context.Context, f Family, c IssuePort, labels LabelPort, cache *IssueLabelCache, owner, repo string, n int64, opts provider.UpdateIssueOptions) ([]string, bool, error) {
+	ls, ok := opts.ResolveLabels()
+	if !ok {
+		return nil, false, nil
+	}
+	ids, err := ResolveLabelIDs(ctx, f, labels, cache, "UpdateIssue", owner, repo, ls)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := c.ReplaceIssueLabels(ctx, owner, repo, n, IssueLabelsOption{Labels: ids}); err != nil {
+		// 2xx 状态在链上 = 写入已落库（family SDK 却强制把 2xx 响应解析
+		// 成 []*Label——契约夹具对所有写请求统一回 issue 对象会在此解析
+		// 失败；本端点签名只回 error、响应体引擎不消费，真实 Gitea/Forgejo
+		// 回 label 数组可正常解析）。4xx/5xx 与无状态的传输错误照常上抛。
+		if !writeLanded(err) {
+			return nil, false, provider.Wrap(f.Platform, "UpdateIssue", err)
+		}
+	}
+	return ls, true, nil
+}
+
+// editIssueNoChange reports whether the built edit option carries no caller
+// change: Title is only the backfill (opts.Title == "" ⇒ rewriting the
+// current title back is a no-op) and Body/State/Assignees/Milestone were
+// never specified (Resolve* left them nil). Reaching this past the
+// all-empty short-circuit implies labels were specified — the side-endpoint
+// PUT was the whole update.
+func editIssueNoChange(opts provider.UpdateIssueOptions, edit FamilyEditIssueOption) bool {
+	return opts.Title == "" && edit.Body == nil && edit.State == nil &&
+		edit.Assignees == nil && edit.Milestone == nil
+}
+
+// writeLanded reports whether the port's error still carries a 2xx HTTP
+// status on the chain (the family adapters' withStatus threads it through
+// provider.WrapStatusError): the request reached the server and was
+// accepted, so only reading the — unused — response body failed.
+func writeLanded(err error) bool {
+	var se *provider.StatusError
+	return errors.As(err, &se) && se.StatusCode() >= 200 && se.StatusCode() < 300
+}
+
 // buildEditIssueOption translates provider update options into the family's
 // edit option, backfilling the title via one GET when the caller leaves it
 // empty (the family's EditIssueOption always serializes Title — no
-// omitempty — so an empty string would clear it).
-func buildEditIssueOption(ctx context.Context, f Family, c IssuePort, op, owner, repo string, n int64, opts provider.UpdateIssueOptions) (FamilyEditIssueOption, error) {
+// omitempty — so an empty string would clear it). The backfilled issue is
+// returned alongside the option so a labels-only update (EditIssue skipped)
+// still has a value to return without a second GET after the PUT.
+func buildEditIssueOption(ctx context.Context, f Family, c IssuePort, op, owner, repo string, n int64, opts provider.UpdateIssueOptions) (FamilyEditIssueOption, *Issue, error) {
 	edit := FamilyEditIssueOption{}
+	var current *Issue
 	if opts.Title != "" {
 		edit.Title = opts.Title
 	} else {
-		current, err := c.GetIssue(ctx, owner, repo, n)
+		var err error
+		current, err = c.GetIssue(ctx, owner, repo, n)
 		if err != nil {
-			return edit, provider.Wrap(f.Platform, op, err)
+			return edit, nil, provider.Wrap(f.Platform, op, err)
 		}
 		edit.Title = current.Title
 	}
-	if len(opts.Assignees) > 0 {
-		edit.Assignees = opts.Assignees
+	// 三态收编（2A）：Resolve* 非 specified 不动；specified 空值即清空
+	// （Body new("") ⇒ wire "body":""、Assignees [] ⇒ wire "assignees":[]、
+	// Milestone "" ⇒ wire "milestone":0——0-vs-null 语义 Phase 3 实测）。
+	if as, ok := opts.ResolveAssignees(); ok {
+		edit.Assignees = as
 	}
-	if opts.Body != "" {
-		body := opts.Body
-		edit.Body = &body
+	if body, ok := opts.ResolveBody(); ok {
+		edit.Body = new(body)
 	}
 	if opts.State != "" {
 		s := string(opts.State)
 		edit.State = &s
 	}
-	if opts.Milestone != "" {
-		m, err := backendutil.ParseMilestoneNumber(f.Platform, op, opts.Milestone)
-		if err != nil {
-			return edit, err
+	if m, ok := opts.ResolveMilestone(); ok {
+		if m == "" {
+			edit.Milestone = new(int64(0)) // wire "milestone":0
+		} else {
+			m64, err := backendutil.ParseMilestoneNumber(f.Platform, op, m)
+			if err != nil {
+				return edit, nil, err
+			}
+			edit.Milestone = &m64
 		}
-		edit.Milestone = &m
 	}
-	return edit, nil
+	return edit, current, nil
 }
 
 // CloseIssue closes an issue.

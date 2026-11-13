@@ -65,8 +65,8 @@ type FamilyEditPullRequestOption struct {
 	Body  *string
 	Base  string
 	State *string
-	// Assignees 全量替换 PR 指派人（logins）；nil/空 = 不变（len>0 才落线，
-	// 与 UpdateCROptions.Assignees 口径一致）。
+	// Assignees 全量替换 PR 指派人（logins）：nil ⇒ wire null（服务端视为
+	// 不变，既有行为）；非空 ⇒ 置值；空切片 ⇒ wire "[]"（2A 三态清空）。
 	Assignees []string
 }
 
@@ -237,18 +237,30 @@ func UpdateCR(ctx context.Context, f Family, c PRPort, owner, repo, number strin
 	if err != nil {
 		return nil, err
 	}
+	// 全零短路（T2 放行条件①）：family SDK 的 EditPullRequestOption 全字段
+	// 无 omitempty——全零 PATCH 会携带 title:""/body:null/assignees:null/
+	// milestone:0，违反「全零 options 不得携带字段」断言。legacy 与 patch
+	// 字段全空才短路到 GetCR（读当前 CR，零写入），镜像 issues 侧。
+	if opts.Title == "" && opts.Description == "" && opts.TargetBranch == "" &&
+		len(opts.Assignees) == 0 && opts.DescriptionPatch == nil && opts.AssigneesPatch == nil {
+		return GetCR(ctx, f, c, owner, repo, number)
+	}
 	editOpts := FamilyEditPullRequestOption{}
 	if opts.Title != "" {
 		editOpts.Title = opts.Title
 	}
-	if opts.Description != "" {
-		editOpts.Body = &opts.Description
+	// 三态收编（2A）：ResolveDescription 非 specified 不动；specified
+	// 空值即清空（new("") ⇒ wire "body":""）。
+	if desc, ok := opts.ResolveDescription(); ok {
+		editOpts.Body = new(desc)
 	}
 	if opts.TargetBranch != "" {
 		editOpts.Base = opts.TargetBranch
 	}
-	if len(opts.Assignees) > 0 {
-		editOpts.Assignees = opts.Assignees
+	// 三态收编（2A）：ResolveAssignees 非 specified 不动（nil ⇒ wire
+	// null）；清空时 []string{} ⇒ wire "assignees":[]。
+	if as, ok := opts.ResolveAssignees(); ok {
+		editOpts.Assignees = as
 	}
 	pr, err := c.EditPullRequest(ctx, owner, repo, n, editOpts)
 	if err != nil {

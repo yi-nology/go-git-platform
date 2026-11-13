@@ -36,6 +36,15 @@ func TestForgejo_Contract(t *testing.T) {
 			MutateResponse:   `{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"id":1,"title":"v1"},"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			CommentsResponse: `[{"id":1,"body":"a comment","user":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// 2A 三态能力矩阵：Gitea/Forgejo 四字段全 A 级——正文/指派人/
+			// 里程碑落 EditIssueOption wire（""/[]/0），labels 走
+			// ReplaceIssueLabels 侧端点 PUT {"labels":[]}。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "body"},
+				"assignees": {BodyField: "assignees"},
+				"labels":    {Method: http.MethodPut, BodyField: "labels", PathContains: "labels"}, // 侧端点
+				"milestone": {BodyField: "milestone"},                                              // 0 在场
+			},
 		},
 		// Forgejo PullReview shape mirrors gitea: github-like keys with
 		// UPPERCASE wire states ("APPROVED"/"REQUEST_CHANGES"/"COMMENT"/"PENDING").
@@ -83,6 +92,12 @@ func TestForgejo_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// 2A 三态：PR wire 的描述字段名是 body；assignees 走 PR edit
+			// 本体（清空发 "assignees":[]）。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "body"},
+				"assignees":   {BodyField: "assignees"},
+			},
 		},
 		Releases: &contracttest.ReleasesHarnessConfig{
 			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"url":"https://forgejo.example.com/owner/repo/releases/tag/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
