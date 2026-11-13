@@ -1,8 +1,20 @@
 # Changelog
 
-All notable changes to this project are documented in this file. The format is
+All notable changes to this project will be documented in this file. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.134.0] - 2026-11-13
+
+### Changed（**BREAKING**：oekit/pkg 地板 v0.46.0 → v0.48.0）
+
+- **依赖地板抬高，强制下游同步 Errorf 迁移**：v0.48.0 删除 `errors.Errorf`
+  Deprecated 兼容层（oekit #401/#405 恢复件的终局退役）。本仓 72 处
+  `oekiterrors.Errorf` → stdlib `fmt.Errorf` 已在 0.128.0 完成（主仓 63 +
+  子模块），本版是地板对齐。**下游要做什么**：go.mod 同步抬
+  `github.com/oekit/pkg v0.48.0` 并 `go mod tidy`；仍用 `errors.Errorf` 的
+  下游在新地板下编译红——迁移口径：普通格式化包装
+  `fmt.Errorf("...: %w", err)`，kv 结构化上下文 `errors.Wrap`。
 
 ## [0.133.0] - 2026-11-13
 
