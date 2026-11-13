@@ -2,7 +2,6 @@ package giteafamily
 
 import (
 	"context"
-	"errors"
 	"slices"
 	"strconv"
 	"strings"
@@ -220,13 +219,7 @@ func applyIssueLabelsUpdate(ctx context.Context, f Family, c IssuePort, labels L
 		return nil, false, err
 	}
 	if err := c.ReplaceIssueLabels(ctx, owner, repo, n, IssueLabelsOption{Labels: ids}); err != nil {
-		// 2xx 状态在链上 = 写入已落库（family SDK 却强制把 2xx 响应解析
-		// 成 []*Label——契约夹具对所有写请求统一回 issue 对象会在此解析
-		// 失败；本端点签名只回 error、响应体引擎不消费，真实 Gitea/Forgejo
-		// 回 label 数组可正常解析）。4xx/5xx 与无状态的传输错误照常上抛。
-		if !writeLanded(err) {
-			return nil, false, provider.Wrap(f.Platform, "UpdateIssue", err)
-		}
+		return nil, false, provider.Wrap(f.Platform, "UpdateIssue", err)
 	}
 	return ls, true, nil
 }
@@ -240,15 +233,6 @@ func applyIssueLabelsUpdate(ctx context.Context, f Family, c IssuePort, labels L
 func editIssueNoChange(opts provider.UpdateIssueOptions, edit FamilyEditIssueOption) bool {
 	return opts.Title == "" && edit.Body == nil && edit.State == nil &&
 		edit.Assignees == nil && edit.Milestone == nil
-}
-
-// writeLanded reports whether the port's error still carries a 2xx HTTP
-// status on the chain (the family adapters' withStatus threads it through
-// provider.WrapStatusError): the request reached the server and was
-// accepted, so only reading the — unused — response body failed.
-func writeLanded(err error) bool {
-	var se *provider.StatusError
-	return errors.As(err, &se) && se.StatusCode() >= 200 && se.StatusCode() < 300
 }
 
 // buildEditIssueOption translates provider update options into the family's

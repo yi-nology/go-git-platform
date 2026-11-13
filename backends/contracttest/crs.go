@@ -357,8 +357,8 @@ func assertCRUpdateWire(t *testing.T, cm provider.ChangeRequestManager, requests
 // A 级 wire 在场空值）。
 //
 // CR 描述的 wire 键两套词表：GitHub 家族 body、GitLab/工蜂 description——
-// 平台以 BodyField 声明，未声明回落 body（B 级条目 gitcode 的
-// description 不带 BodyField，其 wire 也正是 body）。
+// 平台以 BodyField 声明，未声明回落 body（gitcode 的 B 级条目
+// description 也声明 BodyField:"body"，其 wire 正是 body）。
 func assertCRUpdateTriState(t *testing.T, cm provider.ChangeRequestManager, requests *[]recordedRequest, clears map[string]ClearExpect) {
 	t.Helper()
 	ctx := context.Background()
