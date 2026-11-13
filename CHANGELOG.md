@@ -6,6 +6,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.132.0] - 2026-11-13
+
+### Added（Clone Cache 铺路——reference clone，#148/#149）
+
+- **`CloneOptions.Reference/Dissociate`**：等价 `git clone --reference <path>
+  [--dissociate]`——workdir 经 `objects/info/alternates` 借用共享仓对象库，
+  网络只拉共享仓没有的新对象：同源多任务克隆从 N×全量降到 1×全量+N×增量，
+  磁盘从 N×仓库体降到 1×共享+N×元数据（git-ferry Clone Cache 的 SDK 地基）。
+  `Reference` 为空 = 与现状完全一致（零变化）。
+- **共享校验器两后端同形 fail-fast**：`Dissociate` 脱离 `Reference` 单独为真 ⇒
+  `ErrInvalidGitArg`；`Reference` 指向不存在/非 git 仓（bare 顶层 HEAD 与
+  worktree .git 双形态）⇒ `ErrNotAGitRepo`——dest 不被创建，绝不静默退化成
+  普通克隆。
+- **两后端边界机器可读登记**（doc.go "Cloning large repositories" 节）：native
+  后端参数直通全量支持；gogit（go-git v5.19.3 无跨仓借对象能力，事后补写
+  alternates 也不等价——协商期不声明「已有对象」省不了网络）收到 `Reference`
+  ⇒ 新哨兵 `ErrReferenceUnsupported` fail-fast（与 ErrStashUnsupported 同形，
+  "requires the native git backend"）。
+- 回归测试 6 例（`gitbackend/clone_reference_test.go`）：alternates 落盘指向
+  共享仓 objects、`--dissociate` 后产物自包含、`Reference` 空回归现状、
+  sanitizer exec 边界放行直通参数、校验三例 fail-fast 且 dest 未创建、
+  借用 workdir 在共享仓存活期可正常增量 fetch。
+
 ## [0.131.0] - 2026-11-13
 
 ### Fixed（清零战役 Y4——六个真缺陷，#141-#146）
