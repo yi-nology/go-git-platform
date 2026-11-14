@@ -32,11 +32,15 @@ func TestTencentCode_SubscriptionExtrasWire(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/issues/9/unsubscribe":
 			w.WriteHeader(http.StatusOK)
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe",
-			r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe":
-			writeJSON(w, map[string]any{"subscribed": true})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe":
+			// go-gongfeng v0.5.0（go-git-platform#156）：GET 订阅的返回值是
+			// **裸布尔**（上游 issue #7——此前解进 MRSubscription 结构体必然
+			// unmarshal 错）；PUT 只认状态码、不读响应体。
+			writeJSON(w, true)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe":
+			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/unsubscribe":
-			writeJSON(w, map[string]any{"subscribed": false})
+			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)

@@ -64,6 +64,12 @@ var divergences = []provider.Divergence{
 		Reason: "The gongfeng accept endpoint carries only merge_commit_message (the SDK's AcceptMergeRequestOptions has no squash / should_remove_source_branch fields): both options are accepted but ignored — the merge lands as an ordinary merge with the source branch kept (issue #94)."},
 	{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "opts.Page (zero value)", Kind: provider.DivergenceMapping,
 		Reason: "Page==0 walks every page of the MR list and reports total as the merged size (exact by construction), while the caller-paged family contract for CR lists (issue #60, see provider.NormalizePageOpts) keeps Page==0 a single first-page request — this backend exhausts instead, matching its other list managers."},
+	{Capability: "TencentCodeExtras", Method: "SubscribeMR", Field: "resulting subscription state", Kind: provider.DivergenceMapping,
+		Reason: "go-gongfeng v0.5.0 dropped the MRSubscription echo on the put endpoints (2-value signatures, go-git-platform#156): the resulting state is derived from call success (2xx ⇒ target state) instead of being read back from the response."},
+	{Capability: "TencentCodeExtras", Method: "UnsubscribeMR", Field: "resulting subscription state", Kind: provider.DivergenceMapping,
+		Reason: "See SubscribeMR: no echo after v0.5.0; success maps to the unsubscribed state (false)."},
+	{Capability: "TencentCodeExtras", Method: "GetMRSubscription", Field: "response shape", Kind: provider.DivergenceMapping,
+		Reason: "go-gongfeng v0.5.0 decodes the documented bare boolean (upstream issue #7) instead of an MRSubscription object — the wire shape the SDK previously assumed did not exist."},
 	{Capability: "MilestoneManager", Method: "ListMilestones", Field: "State", Kind: provider.DivergenceIgnore,
 		Reason: "Gongfeng's milestone-list endpoint exposes pagination only, so explicit open/closed filters are dropped and the unfiltered output is served (which itself matches the empty-State all contract, issue #61)."},
 }

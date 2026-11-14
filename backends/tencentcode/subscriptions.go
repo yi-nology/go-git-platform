@@ -46,41 +46,39 @@ func (p *Provider) GetMRSubscription(ctx context.Context, owner, repo string, mr
 }
 
 // SubscribeMR implements TencentCodeExtras.
+//
+// go-gongfeng v0.5.0（go-git-platform#156）：SubscribeMR 收敛为 2 值
+// （MRSubscription 回显移除，接口不再返回订阅状态）。端点语义即
+// 「订阅被接受」——调用成功即已订阅，直接回 true；不再有 nil 回显可判。
 func (p *Provider) SubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error) {
-	sub, _, err := p.client.MergeRequests.SubscribeMR(ctx, pid(owner, repo), mrNumber)
-	if err != nil {
+	if _, err := p.client.MergeRequests.SubscribeMR(ctx, pid(owner, repo), mrNumber); err != nil {
 		return false, provider.Wrap(provider.PlatformTencentCode, "SubscribeMR", err)
 	}
-	if sub == nil {
-		return false, nil
-	}
-	return sub.Subscribed, nil
+	return true, nil
 }
 
-// UnsubscribeMR implements TencentCodeExtras.
+// UnsubscribeMR implements TencentCodeExtras。
+// bool 语义是**操作后的订阅状态**（与 wire契约「must echo false」一致）：
+// 取消成功 ⇒ 已不再订阅 ⇒ false。同 SubscribeMR（go-git-platform#156）：
+// 2 值签名，无回显可判，成功即目标状态成立。
 func (p *Provider) UnsubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error) {
-	sub, _, err := p.client.MergeRequests.UnsubscribeMR(ctx, pid(owner, repo), mrNumber)
-	if err != nil {
+	if _, err := p.client.MergeRequests.UnsubscribeMR(ctx, pid(owner, repo), mrNumber); err != nil {
 		return false, provider.Wrap(provider.PlatformTencentCode, "UnsubscribeMR", err)
 	}
-	if sub == nil {
-		return false, nil
-	}
-	return sub.Subscribed, nil
+	return false, nil
 }
 
 // mrSubscription is the shared read path of the MR subscription family
 // (the subscribe/unsubscribe endpoints share the wire shape but decode the
 // echo themselves).
 func (p *Provider) mrSubscription(ctx context.Context, op, owner, repo string, mrNumber int) (bool, error) {
-	sub, _, err := p.client.MergeRequests.GetMRSubscription(ctx, pid(owner, repo), mrNumber)
+	// go-gongfeng v0.5.0（go-git-platform#156）：GetMRSubscription 首值改
+	// bool（订阅状态直接给出，MRSubscription 结构移除）。
+	subscribed, _, err := p.client.MergeRequests.GetMRSubscription(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
 		return false, provider.Wrap(provider.PlatformTencentCode, op, err)
 	}
-	if sub == nil {
-		return false, nil
-	}
-	return sub.Subscribed, nil
+	return subscribed, nil
 }
 
 // ListUserIssues implements TencentCodeExtras: the global /issues listing

@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed（依赖适配——go-gongfeng v0.5.0 / go-gitcode v0.17.0）
+
+- **deps(tencentcode)**：`go-gongfeng` 升 v0.5.0、`go-gitcode` 升 v0.17.0
+  （go-git-platform#156）——`SubscribeMR`/`UnsubscribeMR` 适配 2 值签名
+  （MRSubscription 回显移除，结果状态由调用成功推导，divergence 账本已登记）；
+  `GetMRSubscription` 适配裸布尔解码（上游 issue #7 的 wire 修正）。
+  消费方（git-ferry 壳层/intranet）可解除对两依赖的钉回。
+
 ## [0.135.0] - 2026-11-14
 
 ### Added（Update 三态语义——patch 字段族 + 清空哨兵，2A）
