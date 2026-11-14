@@ -2,6 +2,11 @@ package provider
 
 import (
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"slices"
+	"strconv"
 	"testing"
 
 	oekiterrors "github.com/oekit/pkg/errors"
@@ -293,4 +298,65 @@ func TestErrPermissionDeniedIsMatchable(t *testing.T) {
 			t.Error("ErrPermissionDenied matches ErrAuthentication, want distinct")
 		}
 	})
+}
+
+// TestOpRequirementsCoverEveryConst 钉封闭枚举接线完备性：operation.go 的
+// 每个 Operation 常量都必须有 opRequirements 条目，且每个表项都对应真实
+// 常量（双向）。常量块是唯一真源、运行时不可枚举——用 go/ast 读源码对表，
+// 新增 Operation 忘接 opRequirements（或表里残留死项）即红。
+func TestOpRequirementsCoverEveryConst(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "operation.go", nil, 0)
+	if err != nil {
+		t.Fatalf("parse operation.go: %v", err)
+	}
+	var consts []string
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			// 只跳过非 ValueSpec 与无类型常量——不得按 Values 个数跳过：
+			// grouped 多值形（OpA, OpB Operation = "a", "b"）正是要抓的
+			// 声明形态，个数不齐交给下方 Fatal 响亮失败。
+			if !ok || vs.Type == nil {
+				continue
+			}
+			ident, ok := vs.Type.(*ast.Ident)
+			if !ok || ident.Name != "Operation" {
+				continue
+			}
+			// 字符串枚举无 iota——值缺失或个数不齐是写法错误，响亮失败
+			// 而非静默跳过（静默跳过会让漏检悄悄失效）。
+			if len(vs.Names) != len(vs.Values) {
+				t.Fatalf("Operation const %v: want one string literal per name", vs.Names)
+			}
+			for i, name := range vs.Names {
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					t.Fatalf("Operation const %s: want string literal value", name.Name)
+				}
+				v, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					t.Fatalf("Operation const %s: unquote %s: %v", name.Name, lit.Value, err)
+				}
+				consts = append(consts, v)
+			}
+		}
+	}
+	if len(consts) == 0 {
+		t.Fatal("no Operation constants parsed from operation.go")
+	}
+	for _, c := range consts {
+		if _, ok := opRequirements[Operation(c)]; !ok {
+			t.Errorf("Operation %q has no opRequirements entry", c)
+		}
+	}
+	for op := range opRequirements {
+		if !slices.Contains(consts, string(op)) {
+			t.Errorf("opRequirements entry %q has no Operation const", op)
+		}
+	}
 }

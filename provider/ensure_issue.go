@@ -71,27 +71,7 @@ func EnsureIssueLabels(ctx context.Context, p Provider, owner, repo, number stri
 		return OutcomeUnchanged, current, nil
 	}
 	target := dedupLabels(want)
-	curSet := make(map[string]struct{}, len(current))
-	for _, l := range current {
-		curSet[l] = struct{}{}
-	}
-	toAdd := make([]string, 0, len(target))
-	for _, l := range target {
-		if _, ok := curSet[l]; !ok {
-			toAdd = append(toAdd, l)
-		}
-	}
-	wantSet := make(map[string]struct{}, len(target))
-	for _, l := range target {
-		wantSet[l] = struct{}{}
-	}
-	curDedup := dedupLabels(current)
-	toRemove := make([]string, 0, len(curDedup))
-	for _, l := range curDedup {
-		if _, ok := wantSet[l]; !ok {
-			toRemove = append(toRemove, l)
-		}
-	}
+	toAdd, toRemove := labelDiff(current, want)
 	if len(toAdd) > 0 {
 		if err := im.AddIssueLabels(ctx, owner, repo, number, toAdd); err != nil {
 			if IsConflict(err) {
@@ -109,6 +89,36 @@ func EnsureIssueLabels(ctx context.Context, p Provider, owner, repo, number stri
 		}
 	}
 	return OutcomeUpdated, target, nil
+}
+
+// labelDiff 计算标签收敛差集：toAdd = want∖current（want 侧保序去重）、
+// toRemove = current∖want（current 侧保序去重）。从 EnsureIssueLabels 抽出
+// （gocyclo），行为与原内联逐字一致；集合相等由 labelSetEqual 先判，本
+// helper 只在需要写入时调用。
+func labelDiff(current, want []string) (toAdd, toRemove []string) {
+	target := dedupLabels(want)
+	curSet := make(map[string]struct{}, len(current))
+	for _, l := range current {
+		curSet[l] = struct{}{}
+	}
+	toAdd = make([]string, 0, len(target))
+	for _, l := range target {
+		if _, ok := curSet[l]; !ok {
+			toAdd = append(toAdd, l)
+		}
+	}
+	wantSet := make(map[string]struct{}, len(target))
+	for _, l := range target {
+		wantSet[l] = struct{}{}
+	}
+	curDedup := dedupLabels(current)
+	toRemove = make([]string, 0, len(curDedup))
+	for _, l := range curDedup {
+		if _, ok := wantSet[l]; !ok {
+			toRemove = append(toRemove, l)
+		}
+	}
+	return toAdd, toRemove
 }
 
 // labelSetEqual 集合相等判定：顺序无关、两侧重复各自折叠（map 归一）。

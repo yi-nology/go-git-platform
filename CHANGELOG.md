@@ -6,6 +6,46 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added（MutationOutcome 统一结果 + 操作级 Capability，2B）
+
+- **feat(provider)**：`MutationOutcome` 统一变更结果——`OutcomeCreated`/
+  `OutcomeUpdated`/`OutcomeUnchanged`/`OutcomeConflict` 四常量；`EnsureAction`
+  改为类型别名（源码完全兼容，既有 `EnsureCreated`/`EnsureUpdated`/
+  `EnsureUnchanged` 常量保留），新代码优先 `Outcome*` 名。
+- **feat(provider)**：`EnsureIssueState`/`EnsureIssueLabels` 两个收敛函数
+  （取 Provider 形态，内部断言 IssueManager，缺能力统一 `ErrNotImplemented`）
+  ——已达期望态零写入返 `OutcomeUnchanged`、需写入恰一次返
+  `OutcomeUpdated`、写撞 409 返 `OutcomeConflict` + 写前快照。
+- **feat(provider)**：操作级 Capability——`Operation` 闭集枚举（5 个种子
+  操作，只增不改、值即契约）、`OperationSupport` 三态（Supported/
+  Unsupported/CredentialDenied）、可选能力接口 `OperationCapable`、
+  `DeriveOperationSupport` 单一真源派生（OperationCapable 覆盖 > 台账桩 >
+  门接口缺失 > Supported，未知 op 保守 Unsupported）、`CheckOperation`
+  （nil / `ErrNotImplemented` / `ErrPermissionDenied` 三类判定）、凭据权限
+  哨兵 `ErrPermissionDenied`（与服务端 403 的 `ErrForbidden` 分界，仅
+  CheckOperation 声明面、不做 wire 猜测）、`IsStub`（Capability+Method+
+  Kind==DivergenceStub 三谓词台账桩判定，防跨能力方法名撞车）。
+
+### Fixed（Ensure* 409 路径补 Conflict outcome——行为增强）
+
+- **fix(provider)**：`EnsureWebhook`/`EnsureBranchProtection`/
+  `EnsureDeployKey` 写路径撞 409 此前与普通写失败同形（空 outcome +
+  err）——现返 `OutcomeConflict` + 写前快照 + err，调用方可 `IsConflict`
+  分辨「并发冲突（可重读重试）」与「真失败」。error 语义不变，outcome
+  面新增分支。
+
+### Changed
+
+- **docs**：新增 `docs/error-classification.md` 错误分类矩阵——
+  `classifyStatusCode` 全分支逐行核对（400/422、401、403〔含节流改道
+  例外〕、404、409、410、429、5xx、其余裸 HTTP）+ 2B 三分界
+  （`ErrNotImplemented` / `ErrPermissionDenied` / 服务端拒绝）+ 既有行为
+  契约清单与交叉引用（改分类先改源码，文档随源码同步）。
+- **test(contracttest)**：新增两契约套件——`ErrorClassSuite`（401/403/
+  409/429/5xx 经各后端真实错误链钉到哨兵，自带 httptest）与
+  `OperationSuite`（台账/接口直查期望 vs `CheckOperation` vs stub 行为
+  三层一致；测试侧期望不调 Derive，防同义反复）。
+
 ## [0.135.0] - 2026-11-14
 
 ### Added（Update 三态语义——patch 字段族 + 清空哨兵，2A）
