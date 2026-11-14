@@ -37,6 +37,12 @@ var (
 	// 清空（结构不可表达且无侧端点，或既有登记 no-op）。只由 patch
 	// 字段触发；旧字段路径永不返回。kv 携带 platform/op/field。
 	ErrClearNotSupported = errors.New("clear not supported on this platform")
+	// ErrPermissionDenied 是凭据权限类哨兵（2B）：操作级声明判定
+	// 「平台支持但当前 token 无权」时由 CheckOperation 返回。
+	// 分界：ErrNotImplemented=平台不支持（台账锁定）；ErrForbidden=
+	// 服务端 403（资源策略/权限 wire 不可分，不做猜测）；本哨兵=
+	// 本库声明面的凭据轴。
+	ErrPermissionDenied = errors.New("permission denied for this credential")
 )
 
 // ProviderError is a structured error from a provider operation. It carries

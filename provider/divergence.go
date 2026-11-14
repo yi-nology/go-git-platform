@@ -68,3 +68,14 @@ func Stubs(divs []Divergence, method string) bool {
 	}
 	return false
 }
+
+// IsStub 报告台账是否登记了 capability 方法的 stub（2B）——与 Stubs 的
+// 差别：同时匹配 Capability，防未来跨能力方法名撞车（Stubs 只按 Method）。
+func IsStub(divs []Divergence, capability, method string) bool {
+	for _, d := range divs {
+		if d.Capability == capability && d.Method == method && d.Kind == DivergenceStub {
+			return true
+		}
+	}
+	return false
+}
