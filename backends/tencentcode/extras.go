@@ -83,8 +83,9 @@ type TencentCodeExtras interface {
 	SubscribeIssue(ctx context.Context, owner, repo string, issueID int) error
 	UnsubscribeIssue(ctx context.Context, owner, repo string, issueID int) error
 	// GetMRSubscription/SubscribeMR/UnsubscribeMR manage MR watch state;
-	// unlike issues, 工蜂's MR subscribe endpoints echo the resulting
-	// subscribed flag, so the mutations return it.
+	// the mutations return the resulting subscribed flag. gongfeng v0.5.0
+	// 起 PUT 不再回显结果态（只回状态码，gongfeng issue #7）——返回值由已确认
+	// 的 PUT 语义推导（成功 ⇒ 请求态生效），GET 侧读裸布尔。
 	GetMRSubscription(ctx context.Context, owner, repo string, mrNumber int) (bool, error)
 	SubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error)
 	UnsubscribeMR(ctx context.Context, owner, repo string, mrNumber int) (bool, error)

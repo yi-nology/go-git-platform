@@ -66,6 +66,12 @@ var divergences = []provider.Divergence{
 		Reason: "Page==0 walks every page of the MR list and reports total as the merged size (exact by construction), while the caller-paged family contract for CR lists (issue #60, see provider.NormalizePageOpts) keeps Page==0 a single first-page request — this backend exhausts instead, matching its other list managers."},
 	{Capability: "MilestoneManager", Method: "ListMilestones", Field: "State", Kind: provider.DivergenceIgnore,
 		Reason: "Gongfeng's milestone-list endpoint exposes pagination only, so explicit open/closed filters are dropped and the unfiltered output is served (which itself matches the empty-State all contract, issue #61)."},
+	{Capability: "TencentCodeExtras", Method: "SubscribeMR", Kind: provider.DivergenceMapping,
+		Reason: "gongfeng v0.5.0 起 PUT 只回状态码、不再回显结果订阅态（gongfeng issue #7）——返回值由已确认的 PUT 语义推导（2xx ⇒ 已订阅），无回显可读（issue #156）。"},
+	{Capability: "TencentCodeExtras", Method: "UnsubscribeMR", Kind: provider.DivergenceMapping,
+		Reason: "同 SubscribeMR：PUT 无响应体，成功即已退订（返回 false），由已确认的 PUT 语义推导（issue #156）。"},
+	{Capability: "TencentCodeExtras", Method: "GetMRSubscription", Kind: provider.DivergenceMapping,
+		Reason: "gongfeng v0.5.0 的 GET 解裸布尔（工蜂订阅面真实线形；v0.4.0 解 MRSubscription 结构体必然 unmarshal 错，gongfeng issue #7）——读路径直接透传布尔（issue #156）。"},
 }
 
 // Divergences returns the registered divergence ledger for the Tencent Code backend.

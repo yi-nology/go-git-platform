@@ -17,8 +17,9 @@ import (
 // surface behind TencentCodeExtras: issue watch state rides
 // /issues/{id}/subscribe (GET=read, PUT=subscribe) with unsubscribe as its
 // own PUT path (/issues/{id}/unsubscribe); MR watch rides
-// /merge_request/{id}/subscribe (GET/PUT) and /unsubscribe (PUT); the MR
-// mutations echo {"subscribed":b} while the issue read is a bare bool.
+// /merge_request/{id}/subscribe (GET/PUT) and /unsubscribe (PUT).
+// 线形按 gongfeng v0.5.0（gongfeng issue #7）：GET 订阅态是**裸布尔**，
+// PUT 只回状态码无响应体——结果订阅态由已确认的 PUT 语义推导（issue #156）。
 // Recorded pins use the escaped owner%2Frepo segment (工蜂 embeds the
 // project path in the URL).
 func TestTencentCode_SubscriptionExtrasWire(t *testing.T) {
@@ -32,11 +33,11 @@ func TestTencentCode_SubscriptionExtrasWire(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/issues/9/unsubscribe":
 			w.WriteHeader(http.StatusOK)
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe",
-			r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe":
-			writeJSON(w, map[string]any{"subscribed": true})
-		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/unsubscribe":
-			writeJSON(w, map[string]any{"subscribed": false})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe":
+			writeJSON(w, true) // v0.5.0：裸布尔（v0.4.0 的结构体解码在真 API 上必然 unmarshal 错）
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/subscribe",
+			r.Method == http.MethodPut && r.URL.Path == "/api/v3/projects/owner/repo/merge_request/12/unsubscribe":
+			w.WriteHeader(http.StatusOK) // v0.5.0：PUT 只回状态码，无响应体
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
@@ -63,7 +64,7 @@ func TestTencentCode_SubscriptionExtrasWire(t *testing.T) {
 		t.Fatalf("SubscribeMR: %v %v", subscribed, err)
 	}
 	if subscribed, err = p.UnsubscribeMR(context.Background(), "owner", "repo", 12); err != nil || subscribed {
-		t.Fatalf("UnsubscribeMR must echo false: %v %v", subscribed, err)
+		t.Fatalf("UnsubscribeMR must report false (derived from the confirmed PUT): %v %v", subscribed, err)
 	}
 
 	mu.Lock()
