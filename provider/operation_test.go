@@ -318,32 +318,16 @@ func TestOpRequirementsCoverEveryConst(t *testing.T) {
 		}
 		for _, spec := range gd.Specs {
 			vs, ok := spec.(*ast.ValueSpec)
-			// 只跳过非 ValueSpec 与无类型常量——不得按 Values 个数跳过：
-			// grouped 多值形（OpA, OpB Operation = "a", "b"）正是要抓的
-			// 声明形态，个数不齐交给下方 Fatal 响亮失败。
-			if !ok || vs.Type == nil {
+			if !ok {
 				continue
 			}
-			ident, ok := vs.Type.(*ast.Ident)
-			if !ok || ident.Name != "Operation" {
+			// 不得按 Values 个数跳过：grouped 多值形（OpA, OpB Operation =
+			// "a", "b"）正是要抓的声明形态，个数不齐交给 helper Fatal 响亮失败。
+			vals, isOp := operationConstSpec(t, vs)
+			if !isOp {
 				continue
 			}
-			// 字符串枚举无 iota——值缺失或个数不齐是写法错误，响亮失败
-			// 而非静默跳过（静默跳过会让漏检悄悄失效）。
-			if len(vs.Names) != len(vs.Values) {
-				t.Fatalf("Operation const %v: want one string literal per name", vs.Names)
-			}
-			for i, name := range vs.Names {
-				lit, ok := vs.Values[i].(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
-					t.Fatalf("Operation const %s: want string literal value", name.Name)
-				}
-				v, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					t.Fatalf("Operation const %s: unquote %s: %v", name.Name, lit.Value, err)
-				}
-				consts = append(consts, v)
-			}
+			consts = append(consts, vals...)
 		}
 	}
 	if len(consts) == 0 {
@@ -358,5 +342,105 @@ func TestOpRequirementsCoverEveryConst(t *testing.T) {
 		if !slices.Contains(consts, string(op)) {
 			t.Errorf("opRequirements entry %q has no Operation const", op)
 		}
+	}
+}
+
+// operationConstSpec 判定一个 const spec 是否声明 Operation 常量，并提取
+// 其字符串值。两种声明形都算：显式 `OpX Operation = "x"` 与 type-less
+// 转换形 `OpX = Operation("x")`——后者正是旧卫语句 `vs.Type == nil →
+// continue` 的 fail-open（漏检会静默放过未接 opRequirements 的新 op）；
+// 其余 type-less 常量（iota 风格等）返回 ok=false 照旧跳过。形态写错
+// （个数不齐 / 非字符串字面量 / unquote 失败）响亮 t.Fatalf——字符串
+// 枚举无 iota，静默跳过会让漏检悄悄失效。
+func operationConstSpec(t *testing.T, vs *ast.ValueSpec) (values []string, ok bool) {
+	t.Helper()
+	if vs.Type != nil {
+		ident, isIdent := vs.Type.(*ast.Ident)
+		if !isIdent || ident.Name != "Operation" {
+			return nil, false
+		}
+	} else if !declaresOperationConversion(vs) {
+		return nil, false // 非 Operation 的 type-less 常量（iota 风格等）
+	}
+	if len(vs.Names) != len(vs.Values) {
+		t.Fatalf("Operation const %v: want one string literal per name", vs.Names)
+	}
+	values = make([]string, 0, len(vs.Values))
+	for i, name := range vs.Names {
+		values = append(values, operationConstValue(t, name.Name, vs.Values[i]))
+	}
+	return values, true
+}
+
+// declaresOperationConversion 报告 type-less spec 的任一值写成了 Operation
+// 转换形（call 的函数 ident 是 Operation）——命中即视为 Operation 声明。
+func declaresOperationConversion(vs *ast.ValueSpec) bool {
+	for _, val := range vs.Values {
+		if call, ok := val.(*ast.CallExpr); ok && isOperationIdent(call.Fun) && len(call.Args) == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// operationConstValue 提取单个值的字符串：转换形 `Operation("x")` 取实参，
+// 其余按字面量解。非字面量/非字符串/unquote 失败响亮 Fatalf。
+func operationConstValue(t *testing.T, name string, e ast.Expr) string {
+	t.Helper()
+	if call, ok := e.(*ast.CallExpr); ok && isOperationIdent(call.Fun) && len(call.Args) == 1 {
+		e = call.Args[0]
+	}
+	lit, ok := e.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		t.Fatalf("Operation const %s: want string literal value", name)
+	}
+	v, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		t.Fatalf("Operation const %s: unquote %s: %v", name, lit.Value, err)
+	}
+	return v
+}
+
+// isOperationIdent 报告表达式是裸 Operation 类型标识（转换形的函数侧）。
+func isOperationIdent(e ast.Expr) bool {
+	ident, ok := e.(*ast.Ident)
+	return ok && ident.Name == "Operation"
+}
+
+// TestOperationConstSpecTypeLessConversion 钉 type-less 转换形不再被静默
+// 跳过（M1 修复的聚焦证明）：`OpConv = Operation("conv")` 必须被收集进
+// 覆盖检查的 consts（缺失 opRequirements 条目的 Errorf 由主测试对 consts
+// 的循环触发）；iota 风格的非 Operation type-less 常量照旧跳过。
+func TestOperationConstSpecTypeLessConversion(t *testing.T) {
+	src := `package provider
+const (
+	OpTyped Operation = "typed"
+	OpConv           = Operation("conv")
+	OpIota           = iota
+	OpPlain          = 7
+)
+`
+	f, err := parser.ParseFile(token.NewFileSet(), "synthetic.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse synthetic source: %v", err)
+	}
+	var got []string
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			if vals, isOp := operationConstSpec(t, vs); isOp {
+				got = append(got, vals...)
+			}
+		}
+	}
+	if want := []string{"typed", "conv"}; !slices.Equal(got, want) {
+		t.Errorf("collected = %v, want %v — type-less Operation conversion must not be skipped, iota-style consts must stay skipped", got, want)
 	}
 }

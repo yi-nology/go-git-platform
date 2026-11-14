@@ -71,6 +71,12 @@ func Stubs(divs []Divergence, method string) bool {
 
 // IsStub 报告台账是否登记了 capability 方法的 stub（2B）——与 Stubs 的
 // 差别：同时匹配 Capability，防未来跨能力方法名撞车（Stubs 只按 Method）。
+//
+// 字段级 stub（Field != ""）在此按方法级计入——派生面刻意保守（宁可
+// Unsupported 也不误报 Supported），不区分 Field；DivergenceSuite 对
+// Field != "" 的条目豁免行为检查（字段级条目是文档性质、调用本身可用），
+// 因此未来某个种子 op 若命中一条字段级 stub，OperationSuite 是响亮绊线
+// （CheckOperation 拒但直调成功 → 行为钉红）。
 func IsStub(divs []Divergence, capability, method string) bool {
 	for _, d := range divs {
 		if d.Capability == capability && d.Method == method && d.Kind == DivergenceStub {

@@ -71,7 +71,7 @@ func EnsureIssueLabels(ctx context.Context, p Provider, owner, repo, number stri
 		return OutcomeUnchanged, current, nil
 	}
 	target := dedupLabels(want)
-	toAdd, toRemove := labelDiff(current, want)
+	toAdd, toRemove := labelDiff(current, target)
 	if len(toAdd) > 0 {
 		if err := im.AddIssueLabels(ctx, owner, repo, number, toAdd); err != nil {
 			if IsConflict(err) {
@@ -91,12 +91,12 @@ func EnsureIssueLabels(ctx context.Context, p Provider, owner, repo, number stri
 	return OutcomeUpdated, target, nil
 }
 
-// labelDiff 计算标签收敛差集：toAdd = want∖current（want 侧保序去重）、
-// toRemove = current∖want（current 侧保序去重）。从 EnsureIssueLabels 抽出
-// （gocyclo），行为与原内联逐字一致；集合相等由 labelSetEqual 先判，本
-// helper 只在需要写入时调用。
-func labelDiff(current, want []string) (toAdd, toRemove []string) {
-	target := dedupLabels(want)
+// labelDiff 计算标签收敛差集：toAdd = target∖current、toRemove =
+// current∖target（current 侧保序去重）。target 由调用方 dedupLabels 预先
+// 归一——dedup 单点（EnsureIssueLabels 的收敛目标与差集共用同一份，
+// 不重复计算）；从 EnsureIssueLabels 抽出（gocyclo），行为与原内联逐字
+// 一致；集合相等由 labelSetEqual 先判，本 helper 只在需要写入时调用。
+func labelDiff(current, target []string) (toAdd, toRemove []string) {
 	curSet := make(map[string]struct{}, len(current))
 	for _, l := range current {
 		curSet[l] = struct{}{}

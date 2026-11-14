@@ -20,7 +20,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   操作，只增不改、值即契约）、`OperationSupport` 三态（Supported/
   Unsupported/CredentialDenied）、可选能力接口 `OperationCapable`、
   `DeriveOperationSupport` 单一真源派生（OperationCapable 覆盖 > 台账桩 >
-  门接口缺失 > Supported，未知 op 保守 Unsupported）、`CheckOperation`
+  门接口缺失 > Supported，未知 op 保守 Unsupported〔OperationCapable 覆盖
+  优先于未知判定，可对未声明 op 另答〕）、`CheckOperation`
   （nil / `ErrNotImplemented` / `ErrPermissionDenied` 三类判定）、凭据权限
   哨兵 `ErrPermissionDenied`（与服务端 403 的 `ErrForbidden` 分界，仅
   CheckOperation 声明面、不做 wire 猜测）、`IsStub`（Capability+Method+
@@ -41,10 +42,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   例外〕、404、409、410、429、5xx、其余裸 HTTP）+ 2B 三分界
   （`ErrNotImplemented` / `ErrPermissionDenied` / 服务端拒绝）+ 既有行为
   契约清单与交叉引用（改分类先改源码，文档随源码同步）。
-- **test(contracttest)**：新增两契约套件——`ErrorClassSuite`（401/403/
-  409/429/5xx 经各后端真实错误链钉到哨兵，自带 httptest）与
+- **test(contracttest)**：新增三契约套件——`ErrorClassSuite`（401/403/
+  409/429/5xx 经各后端真实错误链钉到哨兵，自带 httptest）、
   `OperationSuite`（台账/接口直查期望 vs `CheckOperation` vs stub 行为
-  三层一致；测试侧期望不调 Derive，防同义反复）。
+  三层一致；测试侧期望不调 Derive，防同义反复）与 `EnsureIssueSuite`
+  （`EnsureIssueState`/`EnsureIssueLabels` 收敛的 wire 级行为契约：
+  Unchanged 零写 / Updated 恰写，复用 issueStubServer 计数）。
 
 ## [0.135.0] - 2026-11-14
 
