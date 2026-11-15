@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.137.0] - 2026-11-15
+
 ### Added（MutationOutcome 统一结果 + 操作级 Capability，2B）
 
 - **feat(provider)**：`MutationOutcome` 统一变更结果——`OutcomeCreated`/
