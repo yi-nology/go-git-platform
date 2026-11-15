@@ -1,17 +1,21 @@
 package provider
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 func TestMapMRStateToCR(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected CRState
+		expected model.CRState
 	}{
-		{"opened", CRStateOpened},
-		{"open", CRStateOpened},
-		{"merged", CRStateMerged},
-		{"closed", CRStateClosed},
-		{"unknown", CRStateOpened},
+		{"opened", model.CRStateOpened},
+		{"open", model.CRStateOpened},
+		{"merged", model.CRStateMerged},
+		{"closed", model.CRStateClosed},
+		{"unknown", model.CRStateOpened},
 	}
 	for _, tt := range tests {
 		result := MapMRStateToCR(tt.input)
@@ -25,11 +29,11 @@ func TestMapBoolStateToCR(t *testing.T) {
 	tests := []struct {
 		state    string
 		merged   bool
-		expected CRState
+		expected model.CRState
 	}{
-		{"closed", true, CRStateMerged},
-		{"closed", false, CRStateClosed},
-		{"opened", false, CRStateOpened},
+		{"closed", true, model.CRStateMerged},
+		{"closed", false, model.CRStateClosed},
+		{"opened", false, model.CRStateOpened},
 	}
 	for _, tt := range tests {
 		result := MapBoolStateToCR(tt.state, tt.merged)
@@ -41,7 +45,7 @@ func TestMapBoolStateToCR(t *testing.T) {
 
 func TestMapStateToCR_NilFn(t *testing.T) {
 	result := MapStateToCR("merged", nil)
-	if result != CRStateMerged {
+	if result != model.CRStateMerged {
 		t.Fatalf("expected CRStateMerged, got %q", result)
 	}
 }

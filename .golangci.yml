@@ -57,12 +57,12 @@ linters:
     presets:
       - common-false-positives
     rules:
-      # Vendored Gongfeng SDK: backends/tencentcode/internal/gongfeng is a
+      # Vendored Gongfeng SDK: adapter/tencentcode/internal/gongfeng is a
       # whole-tree snapshot of an external Apache-2.0 project (see its
       # README.md). Per-file lint edits would create upgrade friction, and
       # the tree carries its own unit tests, so it is exempt from the
       # enabled linters (extend this list when new linters are enabled).
-      - path: backends/tencentcode/internal/gongfeng/
+      - path: adapter/tencentcode/internal/gongfeng/
         linters:
           - errcheck
           - staticcheck
@@ -83,16 +83,16 @@ linters:
           - errcheck
           - gocritic
       # init.go files are tiny; skip style checks
-      - path: backends/.*/init\.go
+      - path: adapter/.*/init\.go
         linters:
           - gocritic
       # Extras file mirrors third-party API shape
-      - path: backends/tencentcode/extras\.go
+      - path: adapter/tencentcode/extras\.go
         linters:
           - gocyclo
           - gocritic
       # Webhook parsers are inherently complex switch-based event routers
-      - path: backends/.*/webhooks\.go
+      - path: adapter/.*/webhooks\.go
         linters:
           - gosec
           - gocyclo
@@ -107,11 +107,11 @@ linters:
         text: "retryingRoundTripper"
       # Backend httpTransport helpers create InsecureSkipVerify transports
       # when the user explicitly requests SkipTLS
-      - path: backends/.*/(github|gitlab|gitea|forgejo)\.go
+      - path: adapter/.*/(github|gitlab|gitea|forgejo)\.go
         linters:
           - gosec
         text: "G402"
-      - path: backends/tencentcode/tencentcode\.go
+      - path: adapter/tencentcode/tencentcode\.go
         linters:
           - gosec
         text: "G402"
@@ -124,7 +124,7 @@ linters:
         linters:
           - gocyclo
       # SSH key type detection is inherently a multi-case switch
-      - path: pkg/credential/sshkey\.go
+      - path: auth/credential/sshkey\.go
         linters:
           - gocyclo
 

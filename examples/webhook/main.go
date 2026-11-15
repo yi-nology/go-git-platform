@@ -1,5 +1,5 @@
 // Example: verify an inbound GitHub webhook signature using the unified
-// provider.DefaultWebhookRegistry. This makes no network calls.
+// runtime.DefaultWebhookRegistry. This makes no network calls.
 package main
 
 import (
@@ -9,7 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 func main() {
@@ -24,8 +25,8 @@ func main() {
 	// the operator to supply it via X-Hub-Signature-256 for demonstration.
 	req.Header.Set("X-Hub-Signature-256", os.Getenv("X_HUB_SIGNATURE_256"))
 
-	if err := provider.DefaultWebhookRegistry().Validate(
-		provider.PlatformGitHub, req, body, secret,
+	if err := runtime.DefaultWebhookRegistry().Validate(
+		model.PlatformGitHub, req, body, secret,
 	); err != nil {
 		log.Fatalf("webhook validation failed: %v", err)
 	}

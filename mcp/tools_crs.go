@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -44,7 +46,7 @@ type updateCRIn struct {
 }
 
 func registerCRs(s *mcp.Server, st *state) {
-	add(s, st, "create_cr", "Create change request", "Open a pull/merge request from source_branch into target_branch.", true, func(ctx context.Context, in createCRIn) (*provider.ChangeRequest, error) {
+	add(s, st, "create_cr", "Create change request", "Open a pull/merge request from source_branch into target_branch.", true, func(ctx context.Context, in createCRIn) (*model.ChangeRequest, error) {
 		return st.p.CreateCR(ctx, provider.CreateCROptions{
 			Owner: in.Owner, Repo: in.Repo, Title: in.Title,
 			Description: in.Description, SourceBranch: in.SourceBranch,
@@ -52,7 +54,7 @@ func registerCRs(s *mcp.Server, st *state) {
 		})
 	})
 
-	add(s, st, "merge_cr", "Merge change request", "Merge a pull/merge request.", true, func(ctx context.Context, in mergeCRIn) (*provider.ChangeRequest, error) {
+	add(s, st, "merge_cr", "Merge change request", "Merge a pull/merge request.", true, func(ctx context.Context, in mergeCRIn) (*model.ChangeRequest, error) {
 		return st.p.MergeCR(ctx, in.Owner, in.Repo, in.Number, provider.MergeCROptions{Squash: in.Squash})
 	})
 
@@ -61,7 +63,7 @@ func registerCRs(s *mcp.Server, st *state) {
 	// backend's divergence ledger: GitHub/GitLab/Gitea/Forgejo replace,
 	// Gitee converges via read-modify-write, Tencent applies the first,
 	// GitCode ignores the field).
-	add(s, st, "update_cr", "Update change request", "Edit a pull/merge request's title, description, target branch, or assignees. Assignees (when given) replace the set; omit to leave unchanged.", true, func(ctx context.Context, in updateCRIn) (*provider.ChangeRequest, error) {
+	add(s, st, "update_cr", "Update change request", "Edit a pull/merge request's title, description, target branch, or assignees. Assignees (when given) replace the set; omit to leave unchanged.", true, func(ctx context.Context, in updateCRIn) (*model.ChangeRequest, error) {
 		return st.p.UpdateCR(ctx, in.Owner, in.Repo, in.Number, provider.UpdateCROptions{
 			Title: in.Title, Description: in.Description,
 			TargetBranch: in.TargetBranch, Assignees: in.Assignees,
@@ -84,7 +86,7 @@ func registerCRs(s *mcp.Server, st *state) {
 		Owner  string `json:"owner"`
 		Repo   string `json:"repo"`
 		Number string `json:"number"`
-	}) ([]*provider.IssueComment, error) {
+	}) ([]*model.IssueComment, error) {
 		return nm.ListNotes(ctx, in.Owner, in.Repo, in.Number)
 	})
 	add(s, st, "update_cr_comment", "Edit CR comment", "Rewrite the body of one comment on a pull/merge request.", true, func(ctx context.Context, in struct {
@@ -93,7 +95,7 @@ func registerCRs(s *mcp.Server, st *state) {
 		Number string `json:"number"`
 		NoteID string `json:"note_id"`
 		Body   string `json:"body"`
-	}) (*provider.IssueComment, error) {
+	}) (*model.IssueComment, error) {
 		return nm.UpdateNote(ctx, in.Owner, in.Repo, in.Number, in.NoteID, in.Body)
 	})
 }

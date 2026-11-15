@@ -5,7 +5,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/yi-nology/go-git-platform/backends/tencentcode"
+	"github.com/yi-nology/go-git-platform/adapter/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 

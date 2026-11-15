@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // CommitManager handles commit operations.
 //
@@ -9,7 +13,7 @@ import "context"
 // commit-status endpoint). See the optional CommitStatusManager capability
 // interface and CapabilitySet.CommitStatuses.
 type CommitManager interface {
-	GetCommit(ctx context.Context, owner, repo, sha string) (*CommitInfo, error)
-	ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*CommitInfo, error)
-	CompareCommits(ctx context.Context, owner, repo, base, head string) (*CompareResult, error)
+	GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error)
+	ListCommits(ctx context.Context, owner, repo string, opts ListCommitsOptions) ([]*model.CommitInfo, error)
+	CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error)
 }

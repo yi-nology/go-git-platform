@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/transport"
 )
 
@@ -18,8 +19,8 @@ import (
 // （含 errors_test.go 的 throwaway 平台）一律走这里。
 var testPlatformSeq atomic.Int64
 
-func uniqueTestPlatform(prefix string) Platform {
-	return Platform(fmt.Sprintf("%s-%d", prefix, testPlatformSeq.Add(1)))
+func uniqueTestPlatform(prefix string) model.Platform {
+	return model.Platform(fmt.Sprintf("%s-%d", prefix, testPlatformSeq.Add(1)))
 }
 
 // issue #42：GitHub/Gitea 把最常见的节流信号发成 403 + X-RateLimit-Remaining: 0。
@@ -30,7 +31,7 @@ func TestWrap403WithThrottleHeadersClassifiesRateLimited(t *testing.T) {
 	h.Set("X-RateLimit-Remaining", "0")
 	terr := transport.NewStatusErrorWithHeaders("GET", "/repos", http.StatusForbidden, []byte("rate limited"), h)
 
-	err := Wrap(PlatformGitHub, "ListRepos", terr)
+	err := Wrap(model.PlatformGitHub, "ListRepos", terr)
 	if !IsRateLimited(err) {
 		t.Fatalf("403 + Remaining:0 必须归类 ErrRateLimited, got %v", err)
 	}
@@ -42,7 +43,7 @@ func TestWrap403WithThrottleHeadersClassifiesRateLimited(t *testing.T) {
 // 对照：裸 403（无节流头）仍是授权失败——重试永不成功，不放大负载。
 func TestWrap403WithoutThrottleHeadersStaysForbidden(t *testing.T) {
 	terr := transport.NewStatusError("GET", "/repos", http.StatusForbidden, []byte("forbidden by policy"))
-	err := Wrap(PlatformGitHub, "ListRepos", terr)
+	err := Wrap(model.PlatformGitHub, "ListRepos", terr)
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("裸 403 保持 ErrForbidden, got %v", err)
 	}

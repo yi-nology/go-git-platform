@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -29,19 +31,19 @@ type createReleaseIn struct {
 }
 
 func registerReleases(s *mcp.Server, st *state) {
-	add(s, st, "list_tags", "List tags", "List a repository's tags.", false, func(ctx context.Context, in ownerRepo) ([]*provider.TagInfo, error) {
+	add(s, st, "list_tags", "List tags", "List a repository's tags.", false, func(ctx context.Context, in ownerRepo) ([]*model.TagInfo, error) {
 		return st.p.ListTags(ctx, in.Owner, in.Repo)
 	})
 
-	add(s, st, "list_releases", "List releases", "List a repository's published releases.", false, func(ctx context.Context, in listReleasesIn) ([]*provider.ReleaseInfo, error) {
+	add(s, st, "list_releases", "List releases", "List a repository's published releases.", false, func(ctx context.Context, in listReleasesIn) ([]*model.ReleaseInfo, error) {
 		return st.p.ListReleases(ctx, in.Owner, in.Repo)
 	})
 
-	add(s, st, "get_release", "Get release by tag", "Fetch one release addressed by its tag name.", false, func(ctx context.Context, in getReleaseIn) (*provider.ReleaseInfo, error) {
+	add(s, st, "get_release", "Get release by tag", "Fetch one release addressed by its tag name.", false, func(ctx context.Context, in getReleaseIn) (*model.ReleaseInfo, error) {
 		return st.p.GetReleaseByTag(ctx, in.Owner, in.Repo, in.Tag)
 	})
 
-	add(s, st, "create_release", "Create release", "Publish a release for a tag.", true, func(ctx context.Context, in createReleaseIn) (*provider.ReleaseInfo, error) {
+	add(s, st, "create_release", "Create release", "Publish a release for a tag.", true, func(ctx context.Context, in createReleaseIn) (*model.ReleaseInfo, error) {
 		return st.p.CreateRelease(ctx, in.Owner, in.Repo, provider.CreateReleaseOptions{
 			TagName: in.TagName, Target: in.Target, Title: in.Title,
 			Body: in.Body, Draft: in.Draft, Prerelease: in.Prerelease,

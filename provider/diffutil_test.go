@@ -1,6 +1,10 @@
 package provider
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 func TestCountDiffLines(t *testing.T) {
 	diff := `--- a/file.go
@@ -41,7 +45,7 @@ func TestCountDiffLines_IgnoresHeaders(t *testing.T) {
 }
 
 func TestBuildRawDiff(t *testing.T) {
-	files := []*ChangedFile{
+	files := []*model.ChangedFile{
 		{OldPath: "a.go", NewPath: "b.go", Diff: "+line\n", IsNew: true},
 		{OldPath: "c.go", NewPath: "c.go", Diff: "-old\n+new\n"},
 	}
@@ -58,7 +62,7 @@ func TestBuildRawDiff(t *testing.T) {
 }
 
 func TestSumDiffStats(t *testing.T) {
-	files := []*ChangedFile{
+	files := []*model.ChangedFile{
 		{Additions: 5, Deletions: 2},
 		{Additions: 3, Deletions: 1},
 	}

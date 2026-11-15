@@ -1,0 +1,498 @@
+// Package giteafamily hosts the single implementation of the capability
+// logic shared by the Gitea and Forgejo backends. Forgejo is a Gitea fork:
+// after normalizing the two SDK identifiers the backend packages were ~95%
+// identical, differing only in the SDK call shape (the Forgejo SDK drops
+// ctx and flattens the method namespace) and a handful of converter deltas.
+//
+// Architecture (ports & adapters): the engine owns every behavioral concern
+// — option building, pagination, provider-type conversion, webhook payload
+// parsing, error wrapping — against its own minimal wire-shaped types. Each
+// backend supplies a small adapter implementing the port interfaces over
+// its SDK; gitea's adapter delegates almost directly, forgejo's converts
+// its fork-identical types and drops ctx. Behavior is pinned on both sides
+// by the identical contracttest suite and webhook golden corpus.
+//
+// Capabilities migrate here incrementally; types with large SDK surfaces
+// (PullRequest, Issue, ...) each require an exhaustive field-by-field
+// conversion check before their port is cut, so they land capability by
+// capability (see docs/superpowers/specs/2026-10-06-cohesion-patterns-
+// refactor-design.md for the ledger).
+package giteafamily
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/yi-nology/go-git-platform/adapter/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
+)
+
+// Family carries the per-platform bits of one Gitea-family backend, plus the
+// behavioral dialect parameters for the places the family's forks genuinely
+// diverge. Fields must be set by the backend constructor; the engine reads
+// them, never branches on the platform name.
+type Family struct {
+	// Platform identifies the backend (model.PlatformGitea / Forgejo).
+	Platform model.Platform
+	// EventIDPrefix prefixes generated webhook event IDs ("gt-" for both
+	// platforms today, kept explicit so the dialect stays declarative).
+	EventIDPrefix string
+	// EventHeaders are the event-type headers of the family webhook dialect,
+	// checked in order; the first non-empty value wins (the envelope lists
+	// fallbacks the same way the signature validator does). Gitea sends
+	// "X-Gitea-Event"; Forgejo brands it "X-Forgejo-Event" — but releases
+	// forked from older Gitea keep sending the old-brand headers, so Forgejo
+	// lists "X-Gitea-Event" as fallback (issue #99: the signature validator
+	// already tolerates both brands; the event/delivery reads must not be
+	// stricter than the verifier, or old-brand deliveries verify fine and
+	// then parse into empty-Type events with unusable delivery IDs).
+	EventHeaders []string
+	// EventDeliveryHeaders are the delivery-ID headers of the family dialect
+	// ("X-Gitea-Delivery" / "X-Forgejo-Delivery"): the platform repeats the
+	// same value when it redelivers an event ⇒ a true idempotency key.
+	EventDeliveryHeaders []string
+	// PageSize is the per-page size for paginated family list fetches.
+	PageSize int
+
+	// --- behavioral dialect parameters (real differences observed across
+	// the family; kept declarative here so the engine never branches on the
+	// platform name) ---
+
+	// CRPointersHaveReviewers reports whether the PR wire type exposes a
+	// RequestedReviewers list distinct from Assignees. Gitea does; Forgejo
+	// (older fork) folds them into Assignees.
+	CRPointersHaveReviewers bool
+	// PRWireHasDraft reports whether the PR wire type carries a Draft flag.
+	// Gitea does; Forgejo does not (Draft is always false).
+	PRWireHasDraft bool
+}
+
+// --- family wire types (the engine's only vocabulary) ---
+
+// ListOptions is the shared pagination struct of the family SDKs.
+type ListOptions struct {
+	Page     int
+	PageSize int
+}
+
+// CreateHookOption mirrors the family's POST webhook body.
+type CreateHookOption struct {
+	Type   string
+	Config map[string]string
+	Events []string
+	Active bool
+}
+
+// EditHookOption mirrors the family's PATCH webhook body. Config keys are
+// merged server-side (unprovided keys keep their values); Events replaces
+// the full event set.
+type EditHookOption struct {
+	Config map[string]string
+	Events []string
+}
+
+// ListHooksOptions mirrors the family's webhook list query.
+type ListHooksOptions struct {
+	ListOptions ListOptions
+}
+
+// Hook is the slice of the family's webhook object the engine consumes.
+type Hook struct {
+	ID     int64
+	Config map[string]string
+	Events []string
+}
+
+// HookPort is the webhook endpoint of the family SDK surface. Implementations
+// adapt a concrete SDK (gitea: near-direct delegation; forgejo: fork types
+// converted, ctx dropped).
+type HookPort interface {
+	CreateRepoHook(ctx context.Context, owner, repo string, opt CreateHookOption) (*Hook, error)
+	DeleteRepoHook(ctx context.Context, owner, repo string, id int64) error
+	ListRepoHooks(ctx context.Context, owner, repo string, opt ListHooksOptions) ([]*Hook, error)
+	GetRepoHook(ctx context.Context, owner, repo string, id int64) (*Hook, int, error)
+	// EditRepoHook returns the updated hook; both family SDKs' edit
+	// endpoints return no body, so a nil Hook with nil error is the norm
+	// and the engine hydrates with a follow-up read.
+	EditRepoHook(ctx context.Context, owner, repo string, id int64, opt EditHookOption) (*Hook, error)
+}
+
+// --- engine: webhook CRUD ---
+
+// CreateWebhook creates a family webhook, defaulting the event list to
+// push+pull_request when unset.
+func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
+	events := opts.Events
+	if len(events) == 0 {
+		events = []string{"push", "pull_request"}
+	}
+	hook, err := c.CreateRepoHook(ctx, opts.Owner, opts.Repo, CreateHookOption{
+		Type:   "gitea", // the family wire value; Forgejo accepts it unchanged
+		Config: map[string]string{"url": opts.URL, "content_type": "json", "secret": opts.Secret},
+		Events: events,
+		Active: true,
+	})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "CreateWebhook", err)
+	}
+	return convertHook(hook), nil
+}
+
+// GetWebhook returns one family webhook. The int port return carries the
+// response's HTTP status for IsNotFound classification (the family's error
+// type flattens it away — same reason as FilePort.GetFile).
+func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
+	hook, status, err := c.GetRepoHook(ctx, owner, repo, webhookID)
+	if err != nil {
+		return nil, familyError(f, "GetWebhook", status, err)
+	}
+	return convertHook(hook), nil
+}
+
+// UpdateWebhook patches one family webhook. The family PATCH semantics
+// merge the provided config keys server-side, so URL and Secret updates
+// touch only their own key; Events replaces the full event set.
+func UpdateWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
+	opt := EditHookOption{}
+	if opts.URL != nil || opts.Secret != nil {
+		opt.Config = map[string]string{}
+		if opts.URL != nil {
+			opt.Config["url"] = *opts.URL
+		}
+		if opts.Secret != nil {
+			opt.Config["secret"] = *opts.Secret
+		}
+	}
+	if opts.Events != nil {
+		opt.Events = opts.Events
+	}
+	hook, err := c.EditRepoHook(ctx, owner, repo, webhookID, opt)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "UpdateWebhook", err)
+	}
+	// Both family SDKs' edit endpoints return no body (nil hook, nil
+	// error): hydrate with a follow-up read so the engine returns the
+	// updated state uniformly.
+	if hook == nil {
+		hook, _, err = c.GetRepoHook(ctx, owner, repo, webhookID)
+		if err != nil {
+			return nil, provider.Wrap(f.Platform, "UpdateWebhook", err)
+		}
+	}
+	return convertHook(hook), nil
+}
+
+// DeleteWebhook removes one family webhook.
+func DeleteWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) error {
+	if err := c.DeleteRepoHook(ctx, owner, repo, webhookID); err != nil {
+		return provider.Wrap(f.Platform, "DeleteWebhook", err)
+	}
+	return nil
+}
+
+// ListWebhooks returns every family webhook. The provider surface carries no
+// pagination parameters, so the full hook list is fetched by exhausting the
+// endpoint's pagination (backendutil.AllPages).
+func ListWebhooks(ctx context.Context, f Family, c HookPort, owner, repo string) ([]*model.PlatformWebhook, error) {
+	hooks, err := backendutil.AllPages(func(page int) ([]*Hook, error) {
+		return c.ListRepoHooks(ctx, owner, repo, ListHooksOptions{
+			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
+		})
+	})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListWebhooks", err)
+	}
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
+	for _, h := range hooks {
+		result = append(result, convertHook(h))
+	}
+	return result, nil
+}
+
+// convertHook projects a family Hook onto the provider webhook shape.
+func convertHook(h *Hook) *model.PlatformWebhook {
+	if h == nil {
+		return nil
+	}
+	return &model.PlatformWebhook{
+		ID:     h.ID,
+		URL:    h.Config["url"],
+		Events: h.Events,
+	}
+}
+
+// --- engine: webhook event parsing ---
+
+// ParseWebhookEvent validates the signature via the platform's registered
+// validator and maps the (byte-identical across the family) Gitea-style
+// payload onto a NormalizedEvent.
+func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.NormalizedEvent, error) {
+	env := runtime.WebhookEnvelope{
+		Platform:     f.Platform,
+		EventHeaders: f.EventHeaders,
+		IDPrefix:     f.EventIDPrefix,
+		IDHeaders:    f.EventDeliveryHeaders,
+	}
+	eventType, body, err := env.Read(r, secret)
+	if err != nil {
+		return nil, err
+	}
+	var pl struct {
+		Action string `json:"action"`
+		Sender struct {
+			ID    int    `json:"id"`
+			Login string `json:"login"`
+		} `json:"sender"`
+		Repository struct {
+			ID       int64  `json:"id"`
+			FullName string `json:"full_name"`
+		} `json:"repository"`
+		PullRequest *struct {
+			ID     int    `json:"id"`
+			Number int    `json:"number"`
+			Title  string `json:"title"`
+			Body   string `json:"body"`
+			State  string `json:"state"`
+			Head   struct {
+				Ref string `json:"ref"`
+				SHA string `json:"sha"`
+			} `json:"head"`
+			Base struct {
+				Ref string `json:"ref"`
+				SHA string `json:"sha"`
+			} `json:"base"`
+			Draft   bool   `json:"draft"`
+			Merged  bool   `json:"merged"`
+			HTMLURL string `json:"html_url"`
+			User    struct {
+				ID    int    `json:"id"`
+				Login string `json:"login"`
+			} `json:"user"`
+			CreatedAt time.Time `json:"created_at"`
+			UpdatedAt time.Time `json:"updated_at"`
+		} `json:"pull_request"`
+		Number int    `json:"number"`
+		Ref    string `json:"ref"`
+		Before string `json:"before"`
+		After  string `json:"after"`
+		// create/delete hooks carry the ref kind ("branch" or "tag").
+		RefType string `json:"ref_type"`
+		// issues/issue_comment hooks carry the issue object; a PR-shaped
+		// issue additionally carries a pull_request key, and issue_comment
+		// hooks carry the comment itself.
+		Issue   *webhookIssuePayload   `json:"issue"`
+		Comment *webhookCommentPayload `json:"comment"`
+		// Note: the issue payload's own id field is parsed inside
+		// webhookIssuePayload (issue #96: the global ID must not be dropped).
+
+	}
+	if err := json.Unmarshal(body, &pl); err != nil {
+		return nil, provider.Wrap(f.Platform, "ParseWebhookEvent", err)
+	}
+
+	er := runtime.BuildEventRepo(pl.Repository.FullName)
+	er.ID = pl.Repository.ID
+	actor := &model.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
+
+	event := env.NewEventWithID(r, int64(pl.Number), body)
+	event.Actor = actor
+	event.Repo = er
+
+	switch eventType {
+	case "pull_request":
+		action := runtime.NormalizeCRAction(pl.Action, pl.PullRequest != nil && pl.PullRequest.Merged)
+		event.Type = "cr." + action
+		event.Action = action
+		if pl.PullRequest != nil {
+			event.CommitSHA = pl.PullRequest.Head.SHA
+			// ID 用 payload 的平台全局 id（issue #96，对齐 API 流 crs.go 的
+			// ID: pr.ID）——旧实现塞 Number，事件流与 API 流对同一 CR 给出
+			// 两个不同 ID，按 ID 关联/去重的消费方错配，跨仓还撞号。
+			event.CR = &model.ChangeRequest{
+				ID:           int64(pl.PullRequest.ID),
+				Number:       strconv.Itoa(pl.PullRequest.Number),
+				Title:        pl.PullRequest.Title,
+				Description:  pl.PullRequest.Body,
+				State:        MapState(pl.PullRequest.State, pl.PullRequest.Merged),
+				Draft:        pl.PullRequest.Draft,
+				SourceBranch: pl.PullRequest.Head.Ref,
+				TargetBranch: pl.PullRequest.Base.Ref,
+				HeadSHA:      pl.PullRequest.Head.SHA,
+				BaseSHA:      pl.PullRequest.Base.SHA,
+				// The family exposes no distinct merge-base; base.sha is the
+				// target tip.
+				StartSHA:  pl.PullRequest.Base.SHA,
+				WebURL:    pl.PullRequest.HTMLURL,
+				Author:    &model.CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
+				CreatedAt: pl.PullRequest.CreatedAt,
+				UpdatedAt: pl.PullRequest.UpdatedAt,
+			}
+		}
+	case "push":
+		// tag push 归一（issue #98，同族 #76 的 github 面 / #47 的 gitee
+		// tag_push 形）：Gitea/Forgejo 对 tag ref 照发 push 钩子
+		// （ref=refs/tags/...），两个平台的 wire 都没有 tag_push 事件名
+		// （SDK 全文零命中，原 case 是死分支）——ref 前缀才是判定面。旧实现
+		// 产出 Type="push" 且 Branch 带出 "refs/tags/v1.0" 全 ref 伪分支，
+		// 按 Branch 路由的消费方被污染。删除形复用全零 after 标记
+		// （IsWebhookDeletionSHA），commit_sha 不带（tag 事件的定位键是
+		// Tag，与 github/gitee 的 tag.created/tag.deleted 形态一致）。
+		if strings.HasPrefix(pl.Ref, "refs/tags/") {
+			if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+				event.Type = runtime.EventTypeTag + "deleted"
+				event.Action = "deleted"
+			} else {
+				event.Type = runtime.EventTypeTag + "created"
+				event.Action = "created"
+				event.CommitSHA = pl.After
+			}
+			event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
+		} else {
+			event.Type = "push"
+			event.Action = "push"
+			event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
+			event.CommitSHA = pl.After
+		}
+	case "create":
+		if pl.RefType == "tag" {
+			event.Type = runtime.EventTypeTag + "created"
+			event.Action = "created"
+			event.Tag = pl.Ref
+		} else {
+			event.Type = runtime.EventTypeBranch + "created"
+			event.Action = "created"
+			event.Branch = pl.Ref
+		}
+	case "delete":
+		if pl.RefType == "tag" {
+			event.Type = runtime.EventTypeTag + "deleted"
+			event.Action = "deleted"
+			event.Tag = pl.Ref
+		} else {
+			event.Type = runtime.EventTypeBranch + "deleted"
+			event.Action = "deleted"
+			event.Branch = pl.Ref
+		}
+	case "issues":
+		action := runtime.NormalizeIssueAction(pl.Action)
+		event.Type = runtime.EventTypeIssue + action
+		event.Action = action
+		attachWebhookIssue(event, pl.Issue)
+	case "issue_comment":
+		// 动作派生（issue #95，同 github 侧 normalizeCommentAction 的先例）：
+		// Gitea/Forgejo 的 comment hook 带 action=created|edited|deleted——
+		// 旧实现无视 payload 的 action 硬归 created，删除被当新增重放、编辑
+		// 被当新评论。未知值透传（与 NormalizeIssueAction 的兜底一致），
+		// 空值落 created（老 wire 无 action 字段时保持既有形态）。
+		action := normalizeCommentAction(pl.Action)
+		event.Type = runtime.EventTypeComment + action
+		event.Action = action
+		if pl.Comment != nil {
+			author := &model.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
+			if author.ID == 0 && author.Username == "" {
+				author = actor
+			}
+			event.Comment = &model.IssueComment{
+				ID:        pl.Comment.ID,
+				Body:      pl.Comment.Body,
+				Author:    author,
+				CreatedAt: pl.Comment.CreatedAt,
+				UpdatedAt: pl.Comment.UpdatedAt,
+			}
+		}
+		attachWebhookIssue(event, pl.Issue)
+	}
+	return event, nil
+}
+
+// webhookIssuePayload is the issue object carried by issues and
+// issue_comment hooks.
+type webhookIssuePayload struct {
+	ID      int64  `json:"id"`
+	Number  int    `json:"number"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	State   string `json:"state"`
+	HTMLURL string `json:"html_url"`
+	User    struct {
+		ID    int    `json:"id"`
+		Login string `json:"login"`
+	} `json:"user"`
+	PullRequest *struct {
+		Merged bool `json:"merged"`
+	} `json:"pull_request"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// webhookCommentPayload is the comment object carried by issue_comment
+// hooks.
+type webhookCommentPayload struct {
+	ID   int64  `json:"id"`
+	Body string `json:"body"`
+	User struct {
+		ID    int    `json:"id"`
+		Login string `json:"login"`
+	} `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// attachWebhookIssue populates event.Issue (and, for PR-shaped issues,
+// event.CR) from a hook's issue payload.
+func attachWebhookIssue(event *model.NormalizedEvent, issue *webhookIssuePayload) {
+	if issue == nil {
+		return
+	}
+	state := model.IssueStateOpen
+	if issue.State == "closed" {
+		state = model.IssueStateClosed
+	}
+	event.Issue = &model.Issue{
+		// 全局 id 上 ID、number 上 Number（issue #96）：解析到的平台全局
+		// id 此前被丢弃、Number 顶替 ID——与 API 流（issues.go ID: i.ID）
+		// 语义分叉。
+		ID:        issue.ID,
+		Number:    strconv.Itoa(issue.Number),
+		Title:     issue.Title,
+		Body:      issue.Body,
+		State:     state,
+		Author:    &model.CRUser{ID: int64(issue.User.ID), Username: issue.User.Login},
+		WebURL:    issue.HTMLURL,
+		CreatedAt: issue.CreatedAt,
+		UpdatedAt: issue.UpdatedAt,
+	}
+	if issue.PullRequest != nil {
+		event.CR = &model.ChangeRequest{
+			ID: issue.ID, Number: strconv.Itoa(issue.Number), Title: issue.Title,
+		}
+	}
+}
+
+// MapState maps a family issue/PR state string onto the provider CR state;
+// exported because the family backends' converters share it.
+func MapState(state string, merged bool) model.CRState {
+	return provider.MapBoolStateToCR(state, merged)
+}
+
+// normalizeCommentAction maps the family's comment hook action onto the
+// canonical comment vocabulary (created/edited/deleted). Empty falls to
+// created; unknown values pass through unchanged — mirroring the GitHub
+// backend's derivation so a consumer sees the same action vocabulary on
+// every platform.
+func normalizeCommentAction(action string) string {
+	switch action {
+	case runtime.CommentActionCreated, runtime.CommentActionEdited, runtime.CommentActionDeleted:
+		return action
+	case "":
+		return runtime.CommentActionCreated
+	default:
+		return action
+	}
+}

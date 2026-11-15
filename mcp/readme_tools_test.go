@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yi-nology/go-git-platform/backends/tencentcode"
+	"github.com/yi-nology/go-git-platform/adapter/tencentcode"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -29,7 +30,7 @@ type fakeAllProvider struct {
 	tencentcode.TencentCodeExtras
 }
 
-func (f fakeAllProvider) Platform() provider.Platform { return provider.PlatformGitHub }
+func (f fakeAllProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (f fakeAllProvider) Capabilities() provider.CapabilitySet {
 	return provider.CapabilitySet{}
 }

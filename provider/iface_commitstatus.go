@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // CommitStatusManager reports CI statuses on commits. It is an optional
 // capability interface: consumers should gate on
@@ -15,5 +19,5 @@ type CommitStatusManager interface {
 	// ListCommitStatuses returns the statuses reported on a commit,
 	// newest first (the platforms' native order). State is normalized
 	// into the CommitStatusState vocabulary by the backend.
-	ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]CommitStatus, error)
+	ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error)
 }

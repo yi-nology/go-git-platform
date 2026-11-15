@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 func TestProviderError_Error(t *testing.T) {
@@ -23,22 +25,22 @@ func TestProviderError_Error(t *testing.T) {
 		},
 		{
 			"with platform",
-			&ProviderError{Platform: PlatformGitHub, Op: "ListRepos"},
+			&ProviderError{Platform: model.PlatformGitHub, Op: "ListRepos"},
 			"github ListRepos",
 		},
 		{
 			"with resource",
-			&ProviderError{Platform: PlatformGitHub, Op: "GetRepo", Resource: "owner/repo"},
+			&ProviderError{Platform: model.PlatformGitHub, Op: "GetRepo", Resource: "owner/repo"},
 			"github GetRepo owner/repo",
 		},
 		{
 			"with status",
-			&ProviderError{Platform: PlatformGitHub, Op: "GetRepo", Resource: "owner/repo", StatusCode: 404, Cause: ErrNotFound},
+			&ProviderError{Platform: model.PlatformGitHub, Op: "GetRepo", Resource: "owner/repo", StatusCode: 404, Cause: ErrNotFound},
 			"github GetRepo owner/repo: HTTP 404: resource not found",
 		},
 		{
 			"with cause no status",
-			&ProviderError{Platform: PlatformGitHub, Op: "TestConnection", Cause: errors.New("dial tcp: timeout")},
+			&ProviderError{Platform: model.PlatformGitHub, Op: "TestConnection", Cause: errors.New("dial tcp: timeout")},
 			"github TestConnection: dial tcp: timeout",
 		},
 	}
@@ -53,7 +55,7 @@ func TestProviderError_Error(t *testing.T) {
 }
 
 func TestProviderError_Is(t *testing.T) {
-	pe := &ProviderError{Platform: PlatformGitHub, Op: "GetRepo", Cause: ErrNotFound}
+	pe := &ProviderError{Platform: model.PlatformGitHub, Op: "GetRepo", Cause: ErrNotFound}
 	if !errors.Is(pe, ErrNotFound) {
 		t.Error("expected errors.Is to match wrapped sentinel")
 	}
@@ -110,7 +112,7 @@ func TestNew(t *testing.T) {
 		{418, nil},
 	}
 	for _, tc := range tests {
-		err := New(PlatformGitHub, "Test", tc.status, "")
+		err := New(model.PlatformGitHub, "Test", tc.status, "")
 		if tc.want != nil && !errors.Is(err, tc.want) {
 			t.Errorf("status %d: expected %v, got %v", tc.status, tc.want, err)
 		}
@@ -118,7 +120,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_WithBody(t *testing.T) {
-	err := New(PlatformGitHub, "Test", 404, "not found")
+	err := New(model.PlatformGitHub, "Test", 404, "not found")
 	if !errors.Is(err, ErrNotFound) {
 		t.Error("expected ErrNotFound")
 	}
@@ -130,7 +132,7 @@ func TestNew_WithBody(t *testing.T) {
 func TestWrap(t *testing.T) {
 	// Wrap preserves the cause chain
 	cause := errors.New("boom")
-	err := Wrap(PlatformGitHub, "GetRepo", cause)
+	err := Wrap(model.PlatformGitHub, "GetRepo", cause)
 	if !errors.Is(err, cause) {
 		t.Error("expected cause to be preserved")
 	}
@@ -145,7 +147,7 @@ func TestWrap(t *testing.T) {
 
 func TestWrap_WithStatusCoder(t *testing.T) {
 	statusErr := &fakeStatusError{code: 404}
-	err := Wrap(PlatformGitHub, "GetRepo", statusErr)
+	err := Wrap(model.PlatformGitHub, "GetRepo", statusErr)
 	var pe *ProviderError
 	if !errors.As(err, &pe) {
 		t.Fatal("expected *ProviderError")
@@ -165,7 +167,7 @@ func TestWrap_WithStatusCoder(t *testing.T) {
 func TestWrap_PreservesOriginalCause(t *testing.T) {
 	orig := fmt.Errorf("GET /api/v4/projects/42: project not found")
 	wrapped := WrapStatusError(orig, 404)
-	err := Wrap(PlatformGitLab, "GetRepo", wrapped)
+	err := Wrap(model.PlatformGitLab, "GetRepo", wrapped)
 
 	var pe *ProviderError
 	if !errors.As(err, &pe) {
@@ -247,7 +249,7 @@ func TestWrap_StringMessage_NotMistakenForStatus(t *testing.T) {
 		"operation completed with 403 steps",
 	}
 	for _, msg := range msgs {
-		err := Wrap(PlatformGitHub, "Merge", fmt.Errorf("%s", msg))
+		err := Wrap(model.PlatformGitHub, "Merge", fmt.Errorf("%s", msg))
 		var pe *ProviderError
 		if !errors.As(err, &pe) {
 			t.Fatalf("%q: expected *ProviderError", msg)
@@ -275,7 +277,7 @@ func TestWrap_StatusInMessageIsNeverParsed(t *testing.T) {
 		"status 422 Unprocessable",
 		"request failed: returned 503",
 	} {
-		err := Wrap(PlatformGitHub, "TestOp", errors.New(msg))
+		err := Wrap(model.PlatformGitHub, "TestOp", errors.New(msg))
 		var pe *ProviderError
 		if !errors.As(err, &pe) {
 			t.Fatalf("expected *ProviderError for %q", msg)
@@ -287,7 +289,7 @@ func TestWrap_StatusInMessageIsNeverParsed(t *testing.T) {
 }
 
 func TestWrapf(t *testing.T) {
-	err := Wrapf(PlatformGitHub, "GetRepo", "%s/%s", "owner", "repo")
+	err := Wrapf(model.PlatformGitHub, "GetRepo", "%s/%s", "owner", "repo")
 	if !errors.Is(err, err) {
 		t.Error("non-nil error should self-match")
 	}
@@ -297,8 +299,8 @@ func TestWrapf(t *testing.T) {
 }
 
 func TestWrap_AlreadyWrapped(t *testing.T) {
-	inner := Wrap(PlatformGitHub, "ListRepos", errors.New("boom"))
-	outer := Wrap(PlatformGitHub, "ListRepos", inner)
+	inner := Wrap(model.PlatformGitHub, "ListRepos", errors.New("boom"))
+	outer := Wrap(model.PlatformGitHub, "ListRepos", inner)
 	if outer != inner {
 		t.Error("Wrap should be idempotent on identical (platform, op)")
 	}
@@ -358,7 +360,7 @@ func TestClassifyStatus(t *testing.T) {
 // "retry the server" with errors.Is alone.
 func TestWrap_SentinelForValidationRejections(t *testing.T) {
 	for _, status := range []int{http.StatusBadRequest, http.StatusUnprocessableEntity} {
-		err := Wrap(PlatformGitLab, "CreateLabel", &fakeStatusError{code: status})
+		err := Wrap(model.PlatformGitLab, "CreateLabel", &fakeStatusError{code: status})
 		var pe *ProviderError
 		if !errors.As(err, &pe) {
 			t.Fatalf("status %d: expected a *ProviderError, got %T", status, err)
@@ -371,10 +373,10 @@ func TestWrap_SentinelForValidationRejections(t *testing.T) {
 		}
 	}
 	// 410 and 5xx carry their sentinels through Wrap the same way.
-	if !IsGone(Wrap(PlatformGitHub, "GetRepo", &fakeStatusError{code: http.StatusGone})) {
+	if !IsGone(Wrap(model.PlatformGitHub, "GetRepo", &fakeStatusError{code: http.StatusGone})) {
 		t.Error("410: IsGone = false, want true")
 	}
-	if !IsServerSide(Wrap(PlatformGitHub, "ListRepos", &fakeStatusError{code: http.StatusBadGateway})) {
+	if !IsServerSide(Wrap(model.PlatformGitHub, "ListRepos", &fakeStatusError{code: http.StatusBadGateway})) {
 		t.Error("502: IsServerSide = false, want true")
 	}
 }
@@ -398,7 +400,7 @@ func TestNew_ValidationShapes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := New(PlatformGitHub, "CreateRepo", tc.status, tc.body)
+			err := New(model.PlatformGitHub, "CreateRepo", tc.status, tc.body)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("errors.Is(err, %v) = false, err=%v", tc.wantErr, err)
 			}
@@ -455,7 +457,7 @@ func TestWrapStatusError_Nil(t *testing.T) {
 
 func TestWrapStatusError_InProviderError(t *testing.T) {
 	inner := WrapStatusError(fmt.Errorf("gone"), 410)
-	pe := Wrap(PlatformGitHub, "DeleteRepo", inner)
+	pe := Wrap(model.PlatformGitHub, "DeleteRepo", inner)
 
 	var perr *ProviderError
 	if !errors.As(pe, &perr) {
@@ -487,7 +489,7 @@ func TestWrap_NonStructError_DoesNotPanic(t *testing.T) {
 	// non-struct kinds (the reflection path no longer exists).
 	err := url.EscapeError("invalid%escape")
 
-	got := Wrap(PlatformGitHub, "TestOp", err)
+	got := Wrap(model.PlatformGitHub, "TestOp", err)
 	var pe *ProviderError
 	if !errors.As(got, &pe) {
 		t.Fatalf("expected *ProviderError, got %T", got)
@@ -497,7 +499,7 @@ func TestWrap_NonStructError_DoesNotPanic(t *testing.T) {
 	}
 
 	// Pointer form exercises the pointer-deref path into the same guard.
-	got2 := Wrap(PlatformGitHub, "TestOp", &err)
+	got2 := Wrap(model.PlatformGitHub, "TestOp", &err)
 	if !errors.As(got2, &pe) {
 		t.Fatalf("expected *ProviderError for pointer form, got %T", got2)
 	}

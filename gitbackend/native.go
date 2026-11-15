@@ -15,7 +15,7 @@ import (
 	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/shellx"
 
-	"github.com/yi-nology/go-git-platform/pkg/credential"
+	"github.com/yi-nology/go-git-platform/auth/credential"
 )
 
 type NativeGitBackend struct {
@@ -220,7 +220,7 @@ func withInsecureArgs(auth AuthConfig, args []string) []string {
 
 // resolveAuth handles SSH key material for the native git command:
 //   - SSHKeyContent（DB 存 key 的用法）落 0600 临时文件供 GIT_SSH_COMMAND 使用；
-//   - Passphrase 非空时先用 pkg/credential 的 ProcessPrivateKey **在进程内解密
+//   - Passphrase 非空时先用 auth/credential 的 ProcessPrivateKey **在进程内解密
 //     成明文 PEM 再落盘**（issue #142）：native 把 key 经 GIT_SSH_COMMAND
 //     交给 ssh 且带 `-o BatchMode=yes`，ssh 永远没有询问口令的机会——旧实现
 //     原样落盘仍带口令的私钥被 ssh 静默跳过，认证以 Permission denied 失败

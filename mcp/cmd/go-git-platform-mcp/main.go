@@ -50,12 +50,13 @@ import (
 	"github.com/oekit/concurrency/async"
 	"github.com/oekit/logx"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 
 	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 
 	// register every shipped backend
-	_ "github.com/yi-nology/go-git-platform/backends/all"
+	_ "github.com/yi-nology/go-git-platform/adapter/all"
 )
 
 // logger is the binary's service logger (kv style). The mcp server is a
@@ -96,7 +97,7 @@ func run() error {
 	}
 
 	cfg := provider.Config{
-		Platform: provider.Platform(*platform),
+		Platform: model.Platform(*platform),
 		BaseURL:  *baseURL,
 		Token:    tok,
 		SkipTLS:  *skipTLS,

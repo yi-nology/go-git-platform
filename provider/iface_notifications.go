@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // NotificationManager provides access to a user's notification inbox and
 // per-repository notification streams. It is an optional capability interface:
@@ -21,9 +25,9 @@ import "context"
 type NotificationManager interface {
 	// ListNotifications returns the authenticated user's notifications,
 	// exhausting the platform's pagination.
-	ListNotifications(ctx context.Context, opts ListNotificationsOptions) ([]*Notification, error)
+	ListNotifications(ctx context.Context, opts ListNotificationsOptions) ([]*model.Notification, error)
 	// ListRepoNotifications returns notifications for a specific repository.
-	ListRepoNotifications(ctx context.Context, owner, repo string, opts ListNotificationsOptions) ([]*Notification, error)
+	ListRepoNotifications(ctx context.Context, owner, repo string, opts ListNotificationsOptions) ([]*model.Notification, error)
 	// MarkNotificationRead marks a single notification thread as read.
 	MarkNotificationRead(ctx context.Context, threadID string) error
 	// MarkNotificationsRead marks all (or filtered) notifications as read.

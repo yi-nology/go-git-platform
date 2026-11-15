@@ -6,7 +6,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/yi-nology/go-git-platform/pkg/projection"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/model/projection"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -22,9 +23,9 @@ type listIssuesIn struct {
 }
 
 type listIssuesOut struct {
-	Total     int               `json:"total"`
-	Issues    []*provider.Issue `json:"issues,omitempty"`
-	Projected []map[string]any  `json:"projected,omitempty"`
+	Total     int              `json:"total"`
+	Issues    []*model.Issue   `json:"issues,omitempty"`
+	Projected []map[string]any `json:"projected,omitempty"`
 }
 
 type createIssueIn struct {
@@ -77,7 +78,7 @@ func registerIssues(s *mcp.Server, st *state) {
 		}
 		opts := provider.ListIssuesOptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {
-			opts.State = provider.IssueState(in.State)
+			opts.State = model.IssueState(in.State)
 		}
 		issues, total, err := im.ListIssues(ctx, opts)
 		if err != nil {
@@ -93,17 +94,17 @@ func registerIssues(s *mcp.Server, st *state) {
 		return listIssuesOut{Total: total, Projected: trimmed}, nil
 	})
 
-	add(s, st, "get_issue", "Get issue", "Fetch one issue with its full metadata.", false, func(ctx context.Context, in getCRIn) (*provider.Issue, error) {
+	add(s, st, "get_issue", "Get issue", "Fetch one issue with its full metadata.", false, func(ctx context.Context, in getCRIn) (*model.Issue, error) {
 		return im.GetIssue(ctx, in.Owner, in.Repo, in.Number)
 	})
 
-	add(s, st, "create_issue", "Create issue", "Open a new issue.", true, func(ctx context.Context, in createIssueIn) (*provider.Issue, error) {
+	add(s, st, "create_issue", "Create issue", "Open a new issue.", true, func(ctx context.Context, in createIssueIn) (*model.Issue, error) {
 		return im.CreateIssue(ctx, provider.CreateIssueOptions{
 			Owner: in.Owner, Repo: in.Repo, Title: in.Title, Body: in.Body, Labels: in.Labels,
 		})
 	})
 
-	add(s, st, "add_issue_comment", "Comment on issue", "Add a comment to an issue.", true, func(ctx context.Context, in addIssueCommentIn) (*provider.IssueComment, error) {
+	add(s, st, "add_issue_comment", "Comment on issue", "Add a comment to an issue.", true, func(ctx context.Context, in addIssueCommentIn) (*model.IssueComment, error) {
 		return im.CreateIssueComment(ctx, in.Owner, in.Repo, in.Number, in.Body)
 	})
 
@@ -114,7 +115,7 @@ func registerIssues(s *mcp.Server, st *state) {
 		return deleteIssueCommentOut{Deleted: true}, nil
 	})
 
-	add(s, st, "close_issue", "Close issue", "Close an issue.", true, func(ctx context.Context, in closeIssueIn) (*provider.Issue, error) {
+	add(s, st, "close_issue", "Close issue", "Close an issue.", true, func(ctx context.Context, in closeIssueIn) (*model.Issue, error) {
 		return im.CloseIssue(ctx, in.Owner, in.Repo, in.Number)
 	})
 }

@@ -6,8 +6,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/yi-nology/go-git-platform/backends/tencentcode"
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/adapter/tencentcode"
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // --- tencentcode (toolset "tencentcode") ---
@@ -101,7 +101,7 @@ func registerTencentCode(s *mcp.Server, st *state) {
 		Page    int    `json:"page,omitempty"`
 		PerPage int    `json:"per_page,omitempty"`
 	}
-	add(s, st, "list_user_issues", "List issues across projects", "List issues across all projects visible to the authenticated user (工蜂's global issue listing).", false, func(ctx context.Context, in listUserIssuesIn) ([]*provider.Issue, error) {
+	add(s, st, "list_user_issues", "List issues across projects", "List issues across all projects visible to the authenticated user (工蜂's global issue listing).", false, func(ctx context.Context, in listUserIssuesIn) ([]*model.Issue, error) {
 		return tc.ListUserIssues(ctx, tencentcode.ListUserIssuesOptions{
 			State: normalizeTCIssueState(in.State), Page: in.Page, PerPage: in.PerPage,
 		})
@@ -113,7 +113,7 @@ func registerTencentCode(s *mcp.Server, st *state) {
 		MilestoneID int    `json:"milestone_id"`
 		Page        int    `json:"page,omitempty"`
 		PerPage     int    `json:"per_page,omitempty"`
-	}) ([]*provider.Issue, error) {
+	}) ([]*model.Issue, error) {
 		return tc.ListMilestoneIssues(ctx, in.Owner, in.Repo, in.MilestoneID, in.Page, in.PerPage)
 	})
 

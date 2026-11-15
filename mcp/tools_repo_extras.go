@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -52,7 +53,7 @@ type syncForkIn struct {
 // type-assertion mechanism as every other toolset).
 func registerRepoExtras(s *mcp.Server, st *state) {
 	if dm, ok := st.p.(provider.DeploymentManager); ok {
-		add(s, st, "create_deployment", "Create deployment", "Request a platform deployment of ref to environment (GitHub deployments API).", true, func(ctx context.Context, in createDeploymentIn) (*provider.Deployment, error) {
+		add(s, st, "create_deployment", "Create deployment", "Request a platform deployment of ref to environment (GitHub deployments API).", true, func(ctx context.Context, in createDeploymentIn) (*model.Deployment, error) {
 			return dm.CreateDeployment(ctx, in.Owner, in.Repo, in.Ref, in.Environment, provider.CreateDeploymentOptions{
 				Task: in.Task, Description: in.Description, Payload: in.Payload,
 			})
@@ -63,7 +64,7 @@ func registerRepoExtras(s *mcp.Server, st *state) {
 			Environment string `json:"environment,omitempty"`
 			Page        int    `json:"page,omitempty"`
 			PerPage     int    `json:"per_page,omitempty"`
-		}) ([]*provider.Deployment, error) {
+		}) ([]*model.Deployment, error) {
 			deps, _, err := dm.ListDeployments(ctx, in.Owner, in.Repo, in.Environment, perPage(in.Page), perPage(in.PerPage))
 			return deps, err
 		})
@@ -82,7 +83,7 @@ func registerRepoExtras(s *mcp.Server, st *state) {
 		})
 	}
 	if tm, ok := st.p.(provider.TemplateRepoManager); ok {
-		add(s, st, "create_repo_from_template", "Create repo from template", "Instantiate a new repository from a platform template repository (GitHub / Gitea).", true, func(ctx context.Context, in createRepoFromTemplateIn) (*provider.PlatformRepo, error) {
+		add(s, st, "create_repo_from_template", "Create repo from template", "Instantiate a new repository from a platform template repository (GitHub / Gitea).", true, func(ctx context.Context, in createRepoFromTemplateIn) (*model.PlatformRepo, error) {
 			return tm.CreateRepoFromTemplate(ctx, in.TemplateOwner, in.TemplateRepo, provider.CreateRepoFromTemplateOptions{
 				Owner: in.Owner, Name: in.Name, Description: in.Description,
 				Private: in.Private, IncludeAllBranches: in.IncludeAllBranches,

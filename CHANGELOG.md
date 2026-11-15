@@ -6,6 +6,36 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed（**BREAKING**：文件排布重构，<ver>）
+
+- **四层分层成形**：`provider` 单包（90+ 文件）拆为 `model`（纯域实体，叶子）
+  ← `provider`（契约缝：接口/参数/哨兵）← `runtime`（机器与用户面助手）
+  ← `adapter`（七平台实现）四层，依赖方向由 `internal/layering` 边表守卫
+  机器校验（spec §4.1 逐字边表，`go test ./...`/`make check` 即门），分层
+  规则不再停留文档。
+- **实体/机器/路径三类迁移**：实体进 `model`（`provider.{Platform,Issue,
+  ChangeRequest,Label,Milestone,CommitStatus,Webhook…}` → `model.*`，全量
+  清单与 grep 自查见 MIGRATION §2.1）；机器进 `runtime`
+  （`provider.{DetectPlatform,EnsureWebhook,EnsureBranchProtection,
+  EnsureDeployKey,WaitForCommitStatus,ValidateWebhookWithRegistry,
+  BatchOptions,Each,Collect,WebhookValidator,Manager…}` → `runtime.*`，
+  含 `ErrWaitTimedOut`/`ErrStopIteration`/`ErrPageBudgetExceeded` 三哨兵
+  与 2B/2C 的 `MutationOutcome`/`EnsureAction`）；路径归 `adapter` 系
+  （`backends/<平台>` → `adapter/<平台>`、`backends/contracttest` →
+  `contracttest`、`backends/all` → `adapter/all`、`githubapp` →
+  `auth/githubapp`、`pkg/{credential,branchfilter,projection}` →
+  `auth/credential`、`filter/branchfilter`、`model/projection`——包名全部
+  不变，仅路径）。
+- **下游按 [`docs/MIGRATION.md`](docs/MIGRATION.md) 一次性迁移**：无 shim、
+  无 type alias、无双路径过渡，旧 import 路径本版起全部失效——编译器即
+  迁移清单（§1 路径主表 + §2 符号明细 + §3 五形态 before/after + §4 stdlib
+  `runtime` 撞名别名指引）。契约面（`Provider`/`Config`/`NewProvider`/
+  `Register`/`XxxManager`/`XxxOptions`/`ErrNotFound`/`ResolvePatch`/
+  `CapabilitySet`/`Divergence`/`Hooks`/`TokenSource`/`NormalizePageOpts`/
+  `Operation` 族…）原地不动；`EnsureSecretMode` 及其常量留在 `provider`
+  （不随 ensure 机器迁出，`runtime.EnsureSecretMode` 不存在——MIGRATION
+  §2.4）。
+
 ## [0.140.0] - 2026-11-16
 
 ### Fixed（2C 契约两修——issue 约定兑现）

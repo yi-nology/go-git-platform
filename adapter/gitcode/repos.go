@@ -1,0 +1,183 @@
+package gitcode
+
+import (
+	"context"
+
+	gitcode "github.com/yi-nology/go-gitcode"
+
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
+)
+
+// ListRepos implements provider.RepoManager. Owner rides the SDK options
+// and is interpolated into the /users/{owner}/repos path, where the SDK
+// escapes it as a path segment (issue #116: the SDK's pathf covers this
+// call site, retiring the #84 pre-escaping).
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
+	repos, err := p.client.ListRepositories(ctx, gitcode.ListRepositoriesOptions{
+		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
+		Owner:       opts.Owner,
+	})
+	if err != nil {
+		return nil, provider.Wrap(model.PlatformGitCode, "ListRepos", err)
+	}
+	result := make([]*model.PlatformRepo, 0, len(repos))
+	for _, r := range repos {
+		owner := ""
+		if r.Owner != nil {
+			owner = r.Owner.Login
+		}
+		result = append(result, &model.PlatformRepo{
+			ID:            r.ID,
+			FullName:      r.FullName,
+			Name:          r.Name,
+			Owner:         owner,
+			Description:   r.Description,
+			CloneURL:      r.CloneURL,
+			SSHURL:        r.SSHURL,
+			DefaultBranch: r.DefaultBranch,
+			Private:       r.Private,
+			Platform:      model.PlatformGitCode,
+		})
+	}
+	return result, nil
+}
+
+// GetRepo implements provider.RepoManager.
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
+	r, err := p.client.GetRepository(ctx, owner, repo)
+	if err != nil {
+		return nil, provider.Wrap(model.PlatformGitCode, "GetRepo", err)
+	}
+	ownerName := ""
+	if r.Owner != nil {
+		ownerName = r.Owner.Login
+	}
+	return &model.PlatformRepo{
+		ID:            r.ID,
+		FullName:      r.FullName,
+		Name:          r.Name,
+		Owner:         ownerName,
+		Description:   r.Description,
+		CloneURL:      r.CloneURL,
+		SSHURL:        r.SSHURL,
+		DefaultBranch: r.DefaultBranch,
+		Private:       r.Private,
+		Platform:      model.PlatformGitCode,
+	}, nil
+}
+
+// CreateRepo implements provider.RepoManager.
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
+	var r *gitcode.Repository
+	var err error
+	if owner != "" {
+		orgOpts := gitcode.CreateOrgRepoOptions{
+			Name:        opts.Name,
+			Description: opts.Description,
+			Private:     &opts.Private,
+			AutoInit:    &opts.AutoInit,
+		}
+		if opts.DefaultBranch != "" {
+			orgOpts.DefaultBranch = opts.DefaultBranch
+		}
+		r, err = p.client.CreateOrgRepository(ctx, owner, orgOpts)
+	} else {
+		r, err = p.client.CreateRepository(ctx, gitcode.CreateRepositoryOptions{
+			Name:        opts.Name,
+			Description: opts.Description,
+			Private:     &opts.Private,
+			AutoInit:    &opts.AutoInit,
+		})
+	}
+	if err != nil {
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateRepo", err)
+	}
+	ownerName := ""
+	if r.Owner != nil {
+		ownerName = r.Owner.Login
+	}
+	return &model.PlatformRepo{
+		ID:            r.ID,
+		FullName:      r.FullName,
+		Name:          r.Name,
+		Owner:         ownerName,
+		Description:   r.Description,
+		CloneURL:      r.CloneURL,
+		SSHURL:        r.SSHURL,
+		DefaultBranch: r.DefaultBranch,
+		Private:       r.Private,
+		Platform:      model.PlatformGitCode,
+	}, nil
+}
+
+// ForkRepo implements provider.RepoManager. opts.Name maps onto the fork
+// body's name field (renaming the fork at creation, issue #87); the fork
+// endpoint takes no organization — forks always land under the
+// authenticated user's namespace (registered divergence).
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
+	var forkOpts *gitcode.CreateRepositoryOptions
+	if opts.Name != "" {
+		forkOpts = &gitcode.CreateRepositoryOptions{Name: opts.Name}
+	}
+	r, err := p.client.ForkRepository(ctx, owner, repo, forkOpts)
+	if err != nil {
+		return nil, provider.Wrap(model.PlatformGitCode, "ForkRepo", err)
+	}
+	ownerName := ""
+	if r.Owner != nil {
+		ownerName = r.Owner.Login
+	}
+	return &model.PlatformRepo{
+		ID:            r.ID,
+		FullName:      r.FullName,
+		Name:          r.Name,
+		Owner:         ownerName,
+		Description:   r.Description,
+		CloneURL:      r.CloneURL,
+		SSHURL:        r.SSHURL,
+		DefaultBranch: r.DefaultBranch,
+		Private:       r.Private,
+		Platform:      model.PlatformGitCode,
+	}, nil
+}
+
+// DeleteRepo implements provider.RepoManager.
+func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
+	err := p.client.DeleteRepository(ctx, owner, repo)
+	if err != nil {
+		return provider.Wrap(model.PlatformGitCode, "DeleteRepo", err)
+	}
+	return nil
+}
+
+// UpdateRepo implements provider.RepoManager.
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
+	r, err := p.client.UpdateRepository(ctx, owner, repo, gitcode.UpdateRepositoryOptions{
+		Name:          opts.Name,
+		Description:   opts.Description,
+		DefaultBranch: opts.DefaultBranch,
+		Private:       opts.Private,
+	})
+	if err != nil {
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateRepo", err)
+	}
+	ownerName := ""
+	if r.Owner != nil {
+		ownerName = r.Owner.Login
+	}
+	return &model.PlatformRepo{
+		ID:            r.ID,
+		FullName:      r.FullName,
+		Name:          r.Name,
+		Owner:         ownerName,
+		Description:   r.Description,
+		CloneURL:      r.CloneURL,
+		SSHURL:        r.SSHURL,
+		DefaultBranch: r.DefaultBranch,
+		Private:       r.Private,
+		Platform:      model.PlatformGitCode,
+	}, nil
+}
+
+var _ provider.RepoManager = (*Provider)(nil)

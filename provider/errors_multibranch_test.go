@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/transport"
 )
 
@@ -22,7 +23,7 @@ import (
 // 呈多分支形态。
 
 func TestRateLimitRecovery_MultiBranchChain(t *testing.T) {
-	pe := &ProviderError{Platform: PlatformGitHub, Op: "ListRepos", StatusCode: 429, RetryAfter: 30 * time.Second}
+	pe := &ProviderError{Platform: model.PlatformGitHub, Op: "ListRepos", StatusCode: 429, RetryAfter: 30 * time.Second}
 	// 多分支节点：哨兵 + 带 hint 的 ProviderError 并列（errors.Join 形态）
 	multi := stderrors.Join(fmt.Errorf("%w: context lost", ErrRateLimited), pe)
 	outer := fmt.Errorf("op: %w", multi)
@@ -42,8 +43,8 @@ func TestRateLimitRecovery_MultiBranchChain(t *testing.T) {
 	}
 
 	// 分支序（depth-first preorder）：首个带 hint 的节点胜出
-	first := &ProviderError{Platform: PlatformGitHub, Op: "A", RetryAfter: 5 * time.Second}
-	second := &ProviderError{Platform: PlatformGitHub, Op: "B", RetryAfter: 9 * time.Second}
+	first := &ProviderError{Platform: model.PlatformGitHub, Op: "A", RetryAfter: 5 * time.Second}
+	second := &ProviderError{Platform: model.PlatformGitHub, Op: "B", RetryAfter: 9 * time.Second}
 	joined := stderrors.Join(first, second)
 	if ra, _, ok := RateLimitRecovery(joined); !ok || ra != 5*time.Second {
 		t.Fatalf("first matching branch must win: ra=%v ok=%v", ra, ok)
@@ -51,14 +52,14 @@ func TestRateLimitRecovery_MultiBranchChain(t *testing.T) {
 }
 
 func TestRateLimitRecovery_SingleBranchUnchanged(t *testing.T) {
-	pe := &ProviderError{Platform: PlatformGitHub, Op: "ListRepos", StatusCode: 429, RetryAfter: 30 * time.Second}
+	pe := &ProviderError{Platform: model.PlatformGitHub, Op: "ListRepos", StatusCode: 429, RetryAfter: 30 * time.Second}
 	ra, _, ok := RateLimitRecovery(fmt.Errorf("op: %w", pe))
 	if !ok || ra != 30*time.Second {
 		t.Fatalf("single-branch control: ra=%v ok=%v, want 30s true", ra, ok)
 	}
 	// ProviderError 无 hint 时继续下潜（旧行为保留）
-	peNoHint := &ProviderError{Platform: PlatformGitHub, Op: "A"}
-	inner := &ProviderError{Platform: PlatformGitHub, Op: "B", ResetAt: time.Unix(1, 0)}
+	peNoHint := &ProviderError{Platform: model.PlatformGitHub, Op: "A"}
+	inner := &ProviderError{Platform: model.PlatformGitHub, Op: "B", ResetAt: time.Unix(1, 0)}
 	nested := fmt.Errorf("%w: %w", peNoHint, inner)
 	if _, at, ok := RateLimitRecovery(nested); !ok || at.Unix() != 1 {
 		t.Fatalf("walk must descend past hint-less ProviderError: at=%v ok=%v", at, ok)
@@ -78,7 +79,7 @@ func TestWrap_MultiBranchChainKeepsStatusAndHints(t *testing.T) {
 		fmt.Errorf("server said: %w", statusErr))
 	outer := fmt.Errorf("ListRepos: %w", multi)
 
-	pe := Wrap(PlatformGitHub, "ListRepos", outer).(*ProviderError)
+	pe := Wrap(model.PlatformGitHub, "ListRepos", outer).(*ProviderError)
 	if pe.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("StatusCode = %d, want 429（多 %%w 链上状态码不得静默丢失）", pe.StatusCode)
 	}

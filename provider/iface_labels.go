@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // LabelManager provides repository-level label CRUD. It is an optional
 // capability interface: consumers should gate on Provider.Capabilities()
@@ -18,12 +22,12 @@ type LabelManager interface {
 	// ListLabels lists the repository's labels. Page semantics: exhaustive
 	// family (issue #60, see NormalizePageOpts) — Page == 0 walks every
 	// page and returns all labels; Page > 0 returns exactly that page.
-	ListLabels(ctx context.Context, owner, repo string, opts ListLabelsOptions) ([]*Label, error)
+	ListLabels(ctx context.Context, owner, repo string, opts ListLabelsOptions) ([]*model.Label, error)
 	// CreateLabel creates a repository label.
-	CreateLabel(ctx context.Context, owner, repo string, opts CreateLabelOptions) (*Label, error)
+	CreateLabel(ctx context.Context, owner, repo string, opts CreateLabelOptions) (*model.Label, error)
 	// UpdateLabel updates the label with the given name. Nil fields in opts
 	// are left unchanged.
-	UpdateLabel(ctx context.Context, owner, repo, name string, opts UpdateLabelOptions) (*Label, error)
+	UpdateLabel(ctx context.Context, owner, repo, name string, opts UpdateLabelOptions) (*model.Label, error)
 	// DeleteLabel deletes the label with the given name.
 	DeleteLabel(ctx context.Context, owner, repo, name string) error
 }

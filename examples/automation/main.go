@@ -21,8 +21,10 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
+	_ "github.com/yi-nology/go-git-platform/adapter/all" // register every platform
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 func main() {
@@ -30,9 +32,9 @@ func main() {
 	if token == "" {
 		log.Fatal("set PLATFORM_TOKEN to run this example")
 	}
-	platform := provider.Platform(os.Getenv("PLATFORM"))
+	platform := model.Platform(os.Getenv("PLATFORM"))
 	if platform == "" {
-		platform = provider.PlatformGitHub
+		platform = model.PlatformGitHub
 	}
 	owner := os.Getenv("PLATFORM_OWNER")
 	if owner == "" {
@@ -54,10 +56,10 @@ func main() {
 	// callback sees items as they arrive, and a platform that ignores the
 	// page parameter trips ErrPageBudgetExceeded instead of spinning.
 	var count, pages int
-	err = provider.Each(ctx, func(ctx context.Context, page int) ([]*provider.PlatformRepo, error) {
+	err = runtime.Each(ctx, func(ctx context.Context, page int) ([]*model.PlatformRepo, error) {
 		pages++
 		return p.ListRepos(ctx, provider.ListRepoOptions{Owner: owner, Page: page, PerPage: 100})
-	}, func(r *provider.PlatformRepo) error {
+	}, func(r *model.PlatformRepo) error {
 		count++
 		if count <= 3 {
 			fmt.Printf("  %s (stars=%d archived=%v)\n", r.FullName, r.Stars, r.Archived)
@@ -114,7 +116,7 @@ func demoEnsureWebhook(ctx context.Context, p provider.Provider, owner string) {
 	if hookURL == "" {
 		return
 	}
-	action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
+	action, hook, err := runtime.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
 		Owner: owner, Repo: "go-git-platform", URL: hookURL,
 		Events: []string{"push", "pull_request"},
 	})

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -16,66 +18,66 @@ type fakeProvider struct {
 	caps provider.CapabilitySet
 }
 
-func (f fakeProvider) Platform() provider.Platform { return provider.PlatformGitHub }
+func (f fakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (f fakeProvider) Capabilities() provider.CapabilitySet {
 	return f.caps
 }
-func (f fakeProvider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
-	return &provider.PlatformRepo{Owner: owner, Name: repo}, nil
+func (f fakeProvider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
+	return &model.PlatformRepo{Owner: owner, Name: repo}, nil
 }
-func (f fakeProvider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
-	return []*provider.PlatformRepo{{Owner: opts.Owner, Name: "r1"}}, nil
+func (f fakeProvider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
+	return []*model.PlatformRepo{{Owner: opts.Owner, Name: "r1"}}, nil
 }
 func (f fakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	return "contents of " + path, nil
 }
-func (f fakeProvider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
-	return []*provider.CommitInfo{{SHA: "abc123"}}, nil
+func (f fakeProvider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
+	return []*model.CommitInfo{{SHA: "abc123"}}, nil
 }
 func (f fakeProvider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
 	return "note-1", nil
 }
-func (f fakeProvider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
-	return []*provider.Issue{{Number: "1", Title: "broken thing"}}, 1, nil
+func (f fakeProvider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*model.Issue, int, error) {
+	return []*model.Issue{{Number: "1", Title: "broken thing"}}, 1, nil
 }
-func (f fakeProvider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	return &provider.Issue{Number: number, Title: "broken thing"}, nil
+func (f fakeProvider) GetIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	return &model.Issue{Number: number, Title: "broken thing"}, nil
 }
-func (f fakeProvider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
-	return &provider.Issue{Number: "2", Title: opts.Title}, nil
+func (f fakeProvider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*model.Issue, error) {
+	return &model.Issue{Number: "2", Title: opts.Title}, nil
 }
-func (f fakeProvider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	return &provider.IssueComment{Body: body}, nil
+func (f fakeProvider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*model.IssueComment, error) {
+	return &model.IssueComment{Body: body}, nil
 }
-func (f fakeProvider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func (f fakeProvider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	n := 1
-	return []*provider.SearchRepoResult{{FullName: "o/r1"}}, &n, nil
+	return []*model.SearchRepoResult{{FullName: "o/r1"}}, &n, nil
 }
-func (f fakeProvider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func (f fakeProvider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	return nil, nil, nil
 }
-func (f fakeProvider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func (f fakeProvider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	return nil, nil, nil
 }
-func (f fakeProvider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+func (f fakeProvider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*model.Issue, error) {
 	return nil, nil
 }
-func (f fakeProvider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+func (f fakeProvider) CloseIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
 	return nil, nil
 }
-func (f fakeProvider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
+func (f fakeProvider) ReopenIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
 	return nil, nil
 }
-func (f fakeProvider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
+func (f fakeProvider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error) {
 	return nil, nil
 }
-func (f fakeProvider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+func (f fakeProvider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*model.IssueComment, error) {
 	return nil, nil
 }
 func (f fakeProvider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
 	return nil
 }
-func (f fakeProvider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
+func (f fakeProvider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*model.IssueLabel, error) {
 	return nil, nil
 }
 func (f fakeProvider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
@@ -212,23 +214,23 @@ func TestReadOnlyToolCallRejected(t *testing.T) {
 
 // --- branch protection / collaborators / CR notes (fake extensions) ---
 
-func (f fakeProvider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	return []*provider.BranchProtection{{BranchName: "main"}}, nil
+func (f fakeProvider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*model.BranchProtection, error) {
+	return []*model.BranchProtection{{BranchName: "main"}}, nil
 }
-func (f fakeProvider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
-	return &provider.BranchProtection{BranchName: branch}, nil
+func (f fakeProvider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*model.BranchProtection, error) {
+	return &model.BranchProtection{BranchName: branch}, nil
 }
-func (f fakeProvider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	return &provider.BranchProtection{BranchName: opts.BranchName}, nil
+func (f fakeProvider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
+	return &model.BranchProtection{BranchName: opts.BranchName}, nil
 }
-func (f fakeProvider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
-	return &provider.BranchProtection{BranchName: branch}, nil
+func (f fakeProvider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
+	return &model.BranchProtection{BranchName: branch}, nil
 }
 func (f fakeProvider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
 	return nil
 }
-func (f fakeProvider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
-	return []*provider.Collaborator{{Username: "dev", Permission: "write"}}, nil
+func (f fakeProvider) ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error) {
+	return []*model.Collaborator{{Username: "dev", Permission: "write"}}, nil
 }
 func (f fakeProvider) AddCollaborator(ctx context.Context, owner, repo, username string, opts provider.AddCollaboratorOptions) error {
 	return nil
@@ -236,11 +238,11 @@ func (f fakeProvider) AddCollaborator(ctx context.Context, owner, repo, username
 func (f fakeProvider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
 	return nil
 }
-func (f fakeProvider) ListNotes(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	return []*provider.IssueComment{{Body: "first"}}, nil
+func (f fakeProvider) ListNotes(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error) {
+	return []*model.IssueComment{{Body: "first"}}, nil
 }
-func (f fakeProvider) UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*provider.IssueComment, error) {
-	return &provider.IssueComment{Body: body}, nil
+func (f fakeProvider) UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*model.IssueComment, error) {
+	return &model.IssueComment{Body: body}, nil
 }
 
 // TestProtectionCollaboratorNoteToolsets pins the capability-gated mounting

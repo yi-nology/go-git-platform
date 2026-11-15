@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // StarredManager 列出认证用户 star 过的仓库。可选能力接口:使用前先看
 // Provider.Capabilities().Starred(或类型断言)。
@@ -12,5 +16,5 @@ import "context"
 type StarredManager interface {
 	// ListStarred 分页列出认证用户 star 的仓库(GET /user/starred)。
 	// page/perPage 语义与其他分页方法一致,非法值经 NormalizePageOpts 归一。
-	ListStarred(ctx context.Context, page, perPage int) ([]*PlatformRepo, error)
+	ListStarred(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error)
 }

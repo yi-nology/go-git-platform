@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // CollaboratorManager provides repository collaborator management. It is
 // an optional capability interface: consumers should gate on
@@ -13,7 +17,7 @@ import "context"
 // vocabulary maps onto platform access levels (registered mappings).
 type CollaboratorManager interface {
 	// ListCollaborators returns all collaborators on a repository.
-	ListCollaborators(ctx context.Context, owner, repo string) ([]*Collaborator, error)
+	ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error)
 	// AddCollaborator adds a user as a collaborator. Permission is
 	// platform-specific ("read", "write", "admin"; empty = default).
 	AddCollaborator(ctx context.Context, owner, repo, username string, opts AddCollaboratorOptions) error

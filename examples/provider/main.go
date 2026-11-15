@@ -10,7 +10,8 @@ import (
 	"log"
 	"os"
 
-	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
+	_ "github.com/yi-nology/go-git-platform/adapter/all" // register every platform
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -20,10 +21,10 @@ func main() {
 		log.Fatal("set PLATFORM_TOKEN to run this example")
 	}
 
-	// The same call works for any provider.Platform — gitlab, gitea, gitee,
+	// The same call works for any model.Platform — gitlab, gitea, gitee,
 	// forgejo, gitcode, tencent_code.
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		Token:    token,
 	})
 	if err != nil {

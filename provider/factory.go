@@ -1,10 +1,14 @@
 package provider
 
-import oekiterrors "github.com/oekit/pkg/errors"
+import (
+	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // Config holds the configuration for creating a Provider.
 type Config struct {
-	Platform Platform
+	Platform model.Platform
 	BaseURL  string
 	Token    string
 	SkipTLS  bool
@@ -41,7 +45,7 @@ type Config struct {
 // Returns ErrPlatformNotSupported if the platform is not registered.
 //
 // Platform backends are registered via init() functions. Import
-// "github.com/yi-nology/go-git-platform/backends/all" with a blank
+// "github.com/yi-nology/go-git-platform/adapter/all" with a blank
 // identifier to register every platform shipped with the SDK.
 func NewProvider(cfg Config) (Provider, error) {
 	ctor, ok := registry.Get(cfg.Platform)

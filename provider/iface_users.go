@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // UserManager provides user lookup and username-to-ID resolution. It is
 // an optional capability interface: consumers should gate on
@@ -15,12 +19,12 @@ import "context"
 // validate that a username exists before passing it to other operations.
 type UserManager interface {
 	// GetUser returns the user profile for the given username.
-	GetUser(ctx context.Context, username string) (*CRUser, error)
+	GetUser(ctx context.Context, username string) (*model.CRUser, error)
 
 	// ResolveUsernames maps a list of usernames to their platform IDs.
 	// The returned slice preserves input order; each entry's ID field
 	// carries the resolved numeric ID. If a username cannot be resolved,
 	// an error is returned for that entry (the partial result up to that
 	// point is still valid).
-	ResolveUsernames(ctx context.Context, usernames []string) ([]*CRUser, error)
+	ResolveUsernames(ctx context.Context, usernames []string) ([]*model.CRUser, error)
 }

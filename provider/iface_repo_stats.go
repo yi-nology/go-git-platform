@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // RepoStatsManager provides read-only repository statistics: forks,
 // stargazers, and contributors. It is an optional capability interface:
@@ -13,9 +17,9 @@ import "context"
 // implements at least one method.
 type RepoStatsManager interface {
 	// ListForks returns all forks of the repository.
-	ListForks(ctx context.Context, owner, repo string) ([]*PlatformRepo, error)
+	ListForks(ctx context.Context, owner, repo string) ([]*model.PlatformRepo, error)
 	// ListStargazers returns users who have starred the repository.
-	ListStargazers(ctx context.Context, owner, repo string) ([]*CRUser, error)
+	ListStargazers(ctx context.Context, owner, repo string) ([]*model.CRUser, error)
 	// ListContributors returns contributors ranked by commit count.
-	ListContributors(ctx context.Context, owner, repo string) ([]*Contributor, error)
+	ListContributors(ctx context.Context, owner, repo string) ([]*model.Contributor, error)
 }

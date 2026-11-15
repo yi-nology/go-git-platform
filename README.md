@@ -22,7 +22,7 @@ A unified Go SDK for 7 Git hosting platforms — plus local git operations, CI-f
 - **Capability-gated optional APIs** — 23 optional capability interfaces declared via `Capabilities()`; absence is expressed by not declaring, never by stub methods
 - **CI failure diagnostics** — `CILogManager` (GitHub / GitLab / Gitea / GitCode) returns failed jobs with the tail of their execution logs, sized for LLM consumption; declared via `Capabilities().CILogs`
 - **Agent/automation primitives** — `WaitForCommitStatus` (CI gates), bounded-concurrency batch file reads, page-walking iterators (`Each`/`Collect`), field `projection` to shrink payloads before feeding LLMs
-- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
+- **Rotating credentials** — `Config.TokenSource` supplies the access token per request, so expiring credentials (GitHub App installation tokens, OAuth) rotate without rebuilding the provider; the `auth/githubapp` package mints the RS256 JWT and its caching `InstallationTokenSource` exchanges it once per hour
 - **Conditional requests** — opt-in `Config.ConditionalRequests` sends `If-None-Match` and replays cached 304s as 200s; on GitHub, 304s don't count against the rate-limit budget
 - **Idempotent ensure-helpers** — `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` converge desired state (created/updated/unchanged), safe to re-run
 - **Webhook event corpus** — per-backend golden fixtures pin the normalized event vocabulary (`cr./push/tag./branch./issue./comment.`) across all seven platforms
@@ -43,13 +43,14 @@ import (
     "fmt"
     "log"
 
-    _ "github.com/yi-nology/go-git-platform/backends/all" // registers all platforms
+    _ "github.com/yi-nology/go-git-platform/adapter/all" // registers all platforms
+    "github.com/yi-nology/go-git-platform/model"
     "github.com/yi-nology/go-git-platform/provider"
 )
 
 func main() {
     p, err := provider.NewProvider(provider.Config{
-        Platform: provider.PlatformGitHub,
+        Platform: model.PlatformGitHub,
         Token:    "ghp_...",
     })
     if err != nil {
@@ -157,16 +158,16 @@ In CI, dispatch the **smoke** GitHub Actions workflow manually (`workflow_dispat
 ### 架构亮点
 
 - **统一传输层** (`transport/`): 所有平台共享 auth/retry/hooks/rate-limit/logger 管道, 第三方 SDK (go-github, gitlab client-go 等) 通过 `http.RoundTripper` 包装接入
-- **按平台拆包** (`backends/<platform>/`): 每个平台独立包, 按职责拆文件 (repos/crs/webhooks/branches/commits/files/diffs/releases)
-- **契约测试** (`backends/contracttest/`): 跨平台统一测试套件, 确保接口行为一致
+- **按平台拆包** (`adapter/<platform>/`): 每个平台独立包, 按职责拆文件 (repos/crs/webhooks/branches/commits/files/diffs/releases)
+- **契约测试** (`contracttest/`): 跨平台统一测试套件, 确保接口行为一致
 - **分歧台账** (`Divergence`): 每个后端把与统一语义的偏离 (stub/ignore/mapping/detour) 机器可读地登记, 由 `Provider.Divergences()` 与 `provider.Ignores` 等谓词暴露; 渲染文档在 [docs/divergence-ledger.md](docs/divergence-ledger.md), 编辑后用 `go generate ./...` 再生成。契约套件会在台账与实际行为漂移时失败
 - **错误归一** (`provider.ProviderError`): 经 `statusCoder` 接口与各后端注册的 `StatusExtractor`(`provider.RegisterStatusExtractor`) 提取 HTTP 状态码并分类到哨兵错误——无 reflection、无错误消息解析(v0.83.0 起); 平台 SDK 错误统一经 `oekiterrors.Wrap` 携带 kv 结构化上下文
 - **oekit 底层生态**: goroutine 经 `oekit/concurrency/async` 启动(panic 自动 recover, 批处理单项 panic 转为该项 Err); 错误包装用 `oekit/pkg/errors.Wrap`(nil-safe + kv); 并发注册表走 `oekit/pkg/container.SafeMap`(平台/后端/validator/凭据表)、有序注册表走 `pkg/container.Slice`(host 别名表,AppendIfAbsent 原子查重追加); 可选接入 `oekit/logx`(`provider.NewLogxLogger`, 随消费方 `logx.SetDefault` 懒解析跟随)。规则见 [AGENTS.md](AGENTS.md)
 - **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群); 限流类错误携带 `Retry-After`/`ResetAt` 恢复窗口 (`provider.RateLimitRecovery`)
-- **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效; 顶层 `githubapp` 包提供 JWT 铸造 + installation token 换取, 可直接作为 TokenSource 接入
+- **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效; 顶层 `auth/githubapp` 包提供 JWT 铸造 + installation token 换取, 可直接作为 TokenSource 接入
 - **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额
 - **期望态助手**: `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` 幂等收敛 (created/updated/unchanged)
-- **泛型分页迭代器**: `provider.Each` / `Collect`(带 Bounded 变体)逐页惰性遍历, 空页终止 + 页预算硬错误, 不再手写 page++ 循环
+- **泛型分页迭代器**: `runtime.Each` / `Collect`(带 Bounded 变体)逐页惰性遍历, 空页终止 + 页预算硬错误, 不再手写 page++ 循环
 - **版本可观测**: `provider.Version()` + 默认 `User-Agent: ...go-git-platform/<ver>` 产品标识; `transport/metrics` 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)
 - **安全默认**:
   - HTTPS 令牌经**临时 credential helper** 注入 git —— 不进 argv、不进子进程环境变量、绝不落盘到主机凭证库 (钥匙串/~/.git-credentials)
@@ -189,15 +190,17 @@ import (
     "fmt"
     "log"
 
-    _ "github.com/yi-nology/go-git-platform/backends/all" // 注册所有平台
+    _ "github.com/yi-nology/go-git-platform/adapter/all" // 注册所有平台
+    "github.com/yi-nology/go-git-platform/model"
     "github.com/yi-nology/go-git-platform/provider"
+    "github.com/yi-nology/go-git-platform/runtime"
 )
 
 func main() {
     ctx := context.Background()
 
     // 方式 1: 自动检测平台
-    result, err := provider.DetectPlatform("https://github.com/owner/repo.git")
+    result, err := runtime.DetectPlatform("https://github.com/owner/repo.git")
     if err != nil {
         log.Fatal(err)
     }
@@ -205,7 +208,7 @@ func main() {
 
     // 方式 2: 手动指定平台
     p, err := provider.NewProvider(provider.Config{
-        Platform: provider.PlatformGitHub,
+        Platform: model.PlatformGitHub,
         Token:    "your-token",
     })
     if err != nil {
@@ -221,8 +224,8 @@ func main() {
 }
 ```
 
-> **重要**: 必须空白导入 `backends/all` 才能注册所有平台后端。
-> 只需要特定平台时可单独导入, 例如 `_ "github.com/yi-nology/go-git-platform/backends/github"`。
+> **重要**: 必须空白导入 `adapter/all` 才能注册所有平台后端。
+> 只需要特定平台时可单独导入, 例如 `_ "github.com/yi-nology/go-git-platform/adapter/github"`。
 
 ## 平台检测
 
@@ -230,16 +233,16 @@ SDK 支持自动检测远程 URL 对应的平台:
 
 ```go
 // HTTPS URL
-result, _ := provider.DetectPlatform("https://github.com/owner/repo.git")
-// result.Platform == provider.PlatformGitHub
+result, _ := runtime.DetectPlatform("https://github.com/owner/repo.git")
+// result.Platform == model.PlatformGitHub
 
 // SSH URL
-result, _ = provider.DetectPlatform("git@gitlab.com:owner/repo.git")
-// result.Platform == provider.PlatformGitLab
+result, _ = runtime.DetectPlatform("git@gitlab.com:owner/repo.git")
+// result.Platform == model.PlatformGitLab
 
 // 自托管实例
-result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git")
-// result.Platform == provider.PlatformGitea (默认)
+result, _ = runtime.DetectPlatform("https://my-gitea.example.com/owner/repo.git")
+// result.Platform == model.PlatformGitea (默认)
 ```
 
 ## API 使用
@@ -247,10 +250,10 @@ result, _ = provider.DetectPlatform("https://my-gitea.example.com/owner/repo.git
 ### Provider Manager(带缓存 + 统计)
 
 ```go
-import "github.com/yi-nology/go-git-platform/provider"
+import "github.com/yi-nology/go-git-platform/runtime"
 
 // 缓存 30 分钟过期, 最多 100 个 provider
-mgr := provider.NewManager(30*time.Minute, provider.WithMaxSize(100))
+mgr := runtime.NewManager(30*time.Minute, runtime.WithMaxSize(100))
 
 // 后台 janitor 每 5 分钟清理过期条目
 ctx, cancel := context.WithCancel(context.Background())
@@ -324,27 +327,27 @@ if cl, ok := p.(provider.CILogManager); ok {
 
 ```go
 // CI 门禁: 轮询等待提交状态到终态(错误优先级同 GitHub combined status)
-state, err := provider.WaitForCommitStatus(ctx, p, "o", "r", "sha",
-    provider.WaitOptions{Timeout: 10 * time.Minute, Contexts: []string{"ci/test"}})
+state, err := runtime.WaitForCommitStatus(ctx, p, "o", "r", "sha",
+    runtime.WaitOptions{Timeout: 10 * time.Minute, Contexts: []string{"ci/test"}})
 
 // 批量: 有界并发读取多个文件, 单项失败不影响整批
-results := provider.GetFileContents(ctx, p, "o", "r", "main", []string{
+results := runtime.GetFileContents(ctx, p, "o", "r", "main", []string{
     "README.md", "go.mod", "Makefile",
-}, provider.BatchOptions{Concurrency: 4})
+}, runtime.BatchOptions{Concurrency: 4})
 
 // 投影: 把统一模型裁剪成只含选定字段, 喂给 LLM 前省上下文
 doc, _ := projection.Project(cr, "number", "title", "head.ref", "state")
 
 // 分页: 逐页惰性遍历全量列表(空页终止, 平台忽略 page 参数时页预算兜底报错)
-err := provider.Each(ctx, func(ctx context.Context, page int) ([]*provider.PlatformRepo, error) {
+err := runtime.Each(ctx, func(ctx context.Context, page int) ([]*model.PlatformRepo, error) {
     return p.ListRepos(ctx, provider.ListRepoOptions{Owner: "org", Page: page, PerPage: 100})
-}, func(r *provider.PlatformRepo) error {
+}, func(r *model.PlatformRepo) error {
     fmt.Println(r.FullName)
-    return nil // provider.ErrStopIteration 可提前止步
+    return nil // runtime.ErrStopIteration 可提前止步
 })
 
 // 期望态: 幂等创建或修复 webhook, 重跑安全(created/updated/unchanged)
-action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
+action, hook, err := runtime.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
     Owner: "o", Repo: "r", URL: "https://ci.example.com/hook",
     Events: []string{"push", "pull_request"},
 })
@@ -363,20 +366,20 @@ SDK 内置多种 Webhook 签名验证策略(HMAC-SHA256 / SHA1 / GitLab token / 
 
 ```go
 // 默认注册表(init 时自动注册所有平台)
-err := provider.DefaultWebhookRegistry().Validate(
-    provider.PlatformGitHub, r, body, secret,
+err := runtime.DefaultWebhookRegistry().Validate(
+    model.PlatformGitHub, r, body, secret,
 )
 
 // 自定义验证器
-registry := provider.NewWebhookValidatorRegistry()
-registry.Register(provider.Platform("custom"), provider.HMACSHA256Validator{Header: "X-Custom-Sig"})
+registry := runtime.NewWebhookValidatorRegistry()
+registry.Register(model.Platform("custom"), runtime.HMACSHA256Validator{Header: "X-Custom-Sig"})
 ```
 
 ### 配置
 
 ```go
 p, err := provider.NewProvider(provider.Config{
-    Platform: provider.PlatformGitHub,
+    Platform: model.PlatformGitHub,
     BaseURL:  "https://github.example.com/api/v3", // 可选, 用于自托管
     Token:    "your-token",
     SkipTLS:  true,                                 // 可选, 跳过 TLS 验证
@@ -401,7 +404,7 @@ p, err := provider.NewProvider(provider.Config{
 
 ```go
 p, err := provider.NewProvider(provider.Config{
-    Platform: provider.PlatformGitHub,
+    Platform: model.PlatformGitHub,
     // TokenSource 优先于 Token: 每请求取 token, 过期凭证轮换下一请求即生效
     TokenSource: rotatingSource,
     // ConditionalRequests: GET 携带 If-None-Match, 304 透明回放缓存的 200
@@ -410,7 +413,7 @@ p, err := provider.NewProvider(provider.Config{
 })
 ```
 
-GitHub App 凭证两步曲已下沉为顶层 `githubapp` 包: `MintJWT`(RS256 签名) + `FetchInstallationToken`(换短期 installation token), 配合 `Config.TokenSource` 即为完整的每小时轮换链路。
+GitHub App 凭证两步曲已下沉为顶层 `auth/githubapp` 包: `MintJWT`(RS256 签名) + `FetchInstallationToken`(换短期 installation token), 配合 `Config.TokenSource` 即为完整的每小时轮换链路。
 
 ## Git 后端操作
 
@@ -482,10 +485,10 @@ backend.Clone(ctx, gitbackend.CloneOptions{
 腾讯工蜂 backend 额外实现了 `TencentCodeExtras` 接口, 暴露工蜂独有的功能:
 
 ```go
-import "github.com/yi-nology/go-git-platform/backends/tencentcode"
+import "github.com/yi-nology/go-git-platform/adapter/tencentcode"
 
 p, _ := provider.NewProvider(provider.Config{
-    Platform: provider.PlatformTencentCode,
+    Platform: model.PlatformTencentCode,
     Token:    "your-token",
 })
 
@@ -548,27 +551,55 @@ backend 所依赖的工蜂 SDK，v0.1.0 起））：
 
 ## 项目结构
 
+四层单向依赖（规则详见 [AGENTS.md](AGENTS.md)，边表见 spec §4.1）：
+
+- `model` — 纯域实体与 `Platform` 枚举，零仓内依赖（叶子）；
+- `provider` — 契约缝：接口/选项/错误/patch 三态/Capability/Divergence/工厂注册表/Logger/Hooks/TokenSource/共享纯助手/Version()，只准向下看 `model`；
+- `runtime` — 机器层：平台检测、Ensure* 期望态、CI 门禁等待、有界批量、分页迭代、webhook 验证、token 缓存 Manager，依赖 `provider+model`；
+- `adapter` — 七平台实现 + `adapter/internal`（giteafamily/backendutil）+ `adapter/all` 注册器，依赖 `provider+runtime+model` + 自家 internal；
+- `contracttest` — 跨平台契约套件，只看 `provider+runtime+model`；`auth/`（githubapp/credential）与 `filter/branchfilter` 是零依赖叶子。反向 import 一律禁止。
+
 ```
 go-git-platform/
-├── provider/                    # 公共 API (类型 + 接口 + 工厂 + Manager)
+├── model/                       # 纯域实体 (叶子, 零仓内依赖)
+│   ├── platform.go              # Platform 枚举 + 七平台常量
+│   ├── cr.go issue.go review.go repo.go event.go search.go notification.go
+│   ├── gist.go release.go ci.go migration.go file.go
+│   ├── commitstatus.go deployments.go mentions.go
+│   └── projection/              # 字段投影 (LLM/agent 上下文经济)
+│
+├── provider/                    # 契约缝: 接口 + 选项 + 错误 + 工厂 + 能力/分歧
 │   ├── provider.go              # Provider 接口 + CapabilitySet (23 项能力声明)
 │   ├── options.go               # 所有 Options/Result 类型 (集中定义)
 │   ├── errors.go                # ProviderError + Wrap/New 助手 + 状态码反射
+│   ├── capabilities.go divergence.go operation.go patch.go
+│   ├── factory.go registry.go   # 平台注册 + NewProvider
+│   ├── logger.go middleware.go retry.go tokensource.go version.go
+│   ├── stateutil.go diffutil.go files.go pagination.go
+│   └── iface_*.go               # 27 个能力接口族 (数据实体已剥离到 model)
+│
+├── runtime/                     # 机器层: 检测/期望态/门禁/批量/分页/缓存/验证
+│   ├── detect.go manager.go     # 平台自动检测 + TTL 缓存 Manager (SHA256 键 + Janitor)
+│   ├── ensure.go ensure_issue.go # EnsureWebhook/BranchProtection/DeployKey/Issue 期望态收敛
+│   ├── wait.go batch.go pageiter.go # CI 门禁等待 + 有界并发批量 + Each/Collect 分页迭代
 │   ├── webhook.go               # WebhookValidator 接口 + 注册表 + 策略
-│   ├── manager.go               # TTL 缓存 Manager (SHA256 键 + Stats + Janitor)
-│   ├── detect.go                # 平台自动检测
-│   ├── factory.go / registry.go # 平台注册 + NewProvider
-│   ├── pagination.go            # NormalizePageOpts + X-Total-Count 解析
-│   ├── pageiter.go              # Each/Collect 泛型分页迭代器 (空页终止+页预算)
-│   ├── ensure.go                # EnsureWebhook/BranchProtection/DeployKey 期望态收敛
-│   ├── tokensource.go           # 可刷新 TokenSource + StaticTokenSource
-│   ├── version.go               # provider.Version() (buildinfo)
-│   ├── diffutil.go / stateutil.go / convertutil.go
-│   ├── wait.go / batch.go       # Agent 原语: CI 门禁等待 + 有界并发批量
-│   ├── commitstatus.go          # 提交状态工具
-│   ├── divergence.go            # 分歧台账类型 + 谓词
-│   ├── iface_ci.go              # CILogManager (可选, GitHub/GitLab/Gitea/GitCode)
-│   └── iface_*.go               # 其余 20+ 子接口 (按领域拆分)
+│   └── janitor.go ttlcache.go timeparse.go convertutil.go doc.go
+│
+├── adapter/                     # 平台实现 (包名逐目录不变)
+│   ├── github/ gitlab/ gitea/ forgejo/ gitee/ gitcode/ tencentcode/
+│   ├── internal/
+│   │   ├── giteafamily/         # Gitea/Forgejo 家族共享逻辑
+│   │   └── backendutil/         # HTTP client / retry / hooks 共享管线
+│   └── all/                     # 一行 blank import 注册所有平台 + README 矩阵对账
+│
+├── contracttest/                # 跨平台契约套件 (语料驱动; golden 语料在 adapter/<platform>/testdata/webhooks)
+│
+├── auth/
+│   ├── githubapp/               # GitHub App 凭证: MintJWT + FetchInstallationToken
+│   └── credential/              # 凭证管理 + AES-GCM 加密 + SSH 命令构建
+│
+├── filter/
+│   └── branchfilter/            # 分支过滤
 │
 ├── transport/                   # 统一 HTTP 传输层
 │   ├── client.go                # Client + Do/DoJSON/DoRaw + RoundTripper + AuthStrategy
@@ -578,43 +609,32 @@ go-git-platform/
 │   ├── tokensource.go           # 每请求取 token 的 AuthStrategy
 │   ├── useragent.go             # 默认 User-Agent 产品标识
 │   ├── metrics/                 # 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)
-│   ├── hooks.go / errors.go / logger.go
-│
-├── githubapp/                   # GitHub App 凭证: MintJWT + FetchInstallationToken
-
-├── backends/                    # 平台实现 (每个独立包)
-│   ├── github/                  # GitHub (go-github SDK + transport 包装)
-│   ├── gitlab/                  # GitLab (client-go SDK + transport 包装, 含 CI 日志/行内评论)
-│   ├── gitea/  forgejo/         # Gitea / Forgejo (各自 SDK + transport 包装)
-│   ├── gitcode/                 # GitCode (go-gitcode SDK)
-│   ├── gitee/                   # Gitee (go-gitee SDK + transport 包装)
-│   ├── tencentcode/             # 腾讯工蜂 (transport.Client + Extras 专属能力)
-│   ├── all/                     # 一行 blank import 注册所有平台
-│   └── contracttest/            # 跨平台契约套件 + webhook 事件语料库 (testdata/webhooks)
+│   └── hooks.go / errors.go / logger.go
 │
 ├── gitbackend/                  # 本地 Git 操作 (native + gogit 双后端)
 │   ├── native*.go               # 原生 git 后端 (argguard 白名单 + 冲突检测)
 │   ├── gogit*.go                # go-git 后端
 │   ├── credhelper.go            # 令牌临时 credential helper (不进 argv/env)
-│   ├── sshpincache.go           # SSH 指纹钉扎 (keyscan 预校验, fail-closed)
+│   ├── sshpin.go                # SSH 指纹钉扎 (keyscan 预校验, fail-closed)
 │   └── repository.go / backend.go / iface.go
-│
-├── pkg/
-│   ├── branchfilter/            # 分支过滤
-│   ├── credential/              # 凭证管理 + AES-GCM 加密 + SSH 命令构建
-│   └── projection/              # 字段投影 (LLM/agent 上下文经济)
 │
 ├── mcp/                         # MCP server 独立模块 (独立 go.mod)
 │   ├── server.go / tools_*.go   # toolsets + 能力门控 + 读写分离
 │   └── cmd/go-git-platform-mcp/ # stdio 入口
 │
+├── internal/
+│   ├── version/                 # 构建版本标识 (buildinfo)
+│   └── tools/genledger/         # 分歧台账再生成器 (go generate)
+│
 ├── docs/
 │   ├── divergence-ledger.md     # 渲染后的分歧台账 (go generate 再生成)
+│   ├── error-classification.md  # 错误分类单源文档
 │   └── v1.0-readiness.md        # 1.0 路线
+├── smoke/                       # 环境变量门控的真环境只读探针
 ├── examples/                    # automation/capabilities/credential/gitbackend/logging/notification/provider/reaction/webhook
 ├── Makefile                     # test/lint/fmt/cover 等命令
 ├── .golangci.yml                # lint 配置
-└── go.mod
+└── go.mod / go.work
 ```
 
 ## 开发
@@ -636,10 +656,10 @@ make cover      # 打印覆盖率摘要
 
 ### 添加新平台
 
-1. 创建 `backends/<platform>/` 目录
-2. 实现 `provider.Provider` 接口 (参考 `backends/gitee/` 作为模板)
+1. 创建 `adapter/<platform>/` 目录
+2. 实现 `provider.Provider` 接口 (参考 `adapter/gitee/` 作为模板)
 3. 添加 `init.go` 注册到 `provider.Register`
-4. 在 `backends/all/all.go` 添加 blank import
+4. 在 `adapter/all/all.go` 添加 blank import
 5. 创建 `contract_test.go` 调用 `contracttest.Run` 验证契约
 6. 登记 `divergence.go` 分歧台账并 `go generate ./...` 再渲染
 

@@ -3,6 +3,8 @@ package provider
 import (
 	"fmt"
 	"strings"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // CountDiffLines counts additions and deletions in a unified diff string.
@@ -21,7 +23,7 @@ func CountDiffLines(diff string) (additions, deletions int) {
 }
 
 // BuildRawDiff constructs a raw diff string from a list of ChangedFiles.
-func BuildRawDiff(files []*ChangedFile) string {
+func BuildRawDiff(files []*model.ChangedFile) string {
 	var b strings.Builder
 	for _, f := range files {
 		fmt.Fprintf(&b, "diff --git a/%s b/%s\n", f.OldPath, f.NewPath)
@@ -47,7 +49,7 @@ func BuildRawDiff(files []*ChangedFile) string {
 }
 
 // SumDiffStats returns total additions and deletions from a list of ChangedFiles.
-func SumDiffStats(files []*ChangedFile) (additions, deletions int) {
+func SumDiffStats(files []*model.ChangedFile) (additions, deletions int) {
 	for _, f := range files {
 		additions += f.Additions
 		deletions += f.Deletions
