@@ -43,7 +43,7 @@ import (
     "fmt"
     "log"
 
-    _ "github.com/yi-nology/go-git-platform/backends/all" // registers all platforms
+    _ "github.com/yi-nology/go-git-platform/adapter/all" // registers all platforms
     "github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -189,7 +189,7 @@ import (
     "fmt"
     "log"
 
-    _ "github.com/yi-nology/go-git-platform/backends/all" // 注册所有平台
+    _ "github.com/yi-nology/go-git-platform/adapter/all" // 注册所有平台
     "github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -222,7 +222,7 @@ func main() {
 ```
 
 > **重要**: 必须空白导入 `backends/all` 才能注册所有平台后端。
-> 只需要特定平台时可单独导入, 例如 `_ "github.com/yi-nology/go-git-platform/backends/github"`。
+> 只需要特定平台时可单独导入, 例如 `_ "github.com/yi-nology/go-git-platform/adapter/github"`。
 
 ## 平台检测
 
@@ -482,7 +482,7 @@ backend.Clone(ctx, gitbackend.CloneOptions{
 腾讯工蜂 backend 额外实现了 `TencentCodeExtras` 接口, 暴露工蜂独有的功能:
 
 ```go
-import "github.com/yi-nology/go-git-platform/backends/tencentcode"
+import "github.com/yi-nology/go-git-platform/adapter/tencentcode"
 
 p, _ := provider.NewProvider(provider.Config{
     Platform: provider.PlatformTencentCode,

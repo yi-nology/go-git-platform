@@ -12,7 +12,7 @@
 // Start with NewProvider and the blank import that registers every shipped
 // backend:
 //
-//	import _ "github.com/yi-nology/go-git-platform/backends/all"
+//	import _ "github.com/yi-nology/go-git-platform/adapter/all"
 //
 //	p, err := provider.NewProvider(provider.Config{
 //	    Platform: model.PlatformGitHub,

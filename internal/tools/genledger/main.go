@@ -10,13 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yi-nology/go-git-platform/backends/forgejo"
-	"github.com/yi-nology/go-git-platform/backends/gitcode"
-	"github.com/yi-nology/go-git-platform/backends/gitea"
-	"github.com/yi-nology/go-git-platform/backends/gitee"
-	"github.com/yi-nology/go-git-platform/backends/github"
-	"github.com/yi-nology/go-git-platform/backends/gitlab"
-	"github.com/yi-nology/go-git-platform/backends/tencentcode"
+	"github.com/yi-nology/go-git-platform/adapter/forgejo"
+	"github.com/yi-nology/go-git-platform/adapter/gitcode"
+	"github.com/yi-nology/go-git-platform/adapter/gitea"
+	"github.com/yi-nology/go-git-platform/adapter/gitee"
+	"github.com/yi-nology/go-git-platform/adapter/github"
+	"github.com/yi-nology/go-git-platform/adapter/gitlab"
+	"github.com/yi-nology/go-git-platform/adapter/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 

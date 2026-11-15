@@ -1,0 +1,249 @@
+package github_test
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	sdkgithub "github.com/google/go-github/v93/github"
+
+	ghbackend "github.com/yi-nology/go-git-platform/adapter/github"
+	"github.com/yi-nology/go-git-platform/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
+)
+
+// TestGitHub_Contract runs the cross-platform contract suite against the
+// GitHub backend.
+func TestGitHub_Contract(t *testing.T) {
+	contracttest.Run(t, contracttest.Harness{
+		Name:     "GitHub",
+		Platform: model.PlatformGitHub,
+		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
+			cfg.BaseURL = cfg.BaseURL + "/api/v3"
+			p, err := provider.NewProvider(cfg)
+			if err != nil {
+				t.Fatalf("NewProvider: %v", err)
+			}
+			return p
+		},
+		EmptyListResponse:    "[]",
+		NonEmptyListResponse: githubNonEmptyList(),
+		Labels: &contracttest.LabelsHarnessConfig{
+			ListResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			MutateResponse: `{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}`,
+		},
+		Issues: &contracttest.IssuesHarnessConfig{
+			ListResponse:     `[{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"number":1,"title":"v1"},"labels":[{"id":1,"name":"bug","color":"4cc917"}],"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:      `{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"number":1,"title":"v1"},"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse:   `{"number":1,"title":"bug","state":"open","user":{"login":"dev"},"milestone":{"number":1,"title":"v1"},"html_url":"https://example.com/1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			CommentsResponse: `[{"id":1,"body":"a comment","user":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			LabelsResponse:   `[{"id":1,"name":"bug","color":"#4cc917","description":"something broke"}]`,
+			// 2A 三态能力矩阵：GitHub 四字段中三字段 A 级、milestone B 级
+			// （go-github Milestone *int omitempty 发不出 null）。
+			IssueClear: map[string]contracttest.ClearExpect{
+				"body":      {BodyField: "body"},
+				"assignees": {BodyField: "assignees"},
+				"labels":    {BodyField: "labels"},
+				"milestone": {Unsupported: true},
+			},
+		},
+		Reviews: &contracttest.ReviewsHarnessConfig{
+			ListResponse:   `[{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}]`,
+			GetResponse:    `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
+			MutateResponse: `{"id":1,"user":{"login":"dev"},"state":"APPROVED","body":"looks good","submitted_at":"2026-01-01T00:00:00Z","html_url":"https://example.com/pull/1#review-1"}`,
+			// CreateReview forwards CreateReviewOptions.Event verbatim
+			// (PullRequestReviewRequest.Event), so an APPROVE verdict hits
+			// the wire as "APPROVE".
+			CreateEvent: "APPROVE",
+		},
+		// GitHub milestone shape: github-like keys (number/state/due_on);
+		// milestones are number-addressed.
+		Milestones: &contracttest.MilestonesHarnessConfig{
+			ListResponse:   `[{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"number":1,"title":"v1","state":"open","description":"first","due_on":"2026-01-01T00:00:00Z"}`,
+		},
+		RepoTemplates: &contracttest.RepoTemplatesHarnessConfig{
+			GenerateResponse: `{"id":7,"name":"new-repo","full_name":"owner/new-repo","private":false}`,
+		},
+		Gists: &contracttest.GistsHarnessConfig{
+			ListResponse: `[{"id":"g1","description":"notes","public":false,"html_url":"https://gist.github.com/g1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z","files":{"a.txt":{"filename":"a.txt","language":"Text","raw_url":"https://gist.githubusercontent.com/raw","size":5,"content":"hello"}}}]`,
+		},
+		Starred: &contracttest.StarredHarnessConfig{
+			// star+json 包裹形状（ListStarred 的 Accept 请求的形态）。
+			WrappedResponse: `[{"starred_at":"2026-01-01T00:00:00Z","repo":{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}}]`,
+			// 服务端忽略 Accept 时的裸 repo 数组形状（decodeStarredEntry 回退面）。
+			BareResponse: `[{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}]`,
+		},
+		Migrations: &contracttest.MigrationsHarnessConfig{
+			// pending 终态：id 非零 + state 非空（解析对拍的 fixture 有效性前提）。
+			CreateResponse: `{"id":7,"state":"pending","archive_url":""}`,
+			// exported 终态：archive_url 非空，钉 exported-terminal 字段映射。
+			GetResponse: `{"id":42,"state":"exported","archive_url":"https://api.github.com/orgs/acme/migrations/42/artifacts"}`,
+		},
+		ReleaseAssets: &contracttest.ReleaseAssetsHarnessConfig{
+			// 多字节字面量：逐字节下载断言能抓住 byte/rune 切错位。
+			AssetBytes: "release-asset-payload-附件字节流-0123456789",
+		},
+		Deployments: &contracttest.DeploymentsHarnessConfig{
+			// 非零 id + ref/environment/creator/created_at 齐全：解析对拍
+			// （deploymentWire 字段级比对）的 fixture 有效性前提。
+			CreateResponse: `{"id":55,"sha":"abc123","ref":"main","environment":"production","description":"ship it","creator":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/55"}`,
+			// 两元素数组：len 对拍 + total==len（页内计数，issue #89）。
+			ListResponse:   `[{"id":55,"sha":"abc123","ref":"main","environment":"production","description":"ship it","creator":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/55"},{"id":56,"sha":"def456","ref":"dev","environment":"staging","description":"stage it","creator":{"login":"dev"},"created_at":"2026-01-02T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/56"}]`,
+			StatusResponse: `{"id":1,"state":"success","description":"done"}`,
+		},
+		ForkSync: &contracttest.ForkSyncHarnessConfig{
+			// RepoMergeUpstreamResult 形状（message/merge_type/base_branch）。
+			MergeResponse: `{"message":"Successfully fast-forwarded","merge_type":"fast-forward","base_branch":"main"}`,
+		},
+		TeamReviews: &contracttest.TeamReviewsHarnessConfig{
+			// go-github ReviewersRequest.TeamReviewers（team_reviewers 键，
+			// omitempty）——套件按平台无关的「body 数组携带全部 team 值」断言。
+			Teams: []string{"platform-team", "release-eng"},
+		},
+		CILogs: &contracttest.CILogsHarnessConfig{
+			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
+			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
+		},
+		// Family suites (issue #63): GitHub wire shapes.
+		Branches: &contracttest.BranchHarnessConfig{
+			ListResponse:   `[{"name":"main","commit":{"sha":"abc123"}}]`,
+			MutateResponse: `{"ref":"refs/heads/feature-y","object":{"sha":"abc123"}}`,
+		},
+		Commits: &contracttest.CommitHarnessConfig{
+			GetResponse:     `{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}`,
+			ListResponse:    `[{"sha":"abc123","commit":{"message":"commit msg","author":{"name":"dev","date":"2026-01-01T00:00:00Z"}}}]`,
+			CompareResponse: `{"total_commits":1,"commits":[{"sha":"abc123","commit":{"message":"commit msg"}}],"files":[{"filename":"a.txt","additions":1,"deletions":0}],"ahead_by":1,"behind_by":0}`,
+		},
+		Diffs: &contracttest.DiffHarnessConfig{
+			FilesResponse: `[{"filename":"a.txt","status":"modified","additions":1,"deletions":0,"patch":"@@ -1,1 +1,1 @@\n+hello"}]`,
+		},
+		Files: &contracttest.FileHarnessConfig{
+			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+		},
+		// CR suite fixtures (issue #63): GitHub PR shape — number-addressed,
+		// head/base branch keys, closed+merged folds to CRStateMerged.
+		CRs: &contracttest.CRHarnessConfig{
+			ListResponse:   `[{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
+			GetResponse:    `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			MutateResponse: `{"number":1,"title":"fix bug","state":"open","body":"desc","head":{"ref":"feature-x","sha":"abc123"},"base":{"ref":"main","sha":"def456"},"user":{"id":1,"login":"dev"},"merged":false,"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// 2A 三态：PR wire 的描述字段名是 body；assignees 走 issues 线。
+			CRClear: map[string]contracttest.ClearExpect{
+				"description": {BodyField: "body"},
+				"assignees":   {BodyField: "assignees"},
+			},
+		},
+		Releases: &contracttest.ReleasesHarnessConfig{
+			ByTagResponse:    `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0","body":"release notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			UpdateResponse:   `{"id":1,"tag_name":"v1.0.0","name":"v1.0.0-renamed","body":"updated notes","draft":false,"prerelease":false,"html_url":"https://example.com/releases/v1.0.0","created_at":"2026-01-01T00:00:00Z","published_at":"2026-01-01T00:00:00Z"}`,
+			TagsListResponse: `[{"name":"v1","commit":{"sha":"abc123def456","url":"https://api.github.com/repos/owner/repo/commits/abc123def456"}}]`,
+		},
+		// GitHub search payloads wrap items in {"total_count":..,"items":[..]}.
+		Search: &contracttest.SearchHarnessConfig{
+			// The repos envelope's total_count is the server-side total the
+			// backend must return as SearchRepos's total.
+			ReposTotalCount: 1,
+			ReposResponse:   `{"total_count":1,"incomplete_results":false,"items":[{"full_name":"owner/repo","description":"search hit","html_url":"https://github.com/owner/repo","stargazers_count":5,"forks_count":2,"default_branch":"main","private":false}]}`,
+			IssuesResponse:  `{"total_count":1,"items":[{"number":1,"title":"found","state":"open","body":"b","html_url":"https://github.com/owner/repo/issues/1","labels":[{"name":"bug"}],"comments":2,"created_at":"2026-01-01T00:00:00Z"}]}`,
+			UsersResponse:   `{"total_count":1,"items":[{"login":"dev","name":"Dev","avatar_url":"https://github.com/avatars/u/1","html_url":"https://github.com/dev"}]}`,
+		},
+		// Commit status fixtures: GitHub's native commit-status shape
+		// (GET /repos/{o}/{r}/commits/{ref}/statuses), a bare array with
+		// state/context/description/target_url.
+		CommitStatus: &contracttest.CommitStatusHarnessConfig{
+			ListResponse: `[{"state":"success","context":"ci/lint","description":"lint passed","target_url":"https://ci.example.com/1"},{"state":"pending","context":"ci/test","description":"tests running","target_url":"https://ci.example.com/2"}]`,
+		},
+		Notifications: &contracttest.NotificationsHarnessConfig{
+			ListResponse: `[{"id":"1","unread":true,"reason":"subscribed","subject":{"title":"Bug report","type":"Issue","url":"https://api.github.com/repos/owner/repo/issues/1"},"repository":{"id":1,"full_name":"owner/repo"},"updated_at":"2026-01-01T00:00:00Z"}]`,
+		},
+		Reactions: &contracttest.ReactionsHarnessConfig{
+			ListResponse:   `[{"id":1,"content":"+1","user":{"id":1,"login":"dev"}}]`,
+			CreateResponse: `{"id":1,"content":"heart","user":{"id":1,"login":"dev"}}`,
+		},
+		BranchProtections: &contracttest.BranchProtectionsHarnessConfig{
+			ListResponse:    `[{"branch_name":"main","required_approving_reviews":1,"required_status_checks":true,"allow_force_pushes":false,"allow_deletions":false}]`,
+			MutateResponse:  `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+			GetResponse:     `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
+			ListUnsupported: true,
+			GetUnsupported:  false,
+		},
+		Collaborators: &contracttest.CollaboratorsHarnessConfig{
+			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
+		},
+		WebhookConfig: &contracttest.WebhookConfigHarnessConfig{
+			GetResponse: `{"id":42,"url":"https://hooks.example/ci","events":["push","pull_request"]}`,
+		},
+		DeployKeys: &contracttest.DeployKeysHarnessConfig{
+			ListResponse:   `[{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}]`,
+			CreateResponse: `{"id":1,"title":"CI","key":"ssh-rsa AAAA","read_only":true}`,
+		},
+		RepoStats: &contracttest.RepoStatsHarnessConfig{
+			ForksResponse:        `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
+			StargazersResponse:   `[{"starred_at":"2026-01-01T00:00:00Z","user":{"id":1,"login":"star"}}]`,
+			ContributorsResponse: `[{"login":"dev","contributions":10}]`,
+		},
+	})
+}
+
+// TestGitHub_UpdateIssueStateWire 钉 UpdateIssueOptions.State 的 wire 映射
+// （2A 违约修复的钉子）：CloseIssue/ReopenIssue 是独立方法，但 State 是
+// UpdateIssueOptions 的公共契约——本后端此前在 UpdateIssue 里静默丢弃，
+// 其余 6 后端都映射（无 divergence 登记属违约）。
+func TestGitHub_UpdateIssueStateWire(t *testing.T) {
+	var (
+		method string
+		got    map[string]any
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"number":1,"title":"bug","state":"closed","user":{"login":"dev"}}`))
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewProvider(provider.Config{
+		Platform: model.PlatformGitHub,
+		BaseURL:  srv.URL + "/api/v3",
+		Token:    "test",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	im, ok := p.(provider.IssueManager)
+	if !ok {
+		t.Fatal("provider does not implement provider.IssueManager")
+	}
+	if _, err := im.UpdateIssue(context.Background(), "owner", "repo", "1", provider.UpdateIssueOptions{
+		State: model.IssueStateClosed,
+	}); err != nil {
+		t.Fatalf("UpdateIssue(State): %v", err)
+	}
+	if method != http.MethodPatch {
+		t.Errorf("update method = %s, want PATCH", method)
+	}
+	if got["state"] != "closed" {
+		t.Errorf("update wire state = %v, want \"closed\" — opts.State was silently dropped", got["state"])
+	}
+}
+
+func githubNonEmptyList() string {
+	repos := []*sdkgithub.Repository{
+		{
+			ID:       new(int64(1)),
+			FullName: new("owner/repo"),
+			Name:     new("repo"),
+			Owner:    &sdkgithub.User{Login: new("owner")},
+		},
+	}
+	b, _ := json.Marshal(repos)
+	return string(b)
+}
+
+func TestGitHub_WebhookCorpus(t *testing.T) {
+	contracttest.RunWebhookCorpus(t, model.PlatformGitHub, &ghbackend.Provider{}, "testdata/webhooks")
+}

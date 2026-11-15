@@ -6,7 +6,7 @@ import (
 	// Register all built-in backends so factory/manager tests have providers
 	// to work with. Without this, only custom-registered platforms would be
 	// available.
-	_ "github.com/yi-nology/go-git-platform/backends/all"
+	_ "github.com/yi-nology/go-git-platform/adapter/all"
 	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"

@@ -56,7 +56,7 @@ import (
 	mcpserver "github.com/yi-nology/go-git-platform/mcp"
 
 	// register every shipped backend
-	_ "github.com/yi-nology/go-git-platform/backends/all"
+	_ "github.com/yi-nology/go-git-platform/adapter/all"
 )
 
 // logger is the binary's service logger (kv style). The mcp server is a

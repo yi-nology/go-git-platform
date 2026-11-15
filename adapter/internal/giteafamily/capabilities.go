@@ -1,0 +1,288 @@
+package giteafamily
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/yi-nology/go-git-platform/adapter/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
+)
+
+// --- deploy keys ---
+
+// DeployKey is the slice of the family's deploy-key object the engine
+// consumes.
+type DeployKey struct {
+	ID       int64
+	Title    string
+	Key      string
+	ReadOnly bool
+}
+
+// ListDeployKeysOptions mirrors the family's deploy-key list query.
+type ListDeployKeysOptions struct {
+	ListOptions ListOptions
+}
+
+// CreateKeyOption mirrors the family's deploy-key create body.
+type CreateKeyOption struct {
+	Title    string
+	Key      string
+	ReadOnly bool
+}
+
+// DeployKeyPort is the deploy-key endpoint of the family SDK surface.
+type DeployKeyPort interface {
+	ListDeployKeys(ctx context.Context, owner, repo string, opt ListDeployKeysOptions) ([]*DeployKey, error)
+	CreateDeployKey(ctx context.Context, owner, repo string, opt CreateKeyOption) (*DeployKey, error)
+	DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error
+}
+
+// ListDeployKeys returns every deploy key. The provider surface carries no
+// pagination parameters, so the full key list is fetched by exhausting the
+// endpoint's pagination (backendutil.AllPages).
+func ListDeployKeys(ctx context.Context, f Family, c DeployKeyPort, owner, repo string) ([]*model.DeployKey, error) {
+	keys, err := backendutil.AllPages(func(page int) ([]*DeployKey, error) {
+		return c.ListDeployKeys(ctx, owner, repo, ListDeployKeysOptions{
+			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
+		})
+	})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListDeployKeys", err)
+	}
+	result := make([]*model.DeployKey, 0, len(keys))
+	for _, k := range keys {
+		result = append(result, convertDeployKey(k))
+	}
+	return result, nil
+}
+
+// AddDeployKey creates a deploy key.
+func AddDeployKey(ctx context.Context, f Family, c DeployKeyPort, owner, repo string, opts provider.AddDeployKeyOptions) (*model.DeployKey, error) {
+	key, err := c.CreateDeployKey(ctx, owner, repo, CreateKeyOption{
+		Title:    opts.Title,
+		Key:      opts.Key,
+		ReadOnly: opts.ReadOnly,
+	})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "AddDeployKey", err)
+	}
+	return convertDeployKey(key), nil
+}
+
+// DeleteDeployKey removes a deploy key.
+func DeleteDeployKey(ctx context.Context, f Family, c DeployKeyPort, owner, repo string, keyID int64) error {
+	if err := c.DeleteDeployKey(ctx, owner, repo, keyID); err != nil {
+		return provider.Wrap(f.Platform, "DeleteDeployKey", err)
+	}
+	return nil
+}
+
+// convertDeployKey projects a family DeployKey onto the provider shape.
+func convertDeployKey(k *DeployKey) *model.DeployKey {
+	if k == nil {
+		return nil
+	}
+	return &model.DeployKey{
+		ID:       k.ID,
+		Title:    k.Title,
+		Key:      k.Key,
+		ReadOnly: k.ReadOnly,
+	}
+}
+
+// --- milestones ---
+
+// Milestone is the slice of the family's milestone object the engine
+// consumes. Number carries the family milestone ID (the identifier the
+// write endpoints take); Deadline keys the wire's due_on.
+type Milestone struct {
+	ID          int64
+	Title       string
+	Description string
+	State       string
+	Deadline    *time.Time
+}
+
+// ListMilestoneOption mirrors the family's milestone list query
+// (state: "open"/"closed"/"all").
+type ListMilestoneOption struct {
+	ListOptions ListOptions
+	State       string
+}
+
+// CreateMilestoneOption mirrors the family's milestone create body.
+type CreateMilestoneOption struct {
+	Title       string
+	Description string
+	Deadline    *time.Time
+}
+
+// EditMilestoneOption mirrors the family's milestone edit body. Nil fields
+// marshal as JSON null and the server leaves them unchanged; Title is the
+// family's only non-pointer edit field, so an update that does not rename
+// sends an empty title — the API keeps the existing title for blank values
+// (a title is required to be non-empty, so blank cannot be a legitimate
+// rename).
+type EditMilestoneOption struct {
+	Title       string
+	Description *string
+	State       *string
+	Deadline    *time.Time
+}
+
+// MilestonePort is the milestone endpoint of the family SDK surface.
+type MilestonePort interface {
+	ListMilestones(ctx context.Context, owner, repo string, opt ListMilestoneOption) ([]*Milestone, error)
+	GetMilestone(ctx context.Context, owner, repo string, id int64) (*Milestone, error)
+	CreateMilestone(ctx context.Context, owner, repo string, opt CreateMilestoneOption) (*Milestone, error)
+	EditMilestone(ctx context.Context, owner, repo string, id int64, opt EditMilestoneOption) (*Milestone, error)
+	DeleteMilestone(ctx context.Context, owner, repo string, id int64) error
+}
+
+// ListMilestones lists milestones, state-filtered by "open"/"closed" (the
+// family also accepts "all"; the API defaults to open).
+//
+// Dual-mode pagination is handled by backendutil.PageList:
+// opts.Page == 0 walks every page (budget-capped, fails loud);
+// opts.Page > 0 returns exactly that single caller-driven page.
+func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.ListMilestonesOptions) ([]model.Milestone, error) {
+	// State contract (issue #61): empty State sends the family's explicit
+	// "all" — the family's own default (open) silently dropped closed
+	// milestones, which the unified contract forbids.
+	state := opts.State
+	if state == "" {
+		state = "all"
+	}
+	listOpts := ListMilestoneOption{State: state}
+	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
+		func(page, perPage int) ([]*Milestone, error) {
+			listOpts.ListOptions = ListOptions{Page: page, PageSize: perPage}
+			return c.ListMilestones(ctx, owner, repo, listOpts)
+		})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "ListMilestones", err)
+	}
+	result := make([]model.Milestone, 0, len(milestones))
+	for _, m := range milestones {
+		result = append(result, convertMilestone(m))
+	}
+	return result, nil
+}
+
+// GetMilestone fetches one milestone by ID.
+func GetMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string) (*model.Milestone, error) {
+	id, err := backendutil.ParseMilestoneNumber(f.Platform, "GetMilestone", number)
+	if err != nil {
+		return nil, err
+	}
+	m, err := c.GetMilestone(ctx, owner, repo, id)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "GetMilestone", err)
+	}
+	ms := convertMilestone(m)
+	return &ms, nil
+}
+
+// CreateMilestone creates a milestone.
+func CreateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.CreateMilestoneOptions) (*model.Milestone, error) {
+	m, err := c.CreateMilestone(ctx, owner, repo, CreateMilestoneOption{
+		Title:       opts.Title,
+		Description: opts.Description,
+		Deadline:    opts.DueOn,
+	})
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "CreateMilestone", err)
+	}
+	ms := convertMilestone(m)
+	return &ms, nil
+}
+
+// UpdateMilestone edits a milestone; see EditMilestoneOption for the
+// nil-means-unchanged edit semantics.
+func UpdateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*model.Milestone, error) {
+	id, err := backendutil.ParseMilestoneNumber(f.Platform, "UpdateMilestone", number)
+	if err != nil {
+		return nil, err
+	}
+	editOpts := EditMilestoneOption{}
+	if opts.Title != nil {
+		editOpts.Title = *opts.Title
+	}
+	if opts.Description != nil {
+		editOpts.Description = opts.Description
+	}
+	if opts.State != "" {
+		state := string(opts.State)
+		editOpts.State = &state
+	}
+	if opts.DueOn != nil {
+		editOpts.Deadline = opts.DueOn
+	}
+	m, err := c.EditMilestone(ctx, owner, repo, id, editOpts)
+	if err != nil {
+		return nil, provider.Wrap(f.Platform, "UpdateMilestone", err)
+	}
+	ms := convertMilestone(m)
+	return &ms, nil
+}
+
+// DeleteMilestone removes a milestone.
+func DeleteMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string) error {
+	id, err := backendutil.ParseMilestoneNumber(f.Platform, "DeleteMilestone", number)
+	if err != nil {
+		return err
+	}
+	if err := c.DeleteMilestone(ctx, owner, repo, id); err != nil {
+		return provider.Wrap(f.Platform, "DeleteMilestone", err)
+	}
+	return nil
+}
+
+// convertMilestone projects a family Milestone onto the provider shape.
+func convertMilestone(m *Milestone) model.Milestone {
+	var ms model.Milestone
+	if m == nil {
+		return ms
+	}
+	ms = model.Milestone{
+		Number:      strconv.FormatInt(m.ID, 10),
+		Title:       m.Title,
+		Description: m.Description,
+		State:       model.MilestoneState(m.State),
+		DueOn:       m.Deadline,
+	}
+	return ms
+}
+
+// --- divergence ledger ---
+
+// Divergences returns the family's registered divergence ledger: the places
+// where family backend behavior departs from the unified provider
+// semantics. displayName is the platform's display name ("Gitea"/"Forgejo")
+// used in the reason texts.
+func Divergences(displayName string) []provider.Divergence {
+	return []provider.Divergence{
+		{Capability: "ChangeRequestManager", Method: "GetCR", Field: "BaseSHA", Kind: provider.DivergenceMapping,
+			Reason: fmt.Sprintf("%s payloads expose no merge base; BaseSHA carries the target-branch tip instead (StartSHA equals BaseSHA), as does every other method returning a change request.", displayName)},
+		{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "BaseSHA", Kind: provider.DivergenceMapping,
+			Reason: "See GetCR."},
+		{Capability: "ChangeRequestManager", Method: "ListCRs", Field: "State (merged)", Kind: provider.DivergenceMapping,
+			Reason: "The family's list filter has no merged vocabulary: State=merged fetches the closed superset (closed+merged mixed) and no post-filter narrows it — consumers disambiguate via the returned CR's State (ConvertPR maps the merged flag). GetCR stays exact. Registered here instead of living in a code comment only (issue #59); GitCode post-filters the superset into the precise merged set instead."},
+		{Capability: "IssueManager", Method: "ListIssues", Field: "opts.Sort, opts.Direction", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("%s's issue-list endpoint takes no sort/direction; the filters are accepted but ignored (incremental backups must fall back themselves).", displayName)},
+		{Capability: "CommitManager", Method: "ListCommits", Field: "opts.Since, opts.Until (valid values)", Kind: provider.DivergenceIgnore,
+			Reason: "The family SDK's commit-list options carry no time filters (the platform wire has none either); values are validated against RFC3339 (issue #52 — unparsable input fails the call with ErrInvalidInput) but valid filters cannot be applied — incremental syncs must filter client-side."},
+		{Capability: "RepoStatsManager", Method: "ListContributors", Kind: provider.DivergenceStub,
+			Reason: "The family SDK exposes no contributors list endpoint; the stub carries ErrNotImplemented (issue #56)."},
+		{Capability: "RepoManager", Method: "ListRepos", Field: "opts.Owner", Kind: provider.DivergenceMapping,
+			Reason: fmt.Sprintf("%s serves org repos from /orgs/{owner}/repos and user repos from /users/{owner}/repos with no unified endpoint: an Owner listing tries the org endpoint first and falls back to the user endpoint on 404, so both namespace kinds list without the caller knowing which one the login is (issue #92; pre-fix the listing was org-only).", displayName)},
+		{Capability: "BranchProtectionManager", Method: "CreateBranchProtection", Field: "opts.AllowDeletions", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("The %s branch-protection wire has no allow-deletions face (neither family SDK models such a field): valid values are dropped and reads always report false. The pre-#130 mapping inverted the option onto block_on_rejected_reviews — an unrelated merge-blocking switch — silently flipping protection semantics the caller never asked for; a semantic mapping must never ride an unrelated toggle (issue #130, superseding the #93 inverse mapping).", displayName)},
+		{Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowDeletions", Kind: provider.DivergenceIgnore,
+			Reason: "See CreateBranchProtection (issue #130)."},
+	}
+}

@@ -1,0 +1,1122 @@
+package github_test
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	sdkgithub "github.com/google/go-github/v93/github"
+
+	ghbackend "github.com/yi-nology/go-git-platform/adapter/github"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
+)
+
+func newTestProvider(t *testing.T, baseURL string) *ghbackend.Provider {
+	t.Helper()
+	p, err := provider.NewProvider(provider.Config{
+		Platform: model.PlatformGitHub,
+		BaseURL:  baseURL,
+		Token:    "test-token",
+	})
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	gp, ok := p.(*ghbackend.Provider)
+	if !ok {
+		t.Fatalf("expected *ghbackend.Provider, got %T", p)
+	}
+	return gp
+}
+
+func TestNewProvider_Success(t *testing.T) {
+	p, err := provider.NewProvider(provider.Config{
+		Platform: model.PlatformGitHub,
+		BaseURL:  "http://example.test/api/v3",
+		Token:    "test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Platform() != model.PlatformGitHub {
+		t.Errorf("expected GitHub, got %s", p.Platform())
+	}
+}
+
+func TestListRepos(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]*sdkgithub.Repository{
+			{ID: new(int64(1)), FullName: new("owner/r1"), Name: new("r1"),
+				Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main")},
+			{ID: new(int64(2)), FullName: new("owner/r2"), Name: new("r2"),
+				Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main"), Private: new(true)},
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	repos, err := p.ListRepos(context.Background(), provider.ListRepoOptions{Page: 1, PerPage: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 2 {
+		t.Fatalf("expected 2, got %d", len(repos))
+	}
+	if repos[0].Platform != model.PlatformGitHub {
+		t.Errorf("expected GitHub platform, got %s", repos[0].Platform)
+	}
+	if !repos[1].Private {
+		t.Error("expected r2 to be private")
+	}
+}
+
+// TestListRepos_PersonalOwnerFallsBackToUserEndpoint pins issue #80: an
+// Owner listing tries /orgs/{owner}/repos first; GitHub 404s that endpoint
+// for personal accounts (a namespace fact, not "no repos"), so the backend
+// must fall back to /users/{owner}/repos instead of surfacing ErrNotFound.
+func TestListRepos_PersonalOwnerFallsBackToUserEndpoint(t *testing.T) {
+	repoList := func() []byte {
+		b, _ := json.Marshal([]*sdkgithub.Repository{
+			{ID: new(int64(1)), FullName: new("some-user/r1"), Name: new("r1"),
+				Owner: &sdkgithub.User{Login: new("some-user")}, DefaultBranch: new("main")},
+		})
+		return b
+	}
+	tests := []struct {
+		name        string
+		orgStatus   int  // HTTP status the /orgs endpoint returns
+		userStatus  int  // HTTP status the /users endpoint returns (fallback)
+		wantRepos   int  // repos the call must return
+		wantErr     bool // whether the call must fail
+		wantUserHit bool // whether the fallback endpoint must be hit
+	}{
+		{name: "org owner lists from the org endpoint without fallback", orgStatus: http.StatusOK, wantRepos: 1},
+		{name: "personal owner falls back to the user endpoint on 404", orgStatus: http.StatusNotFound, userStatus: http.StatusOK, wantRepos: 1, wantUserHit: true},
+		{name: "nonexistent owner surfaces the fallback's 404", orgStatus: http.StatusNotFound, userStatus: http.StatusNotFound, wantErr: true, wantUserHit: true},
+		{name: "org endpoint 5xx propagates without fallback", orgStatus: http.StatusInternalServerError, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			var paths []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				paths = append(paths, r.URL.Path)
+				mu.Unlock()
+				switch {
+				case strings.Contains(r.URL.Path, "/orgs/"):
+					w.WriteHeader(tt.orgStatus)
+					if tt.orgStatus == http.StatusOK {
+						_, _ = w.Write(repoList())
+					} else {
+						_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+					}
+				case strings.Contains(r.URL.Path, "/users/"):
+					w.WriteHeader(tt.userStatus)
+					if tt.userStatus == http.StatusOK {
+						_, _ = w.Write(repoList())
+					} else {
+						_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+					}
+				}
+			}))
+			defer srv.Close()
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			repos, err := p.ListRepos(context.Background(), provider.ListRepoOptions{Owner: "some-user"})
+			mu.Lock()
+			defer mu.Unlock()
+			userHit := false
+			for _, path := range paths {
+				if strings.Contains(path, "/users/some-user/repos") {
+					userHit = true
+				}
+			}
+			if userHit != tt.wantUserHit {
+				t.Errorf("user-endpoint hit = %v, want %v (paths: %v)", userHit, tt.wantUserHit, paths)
+			}
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got %d repos", len(repos))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ListRepos: %v", err)
+			}
+			if len(repos) != tt.wantRepos {
+				t.Fatalf("expected %d repos, got %d", tt.wantRepos, len(repos))
+			}
+		})
+	}
+}
+
+func TestGetRepo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(&sdkgithub.Repository{
+			ID: new(int64(42)), FullName: new("owner/repo"), Name: new("repo"),
+			Owner: &sdkgithub.User{Login: new("owner")}, DefaultBranch: new("main"),
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	repo, err := p.GetRepo(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repo.ID != 42 || repo.Owner != "owner" {
+		t.Errorf("unexpected repo: %+v", repo)
+	}
+}
+
+func TestCreateCR(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(&sdkgithub.PullRequest{
+			Number: new(7), Title: new("test"), State: new("open"),
+			Head:    &sdkgithub.PullRequestBranch{Ref: new("feature"), SHA: new("abc")},
+			Base:    &sdkgithub.PullRequestBranch{Ref: new("main")},
+			User:    &sdkgithub.User{ID: new(int64(1)), Login: new("dev"), AvatarURL: new("https://a/v")},
+			HTMLURL: new("https://github.com/owner/repo/pull/7"),
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	cr, err := p.CreateCR(context.Background(), provider.CreateCROptions{
+		Owner: "owner", Repo: "repo", Title: "test",
+		SourceBranch: "feature", TargetBranch: "main",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cr.Number != "7" {
+		t.Errorf("expected 7, got %q", cr.Number)
+	}
+	if cr.State != model.CRStateOpened {
+		t.Errorf("expected opened, got %s", cr.State)
+	}
+}
+
+func TestListCRs_MergedDetected(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]*sdkgithub.PullRequest{
+			{Number: new(1), Title: new("a"), State: new("open"),
+				Head: &sdkgithub.PullRequestBranch{Ref: new("a")}, Base: &sdkgithub.PullRequestBranch{Ref: new("main")},
+				User: &sdkgithub.User{ID: new(int64(1)), Login: new("u")}},
+			{Number: new(2), Title: new("b"), State: new("closed"), Merged: new(true),
+				Head: &sdkgithub.PullRequestBranch{Ref: new("b")}, Base: &sdkgithub.PullRequestBranch{Ref: new("main")},
+				User: &sdkgithub.User{ID: new(int64(1)), Login: new("u")}},
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	crs, total, err := p.ListCRs(context.Background(), provider.ListCROptions{Owner: "owner", Repo: "repo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The mock sends no Link header, so GitHub reports no last page: the
+	// total is unknown (nil) rather than faked from the page length.
+	if total != nil {
+		t.Errorf("expected nil total (no Link header in mock), got %d", *total)
+	}
+	if crs[1].State != model.CRStateMerged {
+		t.Errorf("expected merged, got %s", crs[1].State)
+	}
+}
+
+func TestGetCRDiff_Pagination(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n == 1 {
+			// First page: return 100 files to force pagination
+			files := make([]*sdkgithub.CommitFile, 100)
+			for i := range files {
+				files[i] = &sdkgithub.CommitFile{Filename: new("f" + string(rune('a'+i%26))), Status: new("modified"), Additions: new(1), Deletions: new(0)}
+			}
+			_ = json.NewEncoder(w).Encode(files)
+			return
+		}
+		// Second page: 1 file
+		_ = json.NewEncoder(w).Encode([]*sdkgithub.CommitFile{
+			{Filename: new("last"), Status: new("added"), Additions: new(5)},
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	diff, err := p.GetCRDiff(context.Background(), "owner", "repo", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Errorf("expected 2 calls (pagination), got %d", got)
+	}
+	if diff.TotalAdd == 0 {
+		t.Error("expected non-zero additions")
+	}
+}
+
+// hookSecret 用例统一的 webhook secret（非空——issue #43 收口后 parse
+// 路径拒绝空 secret，与注册表验证器同一策略）。
+const hookSecret = "corpus-hook-secret"
+
+// signHook 用 sha256=hex(HMAC-SHA256(body, secret)) 签名 webhook 请求
+// （issue #43 收口后 parse 路径拒绝空 secret，用例必须带真签名）。
+func signHook(t *testing.T, r *http.Request, body string, secret string) {
+	t.Helper()
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	r.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+}
+
+func TestParseWebhookEvent_PullRequest(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	body := `{"action":"opened","number":1,"pull_request":{"number":1,"state":"open","title":"t","draft":true,"head":{"ref":"f","sha":"headSHA"},"base":{"ref":"main","sha":"baseSHA"}},"repository":{"id":42,"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-GitHub-Event", "pull_request")
+	r.Header.Set("Content-Type", "application/json")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "cr.opened" {
+		t.Errorf("expected cr.opened, got %s", ne.Type)
+	}
+	if ne.CR == nil || ne.CR.Number != "1" {
+		t.Errorf("expected PR with number 1, got %+v", ne.CR)
+	}
+	if ne.Repo == nil || ne.Repo.ID != 42 {
+		t.Errorf("expected repo ID 42, got %+v", ne.Repo)
+	}
+	if ne.CR.HeadSHA != "headSHA" {
+		t.Errorf("expected head SHA headSHA, got %q", ne.CR.HeadSHA)
+	}
+	if ne.CR.BaseSHA != "baseSHA" {
+		t.Errorf("expected base SHA baseSHA, got %q", ne.CR.BaseSHA)
+	}
+	// GitHub exposes no distinct merge-base: StartSHA mirrors the base tip.
+	if ne.CR.StartSHA != "baseSHA" {
+		t.Errorf("expected start SHA baseSHA, got %q", ne.CR.StartSHA)
+	}
+	if !ne.CR.Draft {
+		t.Errorf("expected draft=true, got %+v", ne.CR)
+	}
+}
+
+func TestParseWebhookEvent_Merged(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	body := `{"action":"closed","number":1,"pull_request":{"number":1,"state":"closed","merged":true,"head":{"ref":"f","sha":"abc"},"base":{"ref":"main"}},"repository":{"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-GitHub-Event", "pull_request")
+	r.Header.Set("Content-Type", "application/json")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "cr.merged" {
+		t.Errorf("expected cr.merged, got %s", ne.Type)
+	}
+}
+
+func TestParseWebhookEvent_Push(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	body := `{"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+	r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+	r.Header.Set("X-GitHub-Event", "push")
+	r.Header.Set("Content-Type", "application/json")
+	signHook(t, r, body, hookSecret)
+	ne, err := p.ParseWebhookEvent(r, hookSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ne.Type != "push" {
+		t.Errorf("expected push, got %s", ne.Type)
+	}
+	if ne.Branch != "main" {
+		t.Errorf("expected main, got %s", ne.Branch)
+	}
+	if ne.CommitSHA != "abc123" {
+		t.Errorf("expected abc123, got %s", ne.CommitSHA)
+	}
+}
+
+// writeListPage serves v on page 1 and an empty array on page ≥ 2 — the
+// pagination-aware mock shape for list endpoints whose backend walks all
+// pages via backendutil.AllPages.
+func writeListPage(w http.ResponseWriter, r *http.Request, v any) {
+	if page := r.URL.Query().Get("page"); page != "" && page != "1" {
+		_ = json.NewEncoder(w).Encode([]any{})
+		return
+	}
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func TestListBranches(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeListPage(w, r, []*sdkgithub.Branch{
+			{Name: new("main")},
+			{Name: new("dev")},
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	branches, err := p.ListBranches(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(branches) != 2 {
+		t.Fatalf("expected 2, got %d", len(branches))
+	}
+}
+
+func TestCreateBranch_WithCommitSHA(t *testing.T) {
+	var gotRef string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRef = r.URL.Path
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"ref":"refs/heads/newbranch","object":{"sha":"abc"}}`))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	sha := strings.Repeat("a", 40)
+	_, err := p.CreateBranch(context.Background(), "owner", "repo", "newbranch", sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotRef, "git/refs") {
+		t.Errorf("expected git/refs endpoint, got %s", gotRef)
+	}
+}
+
+func TestListTags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeListPage(w, r, []*sdkgithub.RepositoryTag{
+			{Name: new("v1.0"), Commit: &sdkgithub.Commit{SHA: new("abc")}},
+		})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	tags, err := p.ListTags(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 1 || tags[0].Name != "v1.0" {
+		t.Errorf("unexpected tags: %+v", tags)
+	}
+}
+
+func TestCreateCommitStatus(t *testing.T) {
+	var gotState string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			State string `json:"state"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotState = body.State
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	err := p.CreateCommitStatus(context.Background(), "owner", "repo", "abc", provider.CommitStatusOptions{
+		State: "success", Context: "ci", Description: "ok",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotState != "success" {
+		t.Errorf("expected success, got %q", gotState)
+	}
+}
+
+func TestProvider_ImplementsProvider(t *testing.T) {
+	var _ provider.Provider = (*ghbackend.Provider)(nil)
+}
+
+// TestGetFileContent_NotFound verifies the error classification. The
+// go-github SDK's DownloadContents makes 2 HTTP calls (metadata + content
+// fetch), which is brittle to mock in full here. Instead we test the
+// error path that flows through provider.Wrap.
+func TestGetFileContent_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	_, err := p.GetFileContent(context.Background(), "owner", "repo", "missing.md", "main")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !provider.IsNotFound(err) {
+		t.Errorf("expected IsNotFound, got %v", err)
+	}
+}
+
+func TestRetry_TriggersOn5xx(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		if n < 2 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]*sdkgithub.Repository{})
+	}))
+	defer srv.Close()
+
+	p, err := provider.NewProvider(provider.Config{
+		Platform:    model.PlatformGitHub,
+		BaseURL:     srv.URL + "/api/v3",
+		Token:       "test",
+		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = p.ListRepos(context.Background(), provider.ListRepoOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got < 2 {
+		t.Errorf("expected at least 2 calls (retry), got %d", got)
+	}
+}
+
+func TestIsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	_, err := p.GetRepo(context.Background(), "missing", "repo")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !provider.IsNotFound(err) {
+		t.Errorf("expected IsNotFound, got %v", err)
+	}
+}
+
+func TestValidateWebhookSignature_NoSecret(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	r, _ := http.NewRequest(http.MethodPost, "/hook", nil)
+	// Since v0.77.0 validation delegates to the registry validator, and an
+	// empty secret is rejected: an empty HMAC key is trivially forgeable on
+	// predictable payloads.
+	if err := p.ValidateWebhookSignature(r, ""); err == nil {
+		t.Error("expected empty secret to be rejected, got nil error")
+	}
+}
+
+func TestListMyGists_Pagination(t *testing.T) {
+	var gotPath, gotPage, gotPerPage string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotPage = r.URL.Query().Get("page")
+		gotPerPage = r.URL.Query().Get("per_page")
+		w.Header().Set("Content-Type", "application/json")
+		// 原始 JSON 而非 SDK 结构体:同时验证 model.Gist 的 json tag
+		// 与 GitHub 响应字段逐一对齐。
+		_, _ = w.Write([]byte(`[{"id":"g1","description":"notes","public":false,` +
+			`"html_url":"https://gist.github.com/g1",` +
+			`"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",` +
+			`"files":{"a.txt":{"filename":"a.txt","language":"Text",` +
+			`"raw_url":"https://gist.githubusercontent.com/raw","size":5,"content":"hello"}}}]`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	gists, err := p.ListMyGists(context.Background(), 2, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v3/gists" {
+		t.Errorf("expected GET /gists (token 用户列表), got path %s", gotPath)
+	}
+	if gotPage != "2" || gotPerPage != "5" {
+		t.Errorf("expected page=2 per_page=5, got page=%s per_page=%s", gotPage, gotPerPage)
+	}
+	if len(gists) != 1 {
+		t.Fatalf("expected 1 gist, got %d", len(gists))
+	}
+	g := gists[0]
+	if g.ID != "g1" || g.Public {
+		t.Errorf("unexpected gist identity: %+v", g)
+	}
+	if g.CreatedAt.Year() != 2026 || g.UpdatedAt.Year() != 2026 {
+		t.Errorf("expected 2026 timestamps, got %v / %v", g.CreatedAt, g.UpdatedAt)
+	}
+	f := g.Files["a.txt"]
+	if f.Content != "hello" || f.Size != 5 || f.Filename != "a.txt" || f.RawURL == "" {
+		t.Errorf("unexpected gist file: %+v", f)
+	}
+}
+
+func TestListStarred_ShapeCompat(t *testing.T) {
+	const repoJSON = `{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},` +
+		`"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,` +
+		`"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}`
+	cases := []struct {
+		name string
+		body string
+	}{
+		// Accept: star+json 时 GitHub 返回的包裹形状。
+		{"wrapped", `[{"starred_at":"2026-01-01T00:00:00Z","repo":` + repoJSON + `}]`},
+		// 服务端忽略 Accept 时的裸 repo 列表形状。
+		{"bare", `[` + repoJSON + `]`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v3/user/starred" {
+					t.Errorf("expected /user/starred, got %s", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			repos, err := p.ListStarred(context.Background(), 1, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(repos) != 1 {
+				t.Fatalf("expected 1 starred repo, got %d", len(repos))
+			}
+			r := repos[0]
+			if r.FullName != "octo/hello" || r.Owner != "octo" {
+				t.Errorf("unexpected identity: %+v", r)
+			}
+			if r.Stars != 42 || r.Language != "Go" || !r.Archived || !r.Fork {
+				t.Errorf("expected 元数据字段填全(stars/language/archived/fork), got %+v", r)
+			}
+			if r.CloneURL == "" || r.Description != "demo" {
+				t.Errorf("expected clone_url/description, got %+v", r)
+			}
+		})
+	}
+}
+
+func TestCreateMigration_OrgPaths(t *testing.T) {
+	cases := []struct {
+		name     string
+		org      string
+		wantPath string
+	}{
+		{"user_level", "", "/api/v3/user/migrations"},
+		{"org_level", "acme", "/api/v3/orgs/acme/migrations"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotMethod, gotPath string
+			var body map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotMethod = r.Method
+				gotPath = r.URL.Path
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"id":7,"state":"pending","archive_url":""}`))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			info, err := p.CreateMigration(context.Background(), tc.org, provider.CreateMigrationOptions{
+				LockRepositories: true,
+				ExcludeMetadata:  false,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotMethod != http.MethodPost || gotPath != tc.wantPath {
+				t.Errorf("expected POST %s, got %s %s", tc.wantPath, gotMethod, gotPath)
+			}
+			// 与消费方线上请求体保持同一形状:两个 key 都显式上送。
+			if body["lock_repositories"] != true {
+				t.Errorf("expected lock_repositories=true, got %v", body["lock_repositories"])
+			}
+			if v, ok := body["exclude_metadata"]; !ok || v != false {
+				t.Errorf("expected explicit exclude_metadata=false, got %v (present=%v)", v, ok)
+			}
+			if info.ID != 7 || info.State != "pending" {
+				t.Errorf("unexpected migration info: %+v", info)
+			}
+		})
+	}
+}
+
+func TestGetMigration_OrgPaths(t *testing.T) {
+	cases := []struct {
+		name     string
+		org      string
+		wantPath string
+	}{
+		{"user_level", "", "/api/v3/user/migrations/7"},
+		{"org_level", "acme", "/api/v3/orgs/acme/migrations/7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPath string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotPath = r.URL.Path
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"id":7,"state":"exported",` +
+					`"archive_url":"https://api.github.com/user/migrations/7/artifacts"}`))
+			}))
+			defer srv.Close()
+
+			p := newTestProvider(t, srv.URL+"/api/v3")
+			info, err := p.GetMigration(context.Background(), tc.org, 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gotPath != tc.wantPath {
+				t.Errorf("expected GET %s, got %s", tc.wantPath, gotPath)
+			}
+			if info.State != "exported" || info.ArchiveURL == "" {
+				t.Errorf("unexpected migration info: %+v", info)
+			}
+		})
+	}
+}
+
+func TestDownloadReleaseAsset_Streams(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3/repos/owner/repo/releases/assets/99" {
+			t.Errorf("unexpected asset path %s", r.URL.Path)
+		}
+		// 附件端点必须带 octet-stream Accept,否则 GitHub 回 JSON 元数据。
+		if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+			t.Errorf("expected Accept application/octet-stream, got %q", got)
+		}
+		_, _ = w.Write([]byte("asset-bytes"))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	if err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "asset-bytes" {
+		t.Errorf("expected streamed bytes, got %q", buf.String())
+	}
+}
+
+func TestDownloadReleaseAsset_Non2xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 404, &buf)
+	if err == nil {
+		t.Fatal("expected error on non-2xx asset response")
+	}
+	if !provider.IsNotFound(err) {
+		t.Errorf("expected IsNotFound, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no bytes written on error, got %q", buf.String())
+	}
+}
+
+func TestListReleases_AssetsConverted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeListPage(w, r, []*sdkgithub.RepositoryRelease{
+			{ID: 1, TagName: "v1.0.0", Name: new("v1.0.0"),
+				Assets: []*sdkgithub.ReleaseAsset{
+					{ID: new(int64(99)), Name: new("app.zip"), Size: new(123),
+						ContentType:        new("application/zip"),
+						BrowserDownloadURL: new("https://github.com/o/r/releases/download/v1.0.0/app.zip"),
+						URL:                new("https://api.github.com/repos/o/r/releases/assets/99")},
+				}},
+		})
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	rels, err := p.ListReleases(context.Background(), "owner", "repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rels) != 1 || len(rels[0].Assets) != 1 {
+		t.Fatalf("expected 1 release with 1 asset, got %+v", rels)
+	}
+	a := rels[0].Assets[0]
+	if a.ID != 99 || a.Name != "app.zip" || a.Size != 123 {
+		t.Errorf("unexpected asset identity: %+v", a)
+	}
+	if a.ContentType != "application/zip" ||
+		a.BrowserDownloadURL != "https://github.com/o/r/releases/download/v1.0.0/app.zip" ||
+		a.URL != "https://api.github.com/repos/o/r/releases/assets/99" {
+		t.Errorf("unexpected asset urls/type: %+v", a)
+	}
+}
+
+// TestUpdateCRAssignees_PreludesPullEdit locks the GitHub assignee wiring:
+// a non-empty opts.Assignees PATCHes the issue line (PR number = issue
+// number) with the assignees body, and the PR edit still runs afterwards.
+func TestUpdateCRAssignees_PreludesPullEdit(t *testing.T) {
+	var mu sync.Mutex
+	var issuePathSeen bool
+	var assignees []string
+	var pullPathSeen bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/issues/1"):
+			issuePathSeen = true
+			var body struct {
+				Assignees []string `json:"assignees"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			assignees = body.Assignees
+		case strings.HasSuffix(r.URL.Path, "/pulls/1"):
+			pullPathSeen = true
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	if _, err := p.UpdateCR(context.Background(), "owner", "repo", "1",
+		provider.UpdateCROptions{Assignees: []string{"alice"}}); err != nil {
+		t.Fatalf("UpdateCR: %v", err)
+	}
+	if !issuePathSeen || !pullPathSeen {
+		t.Fatalf("expected issue PATCH + pull PATCH, issue=%v pull=%v", issuePathSeen, pullPathSeen)
+	}
+	if len(assignees) != 1 || assignees[0] != "alice" {
+		t.Fatalf("issue assignees body = %v, want [alice]", assignees)
+	}
+}
+
+// TestListFailedJobLogs_WorkflowDedup locks the GitHub CI wiring: runs for a
+// SHA are deduped per workflow (latest run only), failed jobs are collected
+// across the surviving runs, and each job's presigned log is fetched and
+// tailed.
+func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
+	var mu sync.Mutex
+	jobRoutesSeen := map[string]bool{}
+	logRequested := false
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		path := r.URL.Path
+		switch {
+		case strings.HasSuffix(path, "/actions/runs"):
+			// workflow 11 一条 run；workflow 22 两条 run（201 新、301 旧）——
+			// 301 的 job 路由绝不能被查询（dedup 契约）。
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 3,
+				"workflow_runs": []any{
+					map[string]any{"id": 201, "name": "release", "workflow_id": 22, "head_sha": "abc"},
+					map[string]any{"id": 301, "name": "release", "workflow_id": 22, "head_sha": "abc"},
+					map[string]any{"id": 101, "name": "ci", "workflow_id": 11, "head_sha": "abc"},
+				},
+			})
+		case strings.HasSuffix(path, "/actions/runs/101/jobs"):
+			jobRoutesSeen["101"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"jobs": []any{map[string]any{
+					"id": 9001, "name": "build", "conclusion": "failure",
+					"html_url": "https://example.com/jobs/9001",
+				}},
+			})
+		case strings.HasSuffix(path, "/actions/runs/201/jobs"):
+			jobRoutesSeen["201"] = true
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"total_count": 1,
+				"jobs": []any{map[string]any{
+					"id": 9002, "name": "publish", "conclusion": "startup_failure",
+					"html_url": "https://example.com/jobs/9002",
+				}},
+			})
+		case strings.HasSuffix(path, "/actions/runs/301/jobs"):
+			jobRoutesSeen["301"] = true // dedup 违约：旧 run 被查询
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 0, "jobs": []any{}})
+		case strings.HasSuffix(path, "/logs/9001") || strings.HasSuffix(path, "/logs/9002"):
+			logRequested = true
+			_, _ = w.Write([]byte("setup ok\nerror: build failed\n"))
+		default:
+			// GetWorkflowJobLogs 需要 302 到最终日志地址。
+			if strings.Contains(path, "/jobs/900") {
+				// SDK 只跟随 301，302 的 Location 原样返回给调用方自行拉取
+				// ——Location 必须是绝对地址（presigned URL 语义）。
+				jobID := strings.TrimSuffix(path, "/logs")
+				http.Redirect(w, r, srv.URL+"/logs/"+jobID[strings.LastIndex(jobID, "/")+1:], http.StatusFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	logs, err := p.ListFailedJobLogs(context.Background(), "owner", "repo", "abc")
+	if err != nil {
+		t.Fatalf("ListFailedJobLogs: %v", err)
+	}
+	if jobRoutesSeen["301"] {
+		t.Fatalf("dedup violated: old run 301 was queried (routes seen: %v)", jobRoutesSeen)
+	}
+	if !jobRoutesSeen["101"] || !jobRoutesSeen["201"] {
+		t.Fatalf("latest runs 101/201 must be queried, seen=%v", jobRoutesSeen)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("want 2 failed jobs, got %d: %+v", len(logs), logs)
+	}
+	byName := map[string]model.JobLog{}
+	for _, l := range logs {
+		byName[l.Name] = l
+	}
+	if byName["build"].Stage != "ci" || byName["publish"].Stage != "release" {
+		t.Fatalf("unexpected job mapping: %+v", logs)
+	}
+	if !logRequested || !strings.Contains(logs[0].Trace, "build failed") {
+		t.Fatalf("log tail not fetched: requested=%v trace=%q", logRequested, logs[0].Trace)
+	}
+}
+
+// TestRepoExtras_WireTest locks the deployment/template/fork-sync wiring:
+// each capability call hits its route with the right body and the unified
+// conversion does not drop identity fields.
+func TestRepoExtras_WireTest(t *testing.T) {
+	var mu sync.Mutex
+	var bodies []map[string]any
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		if r.Body != nil {
+			var b map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			bodies = append(bodies, b)
+		}
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/deployments") && r.Method == http.MethodPost:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 55, "sha": "abc", "ref": "main", "environment": "prod"})
+		case strings.Contains(r.URL.Path, "/deployments/55/statuses"):
+			_, _ = w.Write([]byte(`{"id":1,"state":"success"}`))
+		case strings.HasSuffix(r.URL.Path, "/merge-upstream"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "fast-forward", "merge_type": "fast-forward"})
+		case strings.HasSuffix(r.URL.Path, "/generate"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "name": "new-repo", "full_name": "owner/new-repo"})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	p := newTestProvider(t, srv.URL)
+	ctx := context.Background()
+
+	dep, err := p.CreateDeployment(ctx, "owner", "repo", "main", "prod", provider.CreateDeploymentOptions{Task: "deploy"})
+	if err != nil {
+		t.Fatalf("CreateDeployment: %v", err)
+	}
+	if dep.ID != 55 || dep.Environment != "prod" {
+		t.Fatalf("deployment mapping: %+v", dep)
+	}
+	if err := p.CreateDeploymentStatus(ctx, "owner", "repo", 55, provider.DeploymentStatusOptions{State: "success", Description: "done"}); err != nil {
+		t.Fatalf("CreateDeploymentStatus: %v", err)
+	}
+	if err := p.SyncFork(ctx, "owner", "repo", "main"); err != nil {
+		t.Fatalf("SyncFork: %v", err)
+	}
+	repo, err := p.CreateRepoFromTemplate(ctx, "tpl", "base", provider.CreateRepoFromTemplateOptions{Name: "new-repo", Private: true})
+	if err != nil {
+		t.Fatalf("CreateRepoFromTemplate: %v", err)
+	}
+	if repo.Name != "new-repo" {
+		t.Fatalf("template repo mapping: %+v", repo)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	joined := strings.Join(paths, "\n")
+	for _, want := range []string{
+		"POST /api/v3/repos/owner/repo/deployments",
+		"POST /api/v3/repos/owner/repo/deployments/55/statuses",
+		"POST /api/v3/repos/owner/repo/merge-upstream",
+		"POST /api/v3/repos/tpl/base/generate",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing route %q, got %v", want, paths)
+		}
+	}
+	if b := bodies[0]; b["ref"] != "main" || b["environment"] != "prod" {
+		t.Errorf("deployment body: %v", b)
+	}
+	if b := bodies[2]; b["branch"] != "main" {
+		t.Errorf("merge-upstream body: %v", b)
+	}
+}
+
+// TestListDeployments_WireTest locks the GitHub deployments listing: the
+// environment filter is sent, the response converts to []model.Deployment,
+// and the int return carries the page item count — never Response.LastPage,
+// which is a page index (0 on single-page responses) rather than a count
+// (issue #89).
+func TestListDeployments_WireTest(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		linkCell  string // Link response header, if any
+		wantItems int
+		wantTotal int
+	}{
+		{
+			name:      "single page reports item count",
+			body:      `[{"id":55,"sha":"abc","ref":"main","environment":"prod"},{"id":56,"sha":"def","ref":"dev","environment":"staging"}]`,
+			wantItems: 2,
+			wantTotal: 2,
+		},
+		{
+			name:      "multi-page response total is page items not page index",
+			body:      `[{"id":55,"sha":"abc","ref":"main","environment":"prod"}]`,
+			linkCell:  `<https://api.example.test/repos/o/r/deployments?page=5>; rel="last"`,
+			wantItems: 1,
+			wantTotal: 1,
+		},
+		{
+			name:      "empty page totals zero",
+			body:      `[]`,
+			wantItems: 0,
+			wantTotal: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotQuery string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotQuery = r.URL.RawQuery
+				if tt.linkCell != "" {
+					w.Header().Set("Link", tt.linkCell)
+				}
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer srv.Close()
+			p := newTestProvider(t, srv.URL)
+			deps, total, err := p.ListDeployments(context.Background(), "owner", "repo", "prod", 1, 30)
+			if err != nil {
+				t.Fatalf("ListDeployments: %v", err)
+			}
+			if len(deps) != tt.wantItems {
+				t.Fatalf("want %d deployments, got %d", tt.wantItems, len(deps))
+			}
+			if len(deps) > 0 && (deps[0].ID != 55 || deps[0].Environment != "prod") {
+				t.Errorf("deployment mapping: %+v", deps[0])
+			}
+			if total != tt.wantTotal {
+				t.Errorf("total = %d, want %d (page item count, never LastPage)", total, tt.wantTotal)
+			}
+			if !strings.Contains(gotQuery, "environment=prod") {
+				t.Errorf("environment filter not sent: %s", gotQuery)
+			}
+		})
+	}
+}
+
+// TestParseWebhookEvent_EmptySecretRejected 钉住 issue #43：空 secret 在
+// parse 路径与注册表验证器同策略拒绝（可伪造 HMAC 不再 fail-open）；
+// 错误签名同样拒绝。
+func TestParseWebhookEvent_EmptySecretRejected(t *testing.T) {
+	p := newTestProvider(t, "http://example.test/api/v3")
+	body := `{"ref":"refs/heads/main","after":"abc123","repository":{"full_name":"owner/repo"},"sender":{"login":"dev"}}`
+
+	mk := func(sig string) *http.Request {
+		r, _ := http.NewRequest(http.MethodPost, "/hook", strings.NewReader(body))
+		r.Header.Set("X-GitHub-Event", "push")
+		r.Header.Set("Content-Type", "application/json")
+		if sig != "" {
+			r.Header.Set("X-Hub-Signature-256", sig)
+		}
+		return r
+	}
+
+	if _, err := p.ParseWebhookEvent(mk(""), ""); err == nil {
+		t.Fatal("空 secret 必须在 parse 路径被拒（与 ValidateWebhookSignature 同策略）")
+	}
+
+	// 用空串自签的 HMAC（攻击者形态）同样拒绝
+	mac := hmac.New(sha256.New, []byte(""))
+	mac.Write([]byte(body))
+	evil := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+	if _, err := p.ParseWebhookEvent(mk(evil), ""); err == nil {
+		t.Fatal("HMAC(key=\"\") 的可伪造签名必须被拒")
+	}
+
+	// 非空 secret + 错误签名拒绝
+	if _, err := p.ParseWebhookEvent(mk("sha256=deadbeef"), hookSecret); err == nil {
+		t.Fatal("错误签名必须被拒")
+	}
+}
+
+// TestDownloadReleaseAsset_CrossHostRedirect_NoCredentialLeak 附件下载二跳
+// **不得**带凭据(issue #136,补 gitee NoTokenLeak 同款用例)。
+//
+// 真实 GitHub 形态:附件端点 302 到 S3/对象存储(跨 host)。断言二跳的
+// Authorization 与 query 令牌均为空——followClient 无认证包装;一旦有人
+// 把二跳改走 p.client(token 通道),本用例立刻红。
+func TestDownloadReleaseAsset_CrossHostRedirect_NoCredentialLeak(t *testing.T) {
+	assetAuth := ""
+	assetQuery := ""
+	objectStore := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assetAuth = r.Header.Get("Authorization")
+		assetQuery = r.URL.RawQuery
+		_, _ = w.Write([]byte("asset-bytes"))
+	}))
+	defer objectStore.Close()
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v3/repos/owner/repo/releases/assets/99" {
+			http.NotFound(w, r)
+			return
+		}
+		// 附件端点必须带 octet-stream Accept,否则 GitHub 回 JSON 元数据。
+		if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+			t.Errorf("expected Accept application/octet-stream, got %q", got)
+		}
+		if r.Header.Get("Authorization") == "" {
+			t.Error("第一跳必须带平台凭据(SDK 通道),否则测的是假链路")
+		}
+		http.Redirect(w, r, objectStore.URL+"/s3/asset.bin", http.StatusFound)
+	}))
+	defer api.Close()
+
+	p := newTestProvider(t, api.URL+"/api/v3")
+	var buf bytes.Buffer
+	if err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if buf.String() != "asset-bytes" {
+		t.Fatalf("expected streamed bytes, got %q", buf.String())
+	}
+	if assetAuth != "" {
+		t.Errorf("第二跳(跨 host 对象存储)不得带 Authorization,实际=%q", assetAuth)
+	}
+	if strings.Contains(assetQuery, "token") {
+		t.Errorf("第二跳 query 不得带令牌参数,实际=%q", assetQuery)
+	}
+}

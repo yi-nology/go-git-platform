@@ -27,7 +27,7 @@ import (
 	"github.com/yi-nology/go-git-platform/provider"
 
 	// register every shipped backend
-	_ "github.com/yi-nology/go-git-platform/backends/all"
+	_ "github.com/yi-nology/go-git-platform/adapter/all"
 )
 
 // probe is one capability tour step: a display name, whether the connected
