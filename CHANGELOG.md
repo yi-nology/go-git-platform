@@ -6,6 +6,34 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed（2C：7 可选接口族 contracttest 补齐）
+
+- **test(contracttest)**：七个可选能力族全部获得 wire 级行为契约套件——
+  `GistsSuite`/`StarredSuite`（T1，分页 query + `Accept:
+  application/vnd.github.star+json` 包装体）、`MigrationsSuite`/
+  `ReleaseAssetsSuite`（T2，org 空/非空双路由 + 资产下载逐字节/404→
+  `ErrNotFound` 链）、`DeploymentsSuite`/`ForkSyncSuite`（T3，写侧
+  body/query 钉）、`TeamReviewsSuite`（T4，github/gitea/forgejo 三平台
+  teams 载荷）。每套件沿 Labels/Issues 范式带**双漂移开关**（harness
+  config 非-nil ⟺ `Capabilities().X` 声明，缺/多 config 均 error、未声明
+  端 skip）+ 自带 httptest；能力仅在场的后端提供 fixture（github×6 族，
+  TeamReviews 三家）。
+- **test(contracttest)**：coverage **三向锁翻转**——七族同提交落
+  `coveredFamilies` 行 + `Run` 挂接 + 族注册，`uncoveredFamilies` 历史
+  缺口清零（七名全数移入 `coveredFamilies`）；T5 收口删翻转守卫
+  `TestOptionalCapabilityFamiliesUncovered`，空表保留以维持
+  `TestCapabilityFamiliesAllRegistered` 的 covered∪uncovered 语义。
+- **test(contracttest)**：**pre-wire 负例**钉死（零请求可判）——非法
+  deployment state、空 fork-sync branch → `ErrInvalidInput` + 422
+  `ProviderError` + 零请求；非法 PR number → 零请求 +
+  `ProviderError{StatusCode:0}` 结构面（见下条：无分类哨兵）。
+- **备忘（已探针实测、另立单候选，零生产改动）**：`iface_releases.go`
+  `DownloadReleaseAsset`「无响应体时返回错误」doc 与现实不符（go-github
+  v93 下 `rc==nil` 生产不可达，200 空体 = 成功 0 字节——套件按现实钉 +
+  flip-together 注释）；`backendutil.ParsePRNumber*` 拒绝无分类哨兵（裸
+  `ProviderError{Status:0}`，`errors.Is(ErrInvalidInput)` 不可用）——
+  两处均**已探针实测、另立单**，非本轮修复。
+
 ## [0.138.0] - 2026-11-15
 
 ### Added（四单批量：Draft 写侧 + 批量标签移除 + 种子全集导出，#160-#163）

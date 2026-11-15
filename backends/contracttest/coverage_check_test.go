@@ -20,10 +20,10 @@ import (
 // check (TestCapabilityFamiliesAllRegistered) pins every CapabilitySet
 // field into one of the two registries.
 // coveredFamilies maps each manager family to the suite that carries its
-// behavior assertions. Core families must all be present here; the
-// optional-capability families with no shared suite yet (see
-// uncoveredFamilies) are deliberately absent — see
-// TestOptionalCapabilityFamiliesUncovered.
+// behavior assertions. Core families must all be present here; an optional
+// capability family with no shared suite yet would be absent — see the
+// uncoveredFamilies registry below (empty since 2C T5: every optional family
+// of roadmap §2.4 has a wire suite).
 var coveredFamilies = map[string]string{
 	"LabelManager":            "LabelsSuite",
 	"IssueManager":            "IssuesSuite",
@@ -80,7 +80,7 @@ func TestRunCoverageMatrix(t *testing.T) {
 		mountedSuites[sub] = true
 	}
 
-	// Direction 1:// Direction 1: every table row's suite must be mounted in Run().
+	// Direction 1: every table row's suite must be mounted in Run().
 	for family, suite := range coveredFamilies {
 		if !mountedSuites[suite] {
 			t.Errorf("family %s claims coverage by %q, but Run() mounts no such suite — wire it or fix the table", family, suite)
@@ -105,20 +105,10 @@ func TestRunCoverageMatrix(t *testing.T) {
 	}
 }
 
-// uncoveredFamilies records the optional-capability families whose behavior
-// currently lives only in the CapabilitySet declaration checks
-// (capabilities.go) — the machine-visible "explicitly uncovered" registry of
-// issue #63. The registry is now EMPTY (2C T4): Gists/Starred moved out to
-// coveredFamilies when their wire suites landed (2C T1); Migrations/
-// ReleaseAssets likewise (2C T2); Deployments/ForkSync likewise (2C T3);
-// TeamReviewManager likewise (2C T4, issue #79/#123 — its per-backend
-// team_reviewers_wire_test.go pins remain alongside the shared suite).
-// The variable and TestOptionalCapabilityFamiliesUncovered stay in place
-// (empty) so a future optional family can re-register a gap here; their
-// final disposal is T5's call.
-// Adding behavior assertions for any family here means adding a suite to
-// Run(), a Harness config, and a row to coveredFamilies — the third-way
-// check (TestCapabilityFamiliesAllRegistered) fails until the move lands.
+// uncoveredFamilies 历史缺口已清零 2C，新可选族先入 coveredFamilies——
+// 保留注册表以维持 TestCapabilityFamiliesAllRegistered 的 covered∪uncovered
+// 语义（翻转守卫 TestOptionalCapabilityFamiliesUncovered 已随 T5 删除：
+// 空循环断言不了任何东西，缺口可见性由本空表与 AllRegistered 承接）。
 var uncoveredFamilies = map[string]string{}
 
 // capFieldToFamily maps every CapabilitySet field to its manager family —
@@ -150,25 +140,6 @@ var capFieldToFamily = map[string]string{
 	"RepoTemplates":     "RepoTemplateManager",
 	"ForkSync":          "ForkSyncManager",
 	"TeamReviews":       "TeamReviewManager",
-}
-
-// TestOptionalCapabilityFamiliesUncovered pins the machine-visible record of
-// the optional-capability families that carry only CapabilitySet
-// declaration checks (issue #63): adding behavior assertions for any of them
-// means adding a suite to Run(), a Harness config, and a row to
-// coveredFamilies — this test fails until the row lands.
-// The list is empty as of 2C T4 (all seven optional families landed); the
-// loop and the test stay in place so a future gap can be registered here.
-func TestOptionalCapabilityFamiliesUncovered(t *testing.T) {
-	for _, suite := range []string{
-		// (empty — 2C T4: all seven optional-capability families covered)
-	} {
-		for _, mounted := range coveredFamilies {
-			if mounted == suite {
-				t.Errorf("optional-capability family suite %s is now covered — move it from the uncovered list into a family row of coveredFamilies", suite)
-			}
-		}
-	}
 }
 
 // TestCapabilityFamiliesAllRegistered is the third-way assertion (issue
