@@ -397,7 +397,7 @@ func TestOriginRedirectHost_WalksChain(t *testing.T) {
 //
 // 回归背景(P2,当前不可达但形状危险):`redactURL` 只处理 query ⇒
 // `https://user:pass@host/` 的密码会原样进日志。仓内构造带 userinfo 的 URL 的
-// 只有 `pkg/credential.BuildAuthURL`(暂无调用点)⇒ 这是"改一行就会泄漏"的形状。
+// 只有 `auth/credential.BuildAuthURL`(暂无调用点)⇒ 这是"改一行就会泄漏"的形状。
 func TestRedactURL_MasksUserInfo(t *testing.T) {
 	u, err := http.NewRequest(http.MethodGet, "https://user:SECRET-PASS@host/path", nil)
 	require.NoError(t, err)

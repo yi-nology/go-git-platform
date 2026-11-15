@@ -45,7 +45,7 @@ func parsePlainAndMatch(t *testing.T, keyContent string) {
 // 旧实现静默丢弃 AuthConfig.Passphrase——带口令私钥原样落盘后交给
 // `-o BatchMode=yes` 的 ssh，口令无门可问，密钥被静默跳过、认证必然失败，
 // 而同一份 AuthConfig 在 gogit 后端（xssh.NewPublicKeys）正常。现在
-// resolveAuth 用 pkg/credential 的 ProcessPrivateKey 在进程内解密成明文 PEM
+// resolveAuth 用 auth/credential 的 ProcessPrivateKey 在进程内解密成明文 PEM
 // 再落盘；口令错误时 fail-fast 报错而不是静默丢弃。
 func TestNative_ResolveAuth_DecryptsPassphraseKey(t *testing.T) {
 	b := &NativeGitBackend{gitPath: "git"}

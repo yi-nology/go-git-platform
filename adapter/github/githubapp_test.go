@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/adapter/github"
-	"github.com/yi-nology/go-git-platform/githubapp"
+	"github.com/yi-nology/go-git-platform/auth/githubapp"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )

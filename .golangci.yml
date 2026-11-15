@@ -124,7 +124,7 @@ linters:
         linters:
           - gocyclo
       # SSH key type detection is inherently a multi-case switch
-      - path: pkg/credential/sshkey\.go
+      - path: auth/credential/sshkey\.go
         linters:
           - gocyclo
 
