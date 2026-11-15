@@ -87,6 +87,18 @@ func TestGitHub_Contract(t *testing.T) {
 			// 多字节字面量：逐字节下载断言能抓住 byte/rune 切错位。
 			AssetBytes: "release-asset-payload-附件字节流-0123456789",
 		},
+		Deployments: &contracttest.DeploymentsHarnessConfig{
+			// 非零 id + ref/environment/creator/created_at 齐全：解析对拍
+			// （deploymentWire 字段级比对）的 fixture 有效性前提。
+			CreateResponse: `{"id":55,"sha":"abc123","ref":"main","environment":"production","description":"ship it","creator":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/55"}`,
+			// 两元素数组：len 对拍 + total==len（页内计数，issue #89）。
+			ListResponse:   `[{"id":55,"sha":"abc123","ref":"main","environment":"production","description":"ship it","creator":{"login":"dev"},"created_at":"2026-01-01T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/55"},{"id":56,"sha":"def456","ref":"dev","environment":"staging","description":"stage it","creator":{"login":"dev"},"created_at":"2026-01-02T00:00:00Z","url":"https://api.github.com/repos/owner/repo/deployments/56"}]`,
+			StatusResponse: `{"id":1,"state":"success","description":"done"}`,
+		},
+		ForkSync: &contracttest.ForkSyncHarnessConfig{
+			// RepoMergeUpstreamResult 形状（message/merge_type/base_branch）。
+			MergeResponse: `{"message":"Successfully fast-forwarded","merge_type":"fast-forward","base_branch":"main"}`,
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
