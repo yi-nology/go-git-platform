@@ -77,6 +77,16 @@ func TestGitHub_Contract(t *testing.T) {
 			// 服务端忽略 Accept 时的裸 repo 数组形状（decodeStarredEntry 回退面）。
 			BareResponse: `[{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}]`,
 		},
+		Migrations: &contracttest.MigrationsHarnessConfig{
+			// pending 终态：id 非零 + state 非空（解析对拍的 fixture 有效性前提）。
+			CreateResponse: `{"id":7,"state":"pending","archive_url":""}`,
+			// exported 终态：archive_url 非空，钉 exported-terminal 字段映射。
+			GetResponse: `{"id":42,"state":"exported","archive_url":"https://api.github.com/orgs/acme/migrations/42/artifacts"}`,
+		},
+		ReleaseAssets: &contracttest.ReleaseAssetsHarnessConfig{
+			// 多字节字面量：逐字节下载断言能抓住 byte/rune 切错位。
+			AssetBytes: "release-asset-payload-附件字节流-0123456789",
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
