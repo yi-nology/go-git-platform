@@ -61,21 +61,21 @@
 ## 既有行为契约清单
 
 - **404**：status 驱动——`contracttest testIsNotFound`
-  （backends/contracttest/contracttest.go:210，httptest 404 → `IsNotFound`），
+  （contracttest/contracttest.go:210，httptest 404 → `IsNotFound`），
   每个后端的主套件跑。
 - **400/422**：**pre-wire 校验拒绝**断言——`families_contract`
   （`assertMalformedTimestampRejected`：`ErrInvalidInput` + 0 GETs，拒绝
-  发生在 wire 之前，backends/contracttest/families_contract.go:218-243）与
+  发生在 wire 之前，contracttest/families_contract.go:218-243）与
   `notifications`（malformed `Since`/`LastReadAt` → `IsInvalidInput`，
-  backends/contracttest/notifications.go:99-111 起）。这些是**后端本地
+  contracttest/notifications.go:99-111 起）。这些是**后端本地
   校验契约、不是 mock 状态码**：断言的是「同一畸形值每后端同拒、绝不静默
   丢过滤器」，不经过 `classifyStatusCode` 的 400/422 分支；wire 路的
   400/422 → `ErrInvalidInput` 由上表与 `provider` 单测钉住，本版不扩套件。
 - **401/403/409/429/5xx**：`ErrorClassSuite`（本版新增，
-  backends/contracttest/errorclass.go——自带 httptest（`stubHandler` 不能改
+  contracttest/errorclass.go——自带 httptest（`stubHandler` 不能改
   状态码），五状态经各后端真实错误链 `errors.Is` 钉到哨兵；套件前置：
   `baseCfg` 不设 RetryConfig ⇒ 429/5xx 单次尝试不被重试）。
-- **操作层**：`OperationSuite`（本版新增，backends/contracttest/operation.go
+- **操作层**：`OperationSuite`（本版新增，contracttest/operation.go
   ——台账/接口测试侧独立直查期望 → `CheckOperation` 哨兵 → stub 派生项
   行为，三层一致；测试侧期望不调 `DeriveOperationSupport`，防同义反复；
   418 Teapot 兜底任何真 wire 调用）。

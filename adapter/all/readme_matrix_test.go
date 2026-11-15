@@ -12,7 +12,7 @@ package all_test
 //
 // ⚠️²（GitCode 通知仅仓库域）与 ❌¹（能力摘除）等脚注格按「非 —」/「—」
 // 归一判定——它们表达的是"声明了但部分受限"或"未声明",声明位真假由
-// backends/contracttest/capabilities.go 的双向断言守着,这里只守矩阵面。
+// contracttest/capabilities.go 的双向断言守着,这里只守矩阵面。
 
 import (
 	"net/http"

@@ -21,7 +21,7 @@ const corpusSecret = "corpus-secret"
 
 // corpusUpdate regenerates golden files:
 //
-//	go test ./backends/<platform>/ -run WebhookCorpus -corpus-update
+//	go test ./adapter/<platform>/ -run WebhookCorpus -corpus-update
 var corpusUpdate = flag.Bool("corpus-update", false, "rewrite webhook corpus golden files")
 
 // WebhookParser is the surface RunWebhookCorpus exercises. Every backend's

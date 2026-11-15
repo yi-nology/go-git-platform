@@ -9,7 +9,7 @@ import (
 )
 
 // Label management is served by the Gitea-family engine
-// (backends/internal/giteafamily); this backend's adapter (sdkPorts) maps
+// (adapter/internal/giteafamily); this backend's adapter (sdkPorts) maps
 // the SDK's label endpoints. Labels are addressed by name on the provider
 // surface and by numeric ID on the family's update/delete endpoints, so
 // update/delete resolve the ID through the per-provider TTL cache.

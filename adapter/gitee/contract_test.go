@@ -50,7 +50,7 @@ func TestGitee_Contract(t *testing.T) {
 			},
 		},
 		// Gitee release shape (raw transport; the SDK model mis-types the
-		// payload — see backends/gitee/releases.go): github-like keys with
+		// payload — see adapter/gitee/releases.go): github-like keys with
 		// html_url, served by the same mock for by-tag fetches and the
 		// tag→id resolution that precedes update/delete.
 		// Gitee milestone shape: keyed by the serial "number" (the write

@@ -1,5 +1,5 @@
 // Package backendutil holds the shared plumbing used by every platform backend
-// under backends/. It exists to eliminate the copy-pasted HTTP-client, hook,
+// under adapter/. It exists to eliminate the copy-pasted HTTP-client, hook,
 // retry, and base-URL construction that was previously duplicated (often
 // byte-for-byte) across the seven backend packages.
 //

@@ -160,7 +160,7 @@ func TestTencentCode_GetBranchProtection_NotFoundSentinel(t *testing.T) {
 
 // TestTencentCode_EnsureBranchProtection_CreatesUnprotected 收口 issue #90
 // 的编排面：EnsureBranchProtection 在 tencentcode 的「未保护 → 创建」路径
-// （provider/ensure.go 的 IsNotFound 分支）必须可达——旧错误分类下该分支
+// （runtime/ensure.go 的 IsNotFound 分支）必须可达——旧错误分类下该分支
 // 永远走不到，Ensure 静默失败。
 func TestTencentCode_EnsureBranchProtection_CreatesUnprotected(t *testing.T) {
 	protected := false

@@ -23,7 +23,7 @@ import (
 //     一个写请求、夹具下至多删 1 个标签；tencentcode 删路径先 GET 后 PUT、
 //     gitea/forgejo 加路径先 GET 标签表再 POST——GET 不计入写数）；
 //   - 缺能力哨兵（ErrNotImplemented）是 unit-only：7 个后端全部实现
-//     IssueManager，wire 面触发不了——已由 provider/ensure_issue_test.go
+//     IssueManager，wire 面触发不了——已由 runtime/ensure_issue_test.go
 //     case 4「缺 IssueManager 能力 NotImplemented 零 HTTP」覆盖。本套件
 //     保留 IssueManager 缺失时的 t.Skipf 守卫（同 errorclass.go）。
 //

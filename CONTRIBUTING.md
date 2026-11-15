@@ -58,17 +58,17 @@ the shape).
 ## What we look for in changes
 
 - **Tests.** Add or update tests for behavior changes. Backends share a
-  cross-platform contract suite in `backends/contracttest/`; when you add a
+  cross-platform contract suite in `contracttest/`; when you add a
   capability that should be consistent across platforms, extend that suite
   rather than only testing one backend.
 - **Race safety.** The test suite runs with `-race`; new concurrency code must
-  be safe under it (see `pkg/credential/sshkey.go` for the mutex + double-check
+  be safe under it (see `auth/credential/sshkey.go` for the mutex + double-check
   pattern used for shared maps).
 - **No secrets in code or logs.** Never pass secrets through `argv` (see the
   removed `ssh-keygen` fallback). Keep credentials out of log output.
 - **Follow existing patterns.** The `provider` package defines the abstraction;
-  each `backends/<platform>/` implements it. Shared plumbing lives in
-  `backends/internal/backendutil` — reuse it instead of copy-pasting.
+  each `adapter/<platform>/` implements it. Shared plumbing lives in
+  `adapter/internal/backendutil` — reuse it instead of copy-pasting.
 
 ## oekit-first conventions (required)
 
@@ -101,7 +101,7 @@ Concrete rules:
   `logx.WithService`. No new stdlib `log` or `fmt.Println` debug output.
 - **Concurrency.** No bare `go func` — use `async.GoSafe` (panic-recovering);
   `GoSafeWithErrChannel` when the goroutine produces an error. Bounded fan-out
-  follows the `provider/batch.go` semaphore + `BatchResult` pattern (a panicking
+  follows the `runtime/batch.go` semaphore + `BatchResult` pattern (a panicking
   item becomes that item's `Err`; it must not crash the process).
 - **Explicitly out of scope** (settled — don't re-litigate): `BizError` /
   `mw.Fail` (HTTP-service-layer concepts; this SDK has no such layer), and
@@ -113,17 +113,17 @@ plus the release/CI discipline AI agents must follow.
 
 ## Adding a new platform backend
 
-1. Create `backends/<platform>/` with a `New(cfg provider.Config) (provider.Provider, error)`
-   constructor. Use `backends/internal/backendutil` for HTTP client / retry /
+1. Create `adapter/<platform>/` with a `New(cfg provider.Config) (provider.Provider, error)`
+   constructor. Use `adapter/internal/backendutil` for HTTP client / retry /
    hooks wiring so you don't reimplement it.
 2. Implement only the capability interfaces the platform actually supports.
    `IssueManager` and `SearchManager` are **optional** — leave them out unless
    the platform genuinely offers them; consumers type-assert for optional caps.
 3. Register the platform with `provider.Register` in an `init()`, and add a
-   blank import in `backends/all/all.go`.
+   blank import in `adapter/all/all.go`.
 4. Add a `contract_test.go` that wires `contracttest.Run` with a `Harness`
    (see any existing backend's contract test).
-5. Add the platform constant to `provider/provider.go` and the README platform
+5. Add the platform constant to `model/platform.go` and the README platform
    list.
 
 ## Adding an optional capability
@@ -134,12 +134,12 @@ plus the release/CI discipline AI agents must follow.
    backend's `Capabilities()`. Platforms that cannot serve the capability do
    not implement it at all — absence is expressed by the declaration, never
    by a stub.
-3. Extend `backends/contracttest/capabilities.go` with the bidirectional
+3. Extend `contracttest/capabilities.go` with the bidirectional
    assertion for the new field, and add a mounted suite
-   (`backends/contracttest/<name>.go` + `Harness` field + `Run` wiring) —
+   (`contracttest/<name>.go` + `Harness` field + `Run` wiring) —
    or, if the capability ships without a shared suite (write-only surfaces,
    ID-scoped families), register the family in
-   `backends/contracttest/coverage_check_test.go`'s `uncoveredFamilies` AND
+   `contracttest/coverage_check_test.go`'s `uncoveredFamilies` AND
    extend `capFieldToFamily`: the third-way check
    (`TestCapabilityFamiliesAllRegistered`) fails for any `CapabilitySet`
    field that lands in neither registry (issue #123).
@@ -153,7 +153,7 @@ plus the release/CI discipline AI agents must follow.
    read-only call exists), the README capability matrix (a row), and both
    static counts (README "N optional capability interfaces",
    README project-structure "CapabilitySet (N 项能力声明)"; the README
-   matrix↔`Capabilities()` machine check in `backends/all` catches matrix
+   matrix↔`Capabilities()` machine check in `adapter/all` catches matrix
    drift automatically).
 6. Update this checklist if the coupling points change.
 
@@ -178,7 +178,7 @@ heading in `CHANGELOG.md` and explain the migration.
 Two repo invariants back this contract:
 
 1. **The contract suites are the spec.** Every behavioral promise above is
-   enforced by `backends/contracttest/`; a PR that changes suite assertions
+   enforced by `contracttest/`; a PR that changes suite assertions
    must justify the change as a bug fix in the commit message.
 2. **The divergence ledger is the fine print.** Platform gaps are declared
    (`provider.Divergences()`), generated into `docs/divergence-ledger.md`,

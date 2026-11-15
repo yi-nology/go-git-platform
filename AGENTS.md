@@ -42,7 +42,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
    禁止新增 stdlib `log` / `fmt.Println` 调试输出。
 3. **并发**：**禁止裸 `go func`**——一律 `async.GoSafe`（自动 panic recover +
    堆栈日志）；需要收集 goroutine 错误用 `GoSafeWithErrChannel`。批量/有界并发
-   沿用 `provider/batch.go` 的 semaphore + `BatchResult` 模式（panic 转 item
+   沿用 `runtime/batch.go` 的 semaphore + `BatchResult` 模式（panic 转 item
    Err，不许崩进程）。
 
 **明确不引入**（写了避免反复重新评估）：
@@ -88,13 +88,13 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   引入；先行审计再动工，本条即结论存档）**。当前基线（已接入的上游新原
   语，后续迭代直接沿用、勿手写等价物）：`syncx.FanInLimitCtx`（batch 引
   擎，panic→item Err）、`pkg/cache`（`LocalCache`+`SingleFlightCache`，
-  provider/ttlcache.go 全量委托）、async v0.22 变体（`GoSafeLabeled`=
-  provider/janitor、`GoSafeWithErrChannel`=mcp serve）、
+  runtime/ttlcache.go 全量委托）、async v0.22 变体（`GoSafeLabeled`=
+  runtime/janitor、`GoSafeWithErrChannel`=mcp serve）、
   `concurrency/retry/httpx`（transport 重试判定）。本轮逐包对照后确认无
   手写等价物/不适用：`errors` 新增的 `Append`/`Chain`/`In`（仓内无错误聚
   合、无清理链、无多哨兵 Is 链）；`cache.Checker`（无健康检查回源形态）；
   `pagination`（服务端 PageRequest/PageResponse，与本仓客户端翻页器
-  provider/pageiter.go 不同域）；`convert`（any 强转，本仓 Parse* 是校验
+  runtime/pageiter.go 不同域）；`convert`（any 强转，本仓 Parse* 是校验
   型拒绝语义）；`timex`（日期算术/格式化，无多 layout 解析原语，
   gitcode/gitee 的 due_on 多格式解析保留为领域助手）；`shellx`（POSIX
   shell 转义，gitbackend 走 argv 直 exec 不经 shell）；`container`
@@ -117,7 +117,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   v0.8.2，另 go-github v92→v93 / gitlab client-go v3.40→v3.43 / gitea sdk
   v1.4→v1.5.1（go-git/forgejo/gitcode/gongfeng/gitee/x/* 已在最新）。pkg
   侧逐版本对照：v0.29 为大批 bugfix 发版（cache 六连修 + `HashKey` 长度前缀
-  无歧义编码——经 provider/ttlcache.go 全量委托**被动受益**，无引入点）；
+  无歧义编码——经 runtime/ttlcache.go 全量委托**被动受益**，无引入点）；
   v0.30 `singleflighttest` 契约套件（无自研 singleflight）、`convert` 增
   nil 安全 `Opt*`/`AnyToStrOr`/`AnyToInt32`（mcp 层经 MCP SDK 类型化解码，
   无 any→T 手写解析点）；v0.31 `cli` 子命令别名/Table/Report（SDK 无 CLI
@@ -134,7 +134,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
 - **pkg v0.34–v0.35 增量审计（2026-11-06，随上游反馈闭环补记）**：v0.34.1
   `container.Slice.AppendIfAbsent`（#178 下游提案落地，detect.go hostAliases
   已迁 Slice——见 container 条款）与 `ErrActionRunNotFound` 配套面；v0.35.0
-  新原语 `pathx.MatchSimpleGlob`（单星+次星字面量——`pkg/branchfilter` 需
+  新原语 `pathx.MatchSimpleGlob`（单星+次星字面量——`filter/branchfilter` 需
   多星 + filepath.Match 语义（`*` 不跨 `/`、`feature/*/*` 多层），形态
   不匹配不引入，branchfilter 保留 stdlib）；`stringx.MaskJSONFields`
   （JSON 字段级脱敏——暂无消费点，webhook 日志脱敏若长出需求再评估）；
@@ -164,7 +164,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   `obfuscated` 未导出内部，只钉行为面：Get 独立副本往返/过期替换生效/
   导出字段直填零值经 nil 守卫可用；PrivateKeyPEM 是配置传入的公有字段
   不动——改类型即 breaking）；② `encoding.UnmarshalUseNumber`——
-  `pkg/projection` 手写 decoder+UseNumber 删除（防 >2^53 精度丢失语义
+  `model/projection` 手写 decoder+UseNumber 删除（防 >2^53 精度丢失语义
   不变；上游「尾残报错」严于手写 Decode，但 raw 来自 json.Marshal 无
   尾残形态，零行为差异）。定性（无消费点，勿再评估）：`pack`（跨宿主
   迁移资产包——本仓无迁移资产导出/导入面）；`encoding` 其余面
@@ -260,7 +260,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   v0.32.0 #231 poll DeadLetter + v0.33.0 七连（#246–#252，Limiter.Reserve
   收敛 (duration,error)+ErrNotReservable 哨兵属 breaking，与本仓无关）；
   logx v0.9.2 纯 floor sync。**收编两处（issue #137/#138 在办）**：①
-  `backends/contracttest/contracttest.go` signRequest 四块手算 HMAC 删成
+  `contracttest/contracttest.go` signRequest 四块手算 HMAC 删成
   `webhook.SignHMAC` 调用（sha256= 前缀两形走 `WithSignaturePrefix`、裸
   hex 两形走缺省，与验证器家族同选项单源；空密钥负对照夹具保留最小手算
   分支——上游 SignHMAC 空 secret fail-closed panic 拒签，攻击者空密钥伪
@@ -269,8 +269,8 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   预算取 TruncBytes 而非 TruncRunes（契约是 at most n bytes），RuneStart
   回退顺带修字节切出非法 UTF-8 的 CJK 缺陷，ASCII 行为逐字节不变，两处
   后缀字节原样保留。**测试夹具手写 HMAC 保留独立对照（不收编，勿再评
-  估）**：provider/webhook_test.go、webhook_gitee_test.go giteeSign、
-  backends/github signHook、giteafamily signedHookRequest 四处——手算
+  估）**：runtime/webhook_test.go、webhook_gitee_test.go giteeSign、
+  adapter/github signHook、giteafamily signedHookRequest 四处——手算
   stdlib 值是对上游委托链（hmacSum/encodeSignature/选项接线）的跨实现
   真源，全换 SignHMAC 会让 sign 与 verify 共用同一 hmacSum 自我抵消；上
   游 sign 测试自留独立实现先例（sign_hmac_test.go signRaw/giteeSign）；
@@ -318,7 +318,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   Delegating/Enabled(logx.Level)/WithService/SetDefault 逐项核对，本仓零
   BaseLogger 字段访问）；concurrency 自宣零 BREAKING 实证（async.PanicError
   兼容载体保留、FanInLimitCtx/Slot/loop.Config/httpx 三函数签名逐字不变）。
-  **收编三处**：① `pkg/errors.Recovered`（#381）——provider/ttlcache.go 回
+  **收编三处**：① `pkg/errors.Recovered`（#381）——runtime/ttlcache.go 回
   源 winner 的手写 recover 双分支（error `%w`/非 error `%v`，正是 #381 点
   名病灶）收编为 Recovered+Wrap，error 身份（Unwrap）+栈+`%T` 三收益，赢
   家重 panic 路径不动；② 72 处 Errorf→fmt.Errorf 全量迁移（见规则一）；
@@ -388,7 +388,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   （v0.87.0 起动态值是 kv 后缀，文本不稳定）。
 - 给 `Provider` 或核心子接口加方法 = breaking（major 口径）；新面一律走可选
   能力接口（`iface_*.go` + `CapabilitySet`）。
-- **契约测试是 spec**：改 `backends/contracttest/` 断言必须在提交信息里论证旧
+- **契约测试是 spec**：改 `contracttest/` 断言必须在提交信息里论证旧
   wire shape 为什么是错的。
 - 平台偏离必须机器可读登记进后端 `divergence.go`，`go generate ./...` 再生成
   `docs/divergence-ledger.md`——禁止文档-only 的偏离。

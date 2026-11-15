@@ -34,7 +34,7 @@ AI agent 可直接调用的工具面。
   [model/projection](../model/projection)),大列表只取
   `["number","title","head.ref"]` 这类字段,不再为 50 个 PR 烧掉整段上下文;
 - 列表工具开放 `per_page` 参数(1–100,默认 30),与 `page` 配合翻页;
-- `wait_for_status` 内置轮询原语(provider.WaitForCommitStatus),
+- `wait_for_status` 内置轮询原语(runtime.WaitForCommitStatus),
   agent 提交状态后一条工具调用即可等待 CI 终态。
 
 ## 使用

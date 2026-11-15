@@ -30,7 +30,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 // create-or-replace——直接落线即可创建(issue #73)。旧实现委托
 // UpdateBranchProtection,而 Update 的「读当前保护再合并」前置在未保护
 // 分支上必然 404 ⇒ create 路径死锁,EnsureBranchProtection 的
-// EnsureCreated 分支(provider/ensure.go)在 GitHub 上不可达。
+// EnsureCreated 分支(runtime/ensure.go)在 GitHub 上不可达。
 // 创建按调用方给定的四旋钮直出 wire,不做任何读回。
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	req := &github.ProtectionRequest{
