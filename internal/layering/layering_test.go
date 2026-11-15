@@ -120,15 +120,17 @@ var specConditionalCells = map[[2]string]bool{
 // **存量边例外**（每条点名存量文件；非测试文件出现同样违例）。这三条是实现期
 // 盘点真实 import 面时发现的：spec 撰写时未覆盖，属「表外存量」，按包×目标
 // 精确放行（不做「任意包的测试都能导」的宽放——保住 model 叶子在测试里也成立）。
-// 新增条目必须先在 spec 修订里登记，再回来加行并点名文件。
+// 新增条目必须先在 spec 修订里登记，再回来加行并点名文件，且同步改
+// TestSpecTableMatchesEncoding 的 wantDeviations 冻结清单（例外维度的
+// 「改一边不改另一边即红」靠它，见该处注释）。
 var documentedTestOnlyDeviations = map[[2]string]string{
-	// S2 carry（task-6 brief 点名）：provider 的工厂/管理器测试需要平台已注册。
+	// Task-2 carry（progress.md）：provider 的工厂/管理器测试需要平台已注册。
 	// 旧 backends/all 形态随包迁移保留为空导入，spec §4.1 未列 provider×adapter。
 	{"provider", "adapter"}: "存量：provider/factory_test.go 空导入 adapter/all 注册平台（S2 carry；按包×目标放行 adapter/all 本体）",
-	// S2 carry（task-6 brief 点名）：runtime 的 manager 测试同理。
+	// Task-2 carry（progress.md）：runtime 的 manager 测试同理。
 	{"runtime", "adapter"}: "存量：runtime/{manager,manager_cachekey,manager_stats}_test.go 空导入 adapter/all 注册平台（S2 carry；同上）",
-	// 实现期盘点补记（brief 未点名、写守卫时从真实 import 面发现）：
-	// provider 的限流/错误分类测试直接消费 transport 的导出面。
+	// 实现期盘点补记（写守卫时从真实 import 面发现；progress.md 记其为
+	// v0.139.0 基线存量）：provider 的限流/错误分类测试直接消费 transport 导出面。
 	{"provider", "transport"}: "存量：provider/{ratelimit,errors_multibranch,errors_ratelimit403}_test.go 使用 transport（spec §4.1 未列，盘点补记）",
 }
 
@@ -359,6 +361,25 @@ func TestSpecTableMatchesEncoding(t *testing.T) {
 	} {
 		if !strings.Contains(boundary, needle) {
 			t.Errorf("specBoundaryLines 缺少 %q", needle)
+		}
+	}
+
+	// 冻结存量例外键集合：例外维度也必须「改一边不改另一边即红」——逐字表的
+	// ✗ 分支不查 isDev，仅靠表↔编码逐格核对拦不住往 map 里静默塞第 4 条
+	// （评审变异实测：注入 model→provider 后两测试曾双 PASS）。新增/删除例外
+	// 必须同步改这份 wantDeviations——diff 即「守卫放宽/收窄」的可见审计点。
+	wantDeviations := [][2]string{
+		{"provider", "adapter"},
+		{"provider", "transport"},
+		{"runtime", "adapter"},
+	}
+	if len(documentedTestOnlyDeviations) != len(wantDeviations) {
+		t.Errorf("documentedTestOnlyDeviations 有 %d 条 ≠ 冻结清单 %d 条——新增例外必须同步改本测试的 wantDeviations",
+			len(documentedTestOnlyDeviations), len(wantDeviations))
+	}
+	for _, key := range wantDeviations {
+		if _, ok := documentedTestOnlyDeviations[key]; !ok {
+			t.Errorf("冻结的存量例外 %s→%s 缺失（如系有意收窄，同步改 wantDeviations 并点名受影响文件）", key[0], key[1])
 		}
 	}
 
