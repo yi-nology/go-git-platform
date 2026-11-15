@@ -21,7 +21,10 @@ type ReleaseAsset struct {
 // 因此是流式接口而非返回 []byte,避免整读内存。
 type ReleaseAssetManager interface {
 	// DownloadReleaseAsset 下载 assetID 对应附件并流式写入 w。
-	// 非 2xx 响应或无响应体时返回错误。
+	// 非 2xx 响应、传输错误或响应体为空（实际写入 0 字节）时返回错误；
+	// 空体错误链可经 errors.Is(err, ErrEmptyResponse) 判定（issue #164）。
+	// 注意：合法的 0 字节附件同样命中该错误——需要放行的调用方可先按
+	// ReleaseAsset.Size 判定资产本身是否为空。
 	DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error
 }
 

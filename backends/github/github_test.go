@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -735,6 +736,37 @@ func TestDownloadReleaseAsset_Non2xx(t *testing.T) {
 	}
 	if buf.Len() != 0 {
 		t.Errorf("expected no bytes written on error, got %q", buf.String())
+	}
+}
+
+// TestDownloadReleaseAsset_EmptyBody 钉住 issue #164：go-github v93 在本
+// 路径恒回非 nil rc（followClient 恒非 nil），空体表现为 200 + 0 字节；
+// 复制计数检查必须把它变成 ErrEmptyResponse，而不是零字节静默成功。
+func TestDownloadReleaseAsset_EmptyBody(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf)
+	if err == nil {
+		t.Fatal("expected an error on a 200-with-empty-body asset response")
+	}
+	if !errors.Is(err, provider.ErrEmptyResponse) {
+		t.Errorf("err = %v, want errors.Is(err, provider.ErrEmptyResponse)", err)
+	}
+	if provider.IsInvalidInput(err) {
+		t.Errorf("empty-body error must not classify as ErrInvalidInput, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no bytes written, got %q", buf.String())
+	}
+	if requests != 1 {
+		t.Errorf("expected exactly 1 request, got %d", requests)
 	}
 }
 

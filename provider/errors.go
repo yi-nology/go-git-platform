@@ -50,6 +50,13 @@ var (
 	// 服务端 403（资源策略/权限 wire 不可分，不做猜测）；本哨兵=
 	// 本库声明面的凭据轴。
 	ErrPermissionDenied = errors.New("permission denied for this credential")
+	// ErrEmptyResponse 是「请求成功（2xx）但响应体为空」的协议异常哨兵
+	// （issue #164）：流式下载面（ReleaseAssetManager.DownloadReleaseAsset）
+	// 在状态码成功、但实际写入 0 字节时返回。调用方因此能把「下载成功且
+	// 有内容」与「服务端回了成功状态但没有任何字节」区分开——后者绝不
+	// 以零字节静默成功。与 transport.ErrEmptyResponse（DoJSON 的 2xx 空体）
+	// 同义；provider 包不依赖 transport，故在本包保留同义哨兵供契约层判定。
+	ErrEmptyResponse = errors.New("empty response body")
 )
 
 // ProviderError is a structured error from a provider operation. It carries
