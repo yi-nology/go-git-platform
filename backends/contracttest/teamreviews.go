@@ -146,19 +146,15 @@ func runRequestTeamReviewersCase(t *testing.T, h TeamReviewsHarness) {
 }
 
 // runRequestTeamReviewersInvalidNumberCase pins the pre-wire number guard:
-// a non-numeric PR number must fail closed BEFORE any HTTP, at the unified
-// ProviderError shape.
+// a non-numeric PR number must fail closed BEFORE any HTTP, classified as
+// ErrInvalidInput on the unified ProviderError shape (issue #165).
 //
-// Site-verified (2C T4 probe): backendutil.ParsePRNumber / ParsePRNumber64
-// reject via provider.Wrapf — the surfaced error is a *provider.ProviderError
-// with Op="RequestTeamReviewers", Platform=<platform>, StatusCode=0
-// (never HTTP-classified) whose cause is the plain "invalid pull request
-// number" message. There is NO classification sentinel: errors.Is(err,
-// provider.ErrInvalidInput) is FALSE (unlike the 422 write-side rejections
-// pinned by assertPreWireInvalidInput). 规则二 forbids matching error
-// message text, so the cause text is deliberately NOT asserted — the pin is
-// the structured face (unified error at the right Op, status 0) plus the
-// load-bearing zero-requests contract. Sentinel gap → report (2C T4).
+// backendutil.ParsePRNumber / ParsePRNumber64 reject malformed numbers with
+// provider.ErrInvalidInput on the cause chain — the same classification the
+// 400/422 write-side rejections carry — so callers branch with errors.Is
+// instead of matching message text (规则二). The structured face stays
+// load-bearing too: Op="RequestTeamReviewers", Platform=<platform>,
+// StatusCode=0 (never HTTP-classified), and zero requests.
 func runRequestTeamReviewersInvalidNumberCase(t *testing.T, h TeamReviewsHarness) {
 	t.Helper()
 	rec := &teamReviewsWire{}
@@ -167,6 +163,9 @@ func runRequestTeamReviewersInvalidNumberCase(t *testing.T, h TeamReviewsHarness
 	_, _, _, n := rec.last()
 	if err == nil {
 		t.Fatal("RequestTeamReviewers(not-a-number): expected a pre-wire rejection, got nil")
+	}
+	if !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("err = %v, want errors.Is(err, provider.ErrInvalidInput) — malformed PR numbers are input rejections, not server failures", err)
 	}
 	var pe *provider.ProviderError
 	if !errors.As(err, &pe) {
