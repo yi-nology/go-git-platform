@@ -444,3 +444,37 @@ const (
 		t.Errorf("collected = %v, want %v — type-less Operation conversion must not be skipped, iota-style consts must stay skipped", got, want)
 	}
 }
+
+func TestAllOperations(t *testing.T) {
+	// 期望全集显式列出：新增种子时本测试与 AST 完备性测试双红，
+	// 强制有意识地更新（勿在本列表上做「自动跟随」——它是消费方
+	// 硬编码清单问题的镜像钉子）。
+	want := []Operation{
+		OpGetSingleWebhook,
+		OpListGlobalNotifications,
+		OpListRepoNotifications,
+		OpUpdateGlobalInbox,
+		OpUpdateSingleWebhook,
+	}
+	got := AllOperations()
+	if !slices.Equal(got, want) {
+		t.Fatalf("AllOperations() = %v, want %v", got, want)
+	}
+	if !slices.IsSorted(got) {
+		t.Fatalf("AllOperations() not sorted: %v", got)
+	}
+
+	// 新切片：改返回值不影响下次调用（导出面不得泄露内部 map 的迭代态）。
+	got[0] = Operation("tampered")
+	again := AllOperations()
+	if !slices.Equal(again, want) {
+		t.Fatalf("AllOperations() not a fresh copy: %v", again)
+	}
+
+	// 全集与单一真源互为子集：每个 op 都有 requirement。
+	for _, op := range again {
+		if _, ok := opRequirements[op]; !ok {
+			t.Errorf("AllOperations returned %q missing from opRequirements", op)
+		}
+	}
+}

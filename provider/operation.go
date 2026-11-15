@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"slices"
+
 	oekiterrors "github.com/oekit/pkg/errors"
 )
 
@@ -53,9 +55,24 @@ var opRequirements = map[Operation]opRequirement{
 		iface: func(p Provider) bool { _, ok := p.(WebhookConfigManager); return ok }},
 }
 
+// AllOperations 返回种子操作全集（按值升序，每次返回新切片）——消费方
+// 遍历能力矩阵（下游 TestConnection 能力输出等）的权威入口，
+// 单一真源 = opRequirements：SDK 按「只增不改」演进时全集自动跟随，
+// 消费方勿再硬编码种子清单。全集遍历后逐 op 走 DeriveOperationSupport /
+// CheckOperation。
+func AllOperations() []Operation {
+	ops := make([]Operation, 0, len(opRequirements))
+	for op := range opRequirements {
+		ops = append(ops, op)
+	}
+	slices.Sort(ops)
+	return ops
+}
+
 // DeriveOperationSupport 从既有单一真源推导操作级支持态（2B spec 2.2）：
 // OperationCapable 覆盖 > 台账 stub > 门接口缺失 > Supported。
 // 凭据轴静态派生不了——只经 OperationCapable 声明。
+// 全集遍历用 AllOperations。
 func DeriveOperationSupport(p Provider, op Operation) OperationSupport {
 	if oc, ok := p.(OperationCapable); ok {
 		return oc.OperationSupport(op)
