@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.140.0] - 2026-11-16
+
+### Fixed（2C 契约两修——issue 约定兑现）
+
+- **fix(releases)**：`DownloadReleaseAsset` 空体契约落地——`io.Copy` 后
+  `n==0` 返回 `ErrEmptyResponse`（原 `rc==nil` 分支保留为防御性 fail-closed
+  并挂同一哨兵）；iface 文档明确「200 空体 = 错误」与 0 字节附件注意事项
+  （先按 `ReleaseAsset.Size` 判定）。contracttest 旧 pin「200 空体=静默成功
+  0 字节」同提交翻转为报错断言（#164）。
+- **fix(backendutil)**：数字解析拒绝统一挂 `ErrInvalidInput` 分类——
+  `ParsePRNumber/64`、`ParseIssueNumber/64`、`ParseMilestoneNumber` 五
+  helper 经 `rejectInvalidNumber` 以 `%w` 保留哨兵；gitee milestone 两处
+  直连 `strconv.Atoi` 守卫同步收口。contracttest 负例从「仅结构面」升级为
+  `errors.Is(err, ErrInvalidInput)` + 零请求双钉（#165）。
+
 ## [0.139.0] - 2026-11-15
 
 ### Changed（2C：7 可选接口族 contracttest 补齐）
