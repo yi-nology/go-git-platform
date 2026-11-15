@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.138.0] - 2026-11-15
+
 ### Added（四单批量：Draft 写侧 + 批量标签移除 + 种子全集导出，#160-#163）
 
 - **feat(provider)**：`CreateCROptions.Draft` 写侧（#160）——缺省 false =
