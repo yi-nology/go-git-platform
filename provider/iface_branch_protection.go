@@ -17,6 +17,9 @@ type BranchProtectionManager interface {
 	// ListBranchProtections returns all branch protection rules for a repo.
 	ListBranchProtections(ctx context.Context, owner, repo string) ([]*BranchProtection, error)
 	// GetBranchProtection returns the protection rule for a specific branch.
+	// 契约：绝不返回 (nil, nil)——规则不存在时是 (nil, ErrNotFound)
+	// （tencentcode #90 同族语义）；非 nil 实体必伴 err==nil。
+	// EnsureBranchProtection 对违约的 (nil, nil) 有防御（视为缺席→Create）。
 	GetBranchProtection(ctx context.Context, owner, repo, branch string) (*BranchProtection, error)
 	// CreateBranchProtection creates a new branch protection rule.
 	CreateBranchProtection(ctx context.Context, owner, repo string, opts CreateBranchProtectionOptions) (*BranchProtection, error)

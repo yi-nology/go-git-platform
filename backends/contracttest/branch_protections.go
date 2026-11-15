@@ -2,6 +2,7 @@ package contracttest
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -142,9 +143,39 @@ func RunBranchProtectionsSuite(t *testing.T, h BranchProtectionsHarness) {
 		assertBPGetShape(t, h, newBPM(t))
 	})
 
+	t.Run("GetBranchProtection_NotFound", func(t *testing.T) {
+		assertBPGetNotFound(t, h)
+	})
+
 	t.Run("UpdateBranchProtection_AcceptsMutation", func(t *testing.T) {
 		assertBPUpdateAcceptsMutation(t, newBPM(t))
 	})
+}
+
+// assertBPGetNotFound pins the Get 契约的 wire 面（#161）：全 404 的
+// httptest 下，Get 必须返回 (nil, ErrNotFound)——绝不 (nil, nil)。
+// 自带 404 服务器（stubHandler 不能改状态码）。GetUnsupported 平台跳过。
+func assertBPGetNotFound(t *testing.T, h BranchProtectionsHarness) {
+	t.Helper()
+	if h.GetUnsupported {
+		t.Skipf("%s has no get endpoint (DivergenceStub)", h.Name)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+	bpm, ok := p.(provider.BranchProtectionManager)
+	if !ok {
+		t.Fatalf("%s does not implement provider.BranchProtectionManager", h.Name)
+	}
+	bp, err := bpm.GetBranchProtection(context.Background(), "owner", "repo", "main")
+	if !errors.Is(err, provider.ErrNotFound) {
+		t.Fatalf("unprotected branch: want ErrNotFound in chain, got %v", err)
+	}
+	if bp != nil {
+		t.Fatalf("want nil entity alongside ErrNotFound, got %+v", bp)
+	}
 }
 
 // assertBPGetShape asserts the single-protection GET parses to a

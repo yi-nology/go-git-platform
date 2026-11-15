@@ -212,11 +212,12 @@ func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebho
 // as required, and returns the resulting rule plus the action taken.
 // It targets the BranchProtectionManager directly so it works with any
 // Provider (type-assert it at the call site) or test double.
+// 契约防御：Get 违约返回 (nil, nil)（iface 契约禁止）时视为缺席走 Create
+// 而非 Update——见 iface_branch_protection.go Get 的契约注释。
 func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, owner, repo string, opts CreateBranchProtectionOptions) (EnsureAction, *BranchProtection, error) {
 	cur, err := bpm.GetBranchProtection(ctx, owner, repo, opts.BranchName)
-	if err == nil {
-		if cur != nil &&
-			cur.RequiredApprovingReviews == opts.RequiredApprovingReviews &&
+	if err == nil && cur != nil {
+		if cur.RequiredApprovingReviews == opts.RequiredApprovingReviews &&
 			cur.RequiredStatusChecks == opts.RequiredStatusChecks &&
 			cur.AllowForcePushes == opts.AllowForcePushes &&
 			cur.AllowDeletions == opts.AllowDeletions {
@@ -236,9 +237,10 @@ func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, ow
 		}
 		return EnsureUpdated, out, nil
 	}
-	if !IsNotFound(err) {
+	if err != nil && !IsNotFound(err) {
 		return "", nil, err
 	}
+	// 缺席：IsNotFound，或违约的 (nil, nil)——统一 Create。
 	out, err := bpm.CreateBranchProtection(ctx, owner, repo, opts)
 	if err != nil {
 		if IsConflict(err) {

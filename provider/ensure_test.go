@@ -730,3 +730,40 @@ func TestEnsureDeployKey_CreateConflictOutcome(t *testing.T) {
 		t.Fatalf("entity = %+v, want nil（无既有实体）", entity)
 	}
 }
+
+// nilGetBPM 违约模拟：Get 返回 (nil, nil)（iface 契约禁止的形态）。
+type nilGetBPM struct {
+	BranchProtectionManager
+	created, updated int
+}
+
+func (b *nilGetBPM) GetBranchProtection(context.Context, string, string, string) (*BranchProtection, error) {
+	return nil, nil
+}
+func (b *nilGetBPM) CreateBranchProtection(_ context.Context, _, _ string, opts CreateBranchProtectionOptions) (*BranchProtection, error) {
+	b.created++
+	return &BranchProtection{BranchName: opts.BranchName}, nil
+}
+func (b *nilGetBPM) UpdateBranchProtection(_ context.Context, _, _, branch string, _ UpdateBranchProtectionOptions) (*BranchProtection, error) {
+	b.updated++
+	return &BranchProtection{BranchName: branch}, nil
+}
+
+// 违约 (nil,nil) 必须被防御为缺席→Create（#161）：绝不能误走 Update。
+func TestEnsureBranchProtection_NilNilGetTreatedAsAbsent(t *testing.T) {
+	b := &nilGetBPM{}
+	action, entity, err := EnsureBranchProtection(t.Context(), b, "o", "r",
+		CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 1})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if action != EnsureCreated {
+		t.Fatalf("want EnsureCreated (nil,nil treated as absent), got %q", action)
+	}
+	if b.created != 1 || b.updated != 0 {
+		t.Fatalf("want exactly 1 create / 0 update, got created=%d updated=%d", b.created, b.updated)
+	}
+	if entity == nil {
+		t.Fatal("want created entity, got nil")
+	}
+}
