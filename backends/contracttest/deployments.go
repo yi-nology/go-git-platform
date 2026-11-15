@@ -207,7 +207,10 @@ func runListDeploymentsCase(t *testing.T, h DeploymentsHarness) {
 	t.Helper()
 	rec := &deploymentsWire{}
 	dm := newDeploymentManager(t, h, h.ListResponse, rec)
-	deps, total, err := dm.ListDeployments(context.Background(), "owner", "repo", "production", 2, 5)
+	// page=3 (≠ the 2-element fixture length) so a hypothetical
+	// `return page` regression yields total=3 ≠ len(deps)=2 and fails the
+	// issue #89 pin below — page=2 would collide with the fixture length.
+	deps, total, err := dm.ListDeployments(context.Background(), "owner", "repo", "production", 3, 5)
 	if err != nil {
 		t.Fatalf("ListDeployments: %v", err)
 	}
@@ -225,8 +228,8 @@ func runListDeploymentsCase(t *testing.T, h DeploymentsHarness) {
 		t.Errorf("query environment = %q (present=%s), want production on the wire",
 			query["environment"], query["environmentPresent"])
 	}
-	if query["page"] != "2" || query["per_page"] != "5" {
-		t.Errorf("query page=%s per_page=%s, want page=2 per_page=5", query["page"], query["per_page"])
+	if query["page"] != "3" || query["per_page"] != "5" {
+		t.Errorf("query page=%s per_page=%s, want page=3 per_page=5", query["page"], query["per_page"])
 	}
 	want := decodeDeploymentListFixture(t, h.ListResponse, "ListResponse")
 	if len(deps) != len(want) {

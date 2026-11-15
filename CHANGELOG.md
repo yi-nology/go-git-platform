@@ -27,12 +27,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deployment state、空 fork-sync branch → `ErrInvalidInput` + 422
   `ProviderError` + 零请求；非法 PR number → 零请求 +
   `ProviderError{StatusCode:0}` 结构面（见下条：无分类哨兵）。
-- **备忘（已探针实测、另立单候选，零生产改动）**：`iface_releases.go`
+- **备忘（已探针实测、已另立单（#164、#165），零生产改动）**：`iface_releases.go`
   `DownloadReleaseAsset`「无响应体时返回错误」doc 与现实不符（go-github
   v93 下 `rc==nil` 生产不可达，200 空体 = 成功 0 字节——套件按现实钉 +
   flip-together 注释）；`backendutil.ParsePRNumber*` 拒绝无分类哨兵（裸
   `ProviderError{Status:0}`，`errors.Is(ErrInvalidInput)` 不可用）——
-  两处均**已探针实测、另立单**，非本轮修复。
+  两处均**已探针实测、已另立单（#164、#165）**，非本轮修复。
 
 ## [0.138.0] - 2026-11-15
 
