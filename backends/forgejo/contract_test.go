@@ -149,6 +149,12 @@ func TestForgejo_Contract(t *testing.T) {
 			ForksResponse:      `[{"id":1,"full_name":"fork/repo","name":"repo","owner":{"login":"fork"}}]`,
 			StargazersResponse: `[{"id":1,"login":"star"}]`,
 		},
+		TeamReviews: &contracttest.TeamReviewsHarnessConfig{
+			// forgejo-sdk v3 PullReviewRequestOptions 同时带 reviewers 与
+			// team_reviewers 两键（均无 omitempty）——套件按平台无关的
+			// 「body 数组携带全部 team 值」断言。
+			Teams: []string{"platform-team", "release-eng"},
+		},
 	})
 }
 

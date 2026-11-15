@@ -12,12 +12,11 @@ import (
 // coverage table must agree in both directions — a suite mounted without a
 // table row, or a table row whose suite is not mounted, fails here. The
 // optional-capability families that still carry only CapabilitySet
-// declaration checks (only TeamReviews, since issue #123) are listed as
-// explicitly uncovered so
-// the gap stays machine-visible instead of silently implied; Gists and
-// Starred left that list when their wire suites landed (2C T1), Migrations
-// and ReleaseAssets when theirs landed (2C T2), Deployments and ForkSync
-// when theirs landed (2C T3). The third-way
+// declaration checks are listed as explicitly uncovered so the gap stays
+// machine-visible instead of silently implied; that list is now empty —
+// Gists/Starred left it (2C T1), Migrations/ReleaseAssets (2C T2),
+// Deployments/ForkSync (2C T3), TeamReviews (2C T4) — all seven optional
+// families of roadmap §2.4 have wire suites. The third-way
 // check (TestCapabilityFamiliesAllRegistered) pins every CapabilitySet
 // field into one of the two registries.
 // coveredFamilies maps each manager family to the suite that carries its
@@ -55,6 +54,7 @@ var coveredFamilies = map[string]string{
 	"ReleaseAssetManager":     "ReleaseAssetsSuite",
 	"DeploymentManager":       "DeploymentsSuite",
 	"ForkSyncManager":         "ForkSyncSuite",
+	"TeamReviewManager":       "TeamReviewsSuite",
 }
 
 func TestRunCoverageMatrix(t *testing.T) {
@@ -75,6 +75,7 @@ func TestRunCoverageMatrix(t *testing.T) {
 		"GistsSuite", "StarredSuite",
 		"MigrationsSuite", "ReleaseAssetsSuite",
 		"DeploymentsSuite", "ForkSyncSuite",
+		"TeamReviewsSuite",
 	} {
 		mountedSuites[sub] = true
 	}
@@ -107,19 +108,18 @@ func TestRunCoverageMatrix(t *testing.T) {
 // uncoveredFamilies records the optional-capability families whose behavior
 // currently lives only in the CapabilitySet declaration checks
 // (capabilities.go) — the machine-visible "explicitly uncovered" registry of
-// issue #63. Gists/Starred moved out to coveredFamilies when their wire
-// suites landed (2C T1); Migrations/ReleaseAssets likewise (2C T2);
-// Deployments/ForkSync likewise (2C T3).
-// TeamReviewManager joined as the seventh family
-// (issue #123): its single method is write-only, its behavior is pinned
-// per-backend in team_reviewers_wire_test.go, and no shared contract suite
-// exists yet.
+// issue #63. The registry is now EMPTY (2C T4): Gists/Starred moved out to
+// coveredFamilies when their wire suites landed (2C T1); Migrations/
+// ReleaseAssets likewise (2C T2); Deployments/ForkSync likewise (2C T3);
+// TeamReviewManager likewise (2C T4, issue #79/#123 — its per-backend
+// team_reviewers_wire_test.go pins remain alongside the shared suite).
+// The variable and TestOptionalCapabilityFamiliesUncovered stay in place
+// (empty) so a future optional family can re-register a gap here; their
+// final disposal is T5's call.
 // Adding behavior assertions for any family here means adding a suite to
 // Run(), a Harness config, and a row to coveredFamilies — the third-way
 // check (TestCapabilityFamiliesAllRegistered) fails until the move lands.
-var uncoveredFamilies = map[string]string{
-	"TeamReviewManager": "TeamReviewsSuite",
-}
+var uncoveredFamilies = map[string]string{}
 
 // capFieldToFamily maps every CapabilitySet field to its manager family —
 // the third direction of the coverage matrix (issue #123): the two original
@@ -157,9 +157,11 @@ var capFieldToFamily = map[string]string{
 // declaration checks (issue #63): adding behavior assertions for any of them
 // means adding a suite to Run(), a Harness config, and a row to
 // coveredFamilies — this test fails until the row lands.
+// The list is empty as of 2C T4 (all seven optional families landed); the
+// loop and the test stay in place so a future gap can be registered here.
 func TestOptionalCapabilityFamiliesUncovered(t *testing.T) {
 	for _, suite := range []string{
-		"TeamReviewsSuite",
+		// (empty — 2C T4: all seven optional-capability families covered)
 	} {
 		for _, mounted := range coveredFamilies {
 			if mounted == suite {

@@ -117,6 +117,10 @@ type Harness struct {
 	// ForkSync, when non-nil, auto-mounts the fork-sync suite inside Run,
 	// with the same bidirectional drift checks as Users.
 	ForkSync *ForkSyncHarnessConfig
+	// TeamReviews, when non-nil, auto-mounts the team-review request suite
+	// inside Run, with the same bidirectional drift checks as the other
+	// optional-capability families (github/gitea/forgejo declare it).
+	TeamReviews *TeamReviewsHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -182,6 +186,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("ReleaseAssetsSuite", func(t *testing.T) { testReleaseAssetsSuite(t, h) })
 	t.Run("DeploymentsSuite", func(t *testing.T) { testDeploymentsSuite(t, h) })
 	t.Run("ForkSyncSuite", func(t *testing.T) { testForkSyncSuite(t, h) })
+	t.Run("TeamReviewsSuite", func(t *testing.T) { testTeamReviewsSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

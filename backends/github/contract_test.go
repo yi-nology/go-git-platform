@@ -99,6 +99,11 @@ func TestGitHub_Contract(t *testing.T) {
 			// RepoMergeUpstreamResult 形状（message/merge_type/base_branch）。
 			MergeResponse: `{"message":"Successfully fast-forwarded","merge_type":"fast-forward","base_branch":"main"}`,
 		},
+		TeamReviews: &contracttest.TeamReviewsHarnessConfig{
+			// go-github ReviewersRequest.TeamReviewers（team_reviewers 键，
+			// omitempty）——套件按平台无关的「body 数组携带全部 team 值」断言。
+			Teams: []string{"platform-team", "release-eng"},
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
