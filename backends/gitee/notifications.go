@@ -8,6 +8,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/runtime"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -55,7 +56,7 @@ type rawNotificationList struct {
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
 	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitee, "ListNotifications", err)
 	}
 	u := fmt.Sprintf("%s/notifications", p.baseURL)
@@ -76,7 +77,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // ListRepoNotifications implements provider.NotificationManager.
 // Same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitee, "ListRepoNotifications", err)
 	}
 	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, backendutil.Esc(owner), backendutil.Esc(repo))
@@ -125,12 +126,12 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 
 // MarkNotificationsRead implements provider.NotificationManager.
 //
-// LastReadAt 走 provider.ParseTimestamp（issue #129，#52/#75/#97 同族收口）：
+// LastReadAt 走 runtime.ParseTimestamp（issue #129，#52/#75/#97 同族收口）：
 // 合法值被丢弃（go-gitee 的 mark 面只收 ids，wire 无 last_read_at 参数，
 // 见 divergence 台账的登记），但**畸形值必须报错**——mark-all 是不可逆的
 // 全量副作用，格式笔误静默退化成「全部标已读」正是该族要消灭的失败模式。
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+	if _, err := runtime.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
 		return provider.Wrap(model.PlatformGitee, "MarkNotificationsRead", err)
 	}
 	_, err := p.client.Activity.MarkNotificationsAsRead(ctx, nil)
@@ -140,7 +141,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 // LastReadAt 校验语义同 MarkNotificationsRead（issue #129）。
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+	if _, err := runtime.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
 		return provider.Wrap(model.PlatformGitee, "MarkRepoNotificationsRead", err)
 	}
 	_, err := p.client.Activity.MarkRepoNotificationsAsRead(ctx, backendutil.Esc(owner), backendutil.Esc(repo), nil)
@@ -167,7 +168,7 @@ func convertRawNotification(n *rawNotification) *model.Notification {
 			ID:       int64(n.Repository.ID),
 			FullName: n.Repository.FullName,
 		}
-		owner, name := provider.SplitFullName(n.Repository.FullName)
+		owner, name := runtime.SplitFullName(n.Repository.FullName)
 		out.Repo.Owner = owner
 		out.Repo.Name = name
 	}

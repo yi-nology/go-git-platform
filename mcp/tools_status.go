@@ -9,6 +9,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // --- status ---
@@ -77,12 +78,12 @@ func registerStatus(s *mcp.Server, st *state) {
 	})
 
 	add(s, st, "wait_for_status", "Wait for commit status", "Poll until a commit's combined CI state is terminal and return it. States: pending/running until done, then success/failure/error/canceled. CI re-runs are folded: only the newest report per context counts.", false, func(ctx context.Context, in waitStatusIn) (waitStatusOut, error) {
-		opts := provider.WaitOptions{Interval: 5 * time.Second}
+		opts := runtime.WaitOptions{Interval: 5 * time.Second}
 		if in.TimeoutSeconds != 0 {
 			opts.Timeout = time.Duration(in.TimeoutSeconds) * time.Second
 		}
 		opts.Contexts = in.Contexts
-		state, err := provider.WaitForCommitStatus(ctx, st.p, in.Owner, in.Repo, in.SHA, opts)
+		state, err := runtime.WaitForCommitStatus(ctx, st.p, in.Owner, in.Repo, in.SHA, opts)
 		if err != nil {
 			return waitStatusOut{}, err
 		}

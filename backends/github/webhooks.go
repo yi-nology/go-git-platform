@@ -12,6 +12,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // CreateWebhook implements provider.WebhookManager.
@@ -105,7 +106,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*mod
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
 		return provider.Wrap(model.PlatformGitHub, "ValidateWebhookSignature", err)
 	}
 	return nil
@@ -115,7 +116,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // githubEnvelope is GitHub's webhook dialect for the shared envelope steps.
 // The event header and payload decoding stay on the go-github library's
 // path; GitHub never set an event ID, so the prefix stays empty.
-var githubEnvelope = provider.WebhookEnvelope{
+var githubEnvelope = runtime.WebhookEnvelope{
 	Platform: model.PlatformGitHub,
 	// X-GitHub-Delivery:GitHub 每次投递都带(重投时值不变)⇒ 真正的幂等键。
 	// 以前 GitHub 的事件 ID 恒为空串 ⇒ 上层按 event_id 去重/唯一索引时,
@@ -131,7 +132,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 	// 空 secret（可伪造），ValidateWebhookSignature 已经走它——同平台的
 	// parse 路径此前却保留内联 go-github 调用，一个 SDK 对一个平台暴露
 	// 两种空 secret 策略。先经注册表校验（读体并回填），再解码载荷。
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
 		return nil, provider.Wrap(model.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 	payload, err := io.ReadAll(r.Body)
@@ -148,10 +149,10 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 
 	switch e := event.(type) {
 	case *github.PullRequestEvent:
-		ne.Type = provider.EventTypeCR + provider.NormalizeCRAction(e.GetAction(), e.GetPullRequest().GetMerged())
+		ne.Type = runtime.EventTypeCR + runtime.NormalizeCRAction(e.GetAction(), e.GetPullRequest().GetMerged())
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetPullRequest() != nil {
@@ -167,7 +168,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// 按分支过滤的下游被伪分支名污染。同文件 CreateEvent/DeleteEvent 的
 		// ref_type=tag 早已归 tag.created/tag.deleted，此处补齐一致。
 		if ref := e.GetRef(); strings.HasPrefix(ref, "refs/tags/") {
-			ne.Type = provider.EventTypeTag + "created"
+			ne.Type = runtime.EventTypeTag + "created"
 			ne.Action = "created"
 			ne.Tag = strings.TrimPrefix(ref, "refs/tags/")
 			// commit_sha 不带（与 create_tag、gitee tag_push 的 tag.created
@@ -179,16 +180,16 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		}
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 	case *github.IssuesEvent:
-		action := provider.NormalizeIssueAction(e.GetAction())
-		ne.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(e.GetAction())
+		ne.Type = runtime.EventTypeIssue + action
 		ne.Action = action
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetIssue() != nil {
@@ -199,11 +200,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// also carries the pull request, so CR is populated alongside Issue.
 		// GitHub sends action created|edited|deleted — derived, not assumed.
 		action := normalizeCommentAction(e.GetAction())
-		ne.Type = provider.EventTypeComment + action
+		ne.Type = runtime.EventTypeComment + action
 		ne.Action = action
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetIssue() != nil {
@@ -214,11 +215,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		}
 	case *github.PullRequestReviewCommentEvent:
 		action := normalizeCommentAction(e.GetAction())
-		ne.Type = provider.EventTypeComment + action
+		ne.Type = runtime.EventTypeComment + action
 		ne.Action = action
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetPullRequest() != nil {
@@ -237,30 +238,30 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// ref_type distinguishes tags from branches.
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetRefType() == "tag" {
-			ne.Type = provider.EventTypeTag + "created"
+			ne.Type = runtime.EventTypeTag + "created"
 			ne.Action = "created"
 			ne.Tag = e.GetRef()
 		} else {
-			ne.Type = provider.EventTypeBranch + "created"
+			ne.Type = runtime.EventTypeBranch + "created"
 			ne.Action = "created"
 			ne.Branch = e.GetRef()
 		}
 	case *github.DeleteEvent:
 		ne.Actor = convertUser(e.GetSender())
 		if e.GetRepo() != nil {
-			ne.Repo = provider.BuildEventRepo(e.GetRepo().GetFullName())
+			ne.Repo = runtime.BuildEventRepo(e.GetRepo().GetFullName())
 			ne.Repo.ID = e.GetRepo().GetID()
 		}
 		if e.GetRefType() == "tag" {
-			ne.Type = provider.EventTypeTag + "deleted"
+			ne.Type = runtime.EventTypeTag + "deleted"
 			ne.Action = "deleted"
 			ne.Tag = e.GetRef()
 		} else {
-			ne.Type = provider.EventTypeBranch + "deleted"
+			ne.Type = runtime.EventTypeBranch + "deleted"
 			ne.Action = "deleted"
 			ne.Branch = e.GetRef()
 		}
@@ -278,7 +279,7 @@ func normalizeCommentAction(action string) string {
 	case "created", "edited", "deleted":
 		return action
 	case "":
-		return provider.CommentActionCreated
+		return runtime.CommentActionCreated
 	default:
 		return action
 	}

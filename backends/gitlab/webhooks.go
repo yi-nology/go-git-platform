@@ -13,6 +13,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // CreateWebhook implements provider.WebhookManager.
@@ -114,7 +115,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*mod
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitLab, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitLab, r, secret); err != nil {
 		return provider.Wrap(model.PlatformGitLab, "ValidateWebhookSignature", err)
 	}
 	return nil
@@ -123,7 +124,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // ParseWebhookEvent implements provider.WebhookManager.
 // gitlabEnvelope is GitLab's webhook dialect for the shared envelope steps
 // (dispatch rides the payload's object_kind, not an event header).
-var gitlabEnvelope = provider.WebhookEnvelope{
+var gitlabEnvelope = runtime.WebhookEnvelope{
 	Platform: model.PlatformGitLab,
 	IDPrefix: "gl",
 	// X-Gitlab-Event-UUID:GitLab 每次投递都带(重投时值不变)⇒ 真幂等键。
@@ -194,7 +195,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		return nil, provider.Wrap(model.PlatformGitLab, "ParseWebhookEvent", err)
 	}
 
-	er := provider.BuildEventRepo(pl.Project.PathWithNS)
+	er := runtime.BuildEventRepo(pl.Project.PathWithNS)
 	er.ID = pl.Project.ID
 	actor := &model.CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
 
@@ -205,11 +206,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 	switch pl.ObjectKind {
 	case "merge_request":
 		state := mapGLState(pl.ObjectAttributes.State)
-		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
+		action := runtime.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
 		event.Type = "cr." + action
 		event.Action = action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
-		headSHA, baseSHA, startSHA := provider.ResolveMRSHAs(
+		headSHA, baseSHA, startSHA := runtime.ResolveMRSHAs(
 			pl.ObjectAttributes.DiffRefs.HeadSHA,
 			pl.ObjectAttributes.DiffRefs.BaseSHA,
 			pl.ObjectAttributes.DiffRefs.StartSHA,
@@ -240,8 +241,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// push，同一物理动作在 github/gitea/forgejo 产出 branch.deleted，
 		// 消费方 switch 静默漏掉全部分支删除。before 非零确认真删除
 		// （全零 before+after 的异常形态不硬归）。
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
-			event.Type = provider.EventTypeBranch + "deleted"
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = runtime.EventTypeBranch + "deleted"
 			event.Action = "deleted"
 			// 全零 after 是删除标记而非提交(github delete 事件与 #47 的
 			// tag.deleted 同款不设 commit_sha)。
@@ -256,7 +257,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// 以 tag_push + 全零 after 投递——此前一律归一成 tag.created，删除
 		// 事件与 GitHub/Gitea 的 tag.deleted 分叉。before 非零确认真删除
 		// （全零 before+after 的异常形态不硬归）。
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
 			event.Type = "tag.deleted"
 			event.Action = "deleted"
 		} else {
@@ -291,8 +292,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// rides along as a top-level issue or merge_request object. The
 		// canonical type is comment.created regardless of the target —
 		// consumers branch on which of CR/Issue is populated.
-		event.Type = provider.EventTypeComment + provider.CommentActionCreated
-		event.Action = provider.CommentActionCreated
+		event.Type = runtime.EventTypeComment + runtime.CommentActionCreated
+		event.Action = runtime.CommentActionCreated
 		// GitLab note hooks carry no comment timestamps; leave them zero
 		// rather than fabricating the parse time.
 		event.Comment = &model.IssueComment{
@@ -315,8 +316,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 	case "issue":
 		// Issue hook: object_attributes carries the issue (iid, title,
 		// description, state) plus the triggering action.
-		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
-		event.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(pl.ObjectAttributes.Action)
+		event.Type = runtime.EventTypeIssue + action
 		event.Action = action
 		event.Issue = &model.Issue{
 			ID: pl.ObjectAttributes.IID, Number: strconv.FormatInt(pl.ObjectAttributes.IID, 10),

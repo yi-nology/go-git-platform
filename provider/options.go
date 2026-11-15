@@ -212,6 +212,34 @@ type FileDeleteOptions struct {
 
 // --- Webhooks ---
 
+// EnsureSecretMode controls how EnsureWebhook treats a matching hook's
+// secret. Platform webhook secrets are write-only on every platform (list
+// responses never return them), so a hook that already matches URL + events
+// cannot be verified to carry the desired secret — it may be stale after a
+// host-side rotation, and a stale secret makes every delivery fail
+// signature validation (fail-closed, silently).
+//
+// 位置裁定（S2 runtime 剖离）：本类型是 CreateWebhookOptions 的字段类型
+// （契约参数面，C5 留 provider），而 runtime/ensure.go 依赖 provider ——
+// 若随 ensure.go 迁 runtime 即成 provider→runtime 反向边与 import 环，
+// 故与所属字段同留 provider；EnsureWebhook（runtime）单向引用它。
+type EnsureSecretMode string
+
+const (
+	// EnsureSecretKeep (default, also the zero value) trusts the match:
+	// a hook that already matches URL + events is left untouched even if
+	// opts.Secret differs from what the platform may hold.
+	EnsureSecretKeep EnsureSecretMode = ""
+	// EnsureSecretAlwaysUpdate rewrites the secret whenever the hook
+	// matches and opts.Secret is non-empty, converging rotations in the
+	// same ensure call: the in-place patch goes through
+	// WebhookConfigManager.UpdateWebhook (implemented by every backend),
+	// keeps the hook's platform ID, and reports EnsureUpdated. A manager
+	// that does not also implement WebhookConfigManager is an error —
+	// silently keeping a possibly-stale secret would defeat the mode.
+	EnsureSecretAlwaysUpdate EnsureSecretMode = "always-update"
+)
+
 // CreateWebhookOptions contains options for creating a webhook.
 type CreateWebhookOptions struct {
 	Owner  string   `json:"owner"`

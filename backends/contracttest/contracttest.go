@@ -29,6 +29,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // Harness bundles the inputs needed to run the contract suite against a
@@ -308,7 +309,7 @@ func testRetry(t *testing.T, h Harness) {
 // (forging with an empty HMAC key must not pass either), and a tampered body
 // must fail.
 func testWebhookSignature(t *testing.T, h Harness) {
-	v := provider.DefaultWebhookRegistry().Get(h.Platform)
+	v := runtime.DefaultWebhookRegistry().Get(h.Platform)
 	if v == nil {
 		t.Skipf("no webhook validator registered for %s", h.Platform)
 	}
@@ -333,7 +334,7 @@ func testWebhookSignature(t *testing.T, h Harness) {
 	// Tampered body must fail validation — but only for validators that sign
 	// the body (HMAC). Static-token validators only compare a header token, so
 	// altering the body is not expected to change the result.
-	if _, isHMAC := v.(provider.HMACSHA256Validator); isHMAC {
+	if _, isHMAC := v.(runtime.HMACSHA256Validator); isHMAC {
 		tampered := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(body))
 		signRequest(tampered, v, body, secret)
 		if err := v.Validate(tampered, append(body, '!'), secret); err == nil {
@@ -352,20 +353,20 @@ func testWebhookSignature(t *testing.T, h Harness) {
 // SignHMAC 对空 secret fail-closed 拒签（构造期 panic）,而「攻击者用空
 // 密钥伪造可预测载荷的签名」恰恰要求算出签名再被验签器拒绝——这层测试
 // 意图只能手算表达。
-func signRequest(req *http.Request, v provider.WebhookValidator, body []byte, secret string) {
+func signRequest(req *http.Request, v runtime.WebhookValidator, body []byte, secret string) {
 	switch vv := v.(type) {
-	case provider.HMACSHA256Validator:
+	case runtime.HMACSHA256Validator:
 		req.Header.Set(vv.Header, signBody(body, secret, "sha256="))
-	case provider.StaticTokenValidator:
+	case runtime.StaticTokenValidator:
 		req.Header.Set(vv.Header, secret)
-	case provider.ForgejoWebhookValidator:
+	case runtime.ForgejoWebhookValidator:
 		req.Header.Set("X-Forgejo-Signature", signBody(body, secret, "sha256="))
-	case provider.GiteeWebhookValidator:
+	case runtime.GiteeWebhookValidator:
 		// Gitee backend scheme: HMAC-SHA256 hex over the body in
 		// X-Gitee-Token (no timestamp). The registry also accepts the
 		// ts-based sign mode, but the corpus pins the backend's scheme.
 		req.Header.Set("X-Gitee-Token", signBody(body, secret, ""))
-	case provider.GitCodeWebhookValidator:
+	case runtime.GitCodeWebhookValidator:
 		req.Header.Set("X-GitCode-Signature", signBody(body, secret, ""))
 	}
 }
@@ -394,11 +395,11 @@ func signBody(body []byte, secret, prefix string) string {
 // validator, so unsigned fixture requests no longer pass validation.
 func ParseSigned(t testing.TB, p provider.Provider, req *http.Request, secret string) *model.NormalizedEvent {
 	t.Helper()
-	v := provider.DefaultWebhookRegistry().Get(p.Platform())
+	v := runtime.DefaultWebhookRegistry().Get(p.Platform())
 	if v == nil {
 		t.Fatalf("no webhook validator registered for %s", p.Platform())
 	}
-	body, err := provider.ReadAndRestoreBody(req)
+	body, err := runtime.ReadAndRestoreBody(req)
 	if err != nil {
 		t.Fatalf("read webhook body: %v", err)
 	}

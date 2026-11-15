@@ -24,6 +24,7 @@ import (
 	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 func main() {
@@ -55,7 +56,7 @@ func main() {
 	// callback sees items as they arrive, and a platform that ignores the
 	// page parameter trips ErrPageBudgetExceeded instead of spinning.
 	var count, pages int
-	err = provider.Each(ctx, func(ctx context.Context, page int) ([]*model.PlatformRepo, error) {
+	err = runtime.Each(ctx, func(ctx context.Context, page int) ([]*model.PlatformRepo, error) {
 		pages++
 		return p.ListRepos(ctx, provider.ListRepoOptions{Owner: owner, Page: page, PerPage: 100})
 	}, func(r *model.PlatformRepo) error {
@@ -115,7 +116,7 @@ func demoEnsureWebhook(ctx context.Context, p provider.Provider, owner string) {
 	if hookURL == "" {
 		return
 	}
-	action, hook, err := provider.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
+	action, hook, err := runtime.EnsureWebhook(ctx, p, provider.CreateWebhookOptions{
 		Owner: owner, Repo: "go-git-platform", URL: hookURL,
 		Events: []string{"push", "pull_request"},
 	})

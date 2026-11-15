@@ -8,6 +8,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // notificationBaseOpts builds the shared (pagination-free) notification
@@ -15,7 +16,7 @@ import (
 // 格式笔误升级成不过滤的全量通知流。
 func notificationBaseOpts(opts provider.ListNotificationsOptions) (github.NotificationListOptions, error) {
 	base := github.NotificationListOptions{All: opts.All}
-	since, err := provider.ParseTimestamp("Since", opts.Since)
+	since, err := runtime.ParseTimestamp("Since", opts.Since)
 	if err != nil {
 		return base, err
 	}
@@ -112,7 +113,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // parseLastReadAt resolves opts.LastReadAt per the contract ("RFC3339;
 // empty = mark all") into the go-github timestamp.
 //
-// 解析统一委托 provider.ParseTimestamp（issue #129：#75 手写实现未走共享
+// 解析统一委托 runtime.ParseTimestamp（issue #129：#75 手写实现未走共享
 // 解析器，双实现漂移风险——timeparse.go 的族契约把 LastReadAt 列入强制
 // 校验面；%v 丢 *time.ParseError cause 链也一并改为多 %w，规则一归位）。
 // 非空但解析失败**必须报错**(issue #75,#52 的写操作面同源缺陷):
@@ -121,7 +122,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // 一个格式笔误(如 "2026/11/11")升级成不可逆的全量副作用。拒绝语义与
 // GitLab 非法 threadID 同型:ErrInvalidInput 哨兵经 Wrap 保留可判定性。
 func parseLastReadAt(op, raw string) (github.Timestamp, error) {
-	t, err := provider.ParseTimestamp("LastReadAt", raw)
+	t, err := runtime.ParseTimestamp("LastReadAt", raw)
 	if err != nil {
 		return github.Timestamp{}, provider.Wrap(model.PlatformGitHub, op, err)
 	}
@@ -166,7 +167,7 @@ func convertNotification(n *github.Notification) *model.Notification {
 			ID:       n.Repository.GetID(),
 			FullName: n.Repository.GetFullName(),
 		}
-		owner, name := provider.SplitFullName(n.Repository.GetFullName())
+		owner, name := runtime.SplitFullName(n.Repository.GetFullName())
 		out.Repo.Owner = owner
 		out.Repo.Name = name
 	}

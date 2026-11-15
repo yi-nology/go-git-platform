@@ -30,6 +30,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // Family carries the per-platform bits of one Gitea-family backend, plus the
@@ -232,7 +233,7 @@ func convertHook(h *Hook) *model.PlatformWebhook {
 // validator and maps the (byte-identical across the family) Gitea-style
 // payload onto a NormalizedEvent.
 func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.NormalizedEvent, error) {
-	env := provider.WebhookEnvelope{
+	env := runtime.WebhookEnvelope{
 		Platform:     f.Platform,
 		EventHeaders: f.EventHeaders,
 		IDPrefix:     f.EventIDPrefix,
@@ -295,7 +296,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.Normali
 		return nil, provider.Wrap(f.Platform, "ParseWebhookEvent", err)
 	}
 
-	er := provider.BuildEventRepo(pl.Repository.FullName)
+	er := runtime.BuildEventRepo(pl.Repository.FullName)
 	er.ID = pl.Repository.ID
 	actor := &model.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
@@ -305,7 +306,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.Normali
 
 	switch eventType {
 	case "pull_request":
-		action := provider.NormalizeCRAction(pl.Action, pl.PullRequest != nil && pl.PullRequest.Merged)
+		action := runtime.NormalizeCRAction(pl.Action, pl.PullRequest != nil && pl.PullRequest.Merged)
 		event.Type = "cr." + action
 		event.Action = action
 		if pl.PullRequest != nil {
@@ -343,11 +344,11 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.Normali
 		// （IsWebhookDeletionSHA），commit_sha 不带（tag 事件的定位键是
 		// Tag，与 github/gitee 的 tag.created/tag.deleted 形态一致）。
 		if strings.HasPrefix(pl.Ref, "refs/tags/") {
-			if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
-				event.Type = provider.EventTypeTag + "deleted"
+			if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+				event.Type = runtime.EventTypeTag + "deleted"
 				event.Action = "deleted"
 			} else {
-				event.Type = provider.EventTypeTag + "created"
+				event.Type = runtime.EventTypeTag + "created"
 				event.Action = "created"
 				event.CommitSHA = pl.After
 			}
@@ -360,27 +361,27 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.Normali
 		}
 	case "create":
 		if pl.RefType == "tag" {
-			event.Type = provider.EventTypeTag + "created"
+			event.Type = runtime.EventTypeTag + "created"
 			event.Action = "created"
 			event.Tag = pl.Ref
 		} else {
-			event.Type = provider.EventTypeBranch + "created"
+			event.Type = runtime.EventTypeBranch + "created"
 			event.Action = "created"
 			event.Branch = pl.Ref
 		}
 	case "delete":
 		if pl.RefType == "tag" {
-			event.Type = provider.EventTypeTag + "deleted"
+			event.Type = runtime.EventTypeTag + "deleted"
 			event.Action = "deleted"
 			event.Tag = pl.Ref
 		} else {
-			event.Type = provider.EventTypeBranch + "deleted"
+			event.Type = runtime.EventTypeBranch + "deleted"
 			event.Action = "deleted"
 			event.Branch = pl.Ref
 		}
 	case "issues":
-		action := provider.NormalizeIssueAction(pl.Action)
-		event.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(pl.Action)
+		event.Type = runtime.EventTypeIssue + action
 		event.Action = action
 		attachWebhookIssue(event, pl.Issue)
 	case "issue_comment":
@@ -390,7 +391,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.Normali
 		// 被当新评论。未知值透传（与 NormalizeIssueAction 的兜底一致），
 		// 空值落 created（老 wire 无 action 字段时保持既有形态）。
 		action := normalizeCommentAction(pl.Action)
-		event.Type = provider.EventTypeComment + action
+		event.Type = runtime.EventTypeComment + action
 		event.Action = action
 		if pl.Comment != nil {
 			author := &model.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
@@ -487,10 +488,10 @@ func MapState(state string, merged bool) model.CRState {
 // every platform.
 func normalizeCommentAction(action string) string {
 	switch action {
-	case provider.CommentActionCreated, provider.CommentActionEdited, provider.CommentActionDeleted:
+	case runtime.CommentActionCreated, runtime.CommentActionEdited, runtime.CommentActionDeleted:
 		return action
 	case "":
-		return provider.CommentActionCreated
+		return runtime.CommentActionCreated
 	default:
 		return action
 	}

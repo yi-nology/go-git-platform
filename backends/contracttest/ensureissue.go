@@ -8,6 +8,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // EnsureIssueSuite 钉两个新收敛函数的 wire 级行为契约（2B spec §1.2 body
@@ -85,12 +86,12 @@ func assertEnsureStateUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *
 	t.Helper()
 	ctx := context.Background()
 	p, requests := ensureIssueStub(t, h, ih)
-	outcome, got, err := provider.EnsureIssueState(ctx, p, "owner", "repo", "1", cur.State)
+	outcome, got, err := runtime.EnsureIssueState(ctx, p, "owner", "repo", "1", cur.State)
 	if err != nil {
 		t.Fatalf("EnsureIssueState(want=%q): %v", cur.State, err)
 	}
-	if outcome != provider.OutcomeUnchanged {
-		t.Errorf("outcome = %q, want %q", outcome, provider.OutcomeUnchanged)
+	if outcome != runtime.OutcomeUnchanged {
+		t.Errorf("outcome = %q, want %q", outcome, runtime.OutcomeUnchanged)
 	}
 	if got == nil {
 		t.Error("Unchanged must return the read snapshot, got nil")
@@ -116,12 +117,12 @@ func assertEnsureStateUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *mo
 	}
 	ctx := context.Background()
 	p, requests := ensureIssueStub(t, h, ih)
-	outcome, got, err := provider.EnsureIssueState(ctx, p, "owner", "repo", "1", want)
+	outcome, got, err := runtime.EnsureIssueState(ctx, p, "owner", "repo", "1", want)
 	if err != nil {
 		t.Fatalf("EnsureIssueState(want=%q): %v", want, err)
 	}
-	if outcome != provider.OutcomeUpdated {
-		t.Errorf("outcome = %q, want %q", outcome, provider.OutcomeUpdated)
+	if outcome != runtime.OutcomeUpdated {
+		t.Errorf("outcome = %q, want %q", outcome, runtime.OutcomeUpdated)
 	}
 	if got == nil {
 		t.Error("Updated must return the write result, got nil")
@@ -141,12 +142,12 @@ func assertEnsureLabelsUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur 
 	ctx := context.Background()
 	want := append([]string(nil), cur.Labels...)
 	p, requests := ensureIssueStub(t, h, ih)
-	outcome, got, err := provider.EnsureIssueLabels(ctx, p, "owner", "repo", "1", want)
+	outcome, got, err := runtime.EnsureIssueLabels(ctx, p, "owner", "repo", "1", want)
 	if err != nil {
 		t.Fatalf("EnsureIssueLabels(want=%v): %v", want, err)
 	}
-	if outcome != provider.OutcomeUnchanged {
-		t.Errorf("outcome = %q, want %q", outcome, provider.OutcomeUnchanged)
+	if outcome != runtime.OutcomeUnchanged {
+		t.Errorf("outcome = %q, want %q", outcome, runtime.OutcomeUnchanged)
 	}
 	if !sameLabelSet(got, want) {
 		t.Errorf("returned labels = %v, want set-equal to %v", got, want)
@@ -170,12 +171,12 @@ func assertEnsureLabelsUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *m
 	}
 	ctx := context.Background()
 	p, requests := ensureIssueStub(t, h, ih)
-	outcome, got, err := provider.EnsureIssueLabels(ctx, p, "owner", "repo", "1", want)
+	outcome, got, err := runtime.EnsureIssueLabels(ctx, p, "owner", "repo", "1", want)
 	if err != nil {
 		t.Fatalf("EnsureIssueLabels(want=%v): %v", want, err)
 	}
-	if outcome != provider.OutcomeUpdated {
-		t.Errorf("outcome = %q, want %q", outcome, provider.OutcomeUpdated)
+	if outcome != runtime.OutcomeUpdated {
+		t.Errorf("outcome = %q, want %q", outcome, runtime.OutcomeUpdated)
 	}
 	if !sameLabelSet(got, want) {
 		t.Errorf("convergence target = %v, want set-equal to %v", got, want)

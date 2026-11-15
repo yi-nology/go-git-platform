@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // TestTencentCode_BatchHelpers pins the provider-level batch helpers
-// (provider.GetFileContents / GetCRs / SetCommitStatuses — the oekit
+// (runtime.GetFileContents / GetCRs / SetCommitStatuses — the oekit
 // syncx.FanInLimitCtx-driven bounded-concurrency engine) over the 工蜂
 // wire: every item lands as its own BatchResult in input order, per-item
 // failures do not abort the batch, and the engine's per-item panics are
@@ -55,7 +56,7 @@ func TestTencentCode_BatchHelpers(t *testing.T) {
 	p := newTestProvider(t, srv)
 
 	// GetFileContents: one hit, one miss — the miss must stay a per-item Err.
-	fileResults := provider.GetFileContents(context.Background(), p, "owner", "repo", "main",
+	fileResults := runtime.GetFileContents(context.Background(), p, "owner", "repo", "main",
 		[]string{"README.md", "missing.txt"})
 	if len(fileResults) != 2 {
 		t.Fatalf("expected 2 file results, got %d", len(fileResults))
@@ -71,7 +72,7 @@ func TestTencentCode_BatchHelpers(t *testing.T) {
 	}
 
 	// GetCRs: input order preserved.
-	crResults := provider.GetCRs(context.Background(), p, "owner", "repo", []string{"2", "1"})
+	crResults := runtime.GetCRs(context.Background(), p, "owner", "repo", []string{"2", "1"})
 	for i, want := range []string{"2", "1"} {
 		if crResults[i].Err != nil {
 			t.Fatalf("cr[%d]: %v", i, crResults[i].Err)
@@ -82,7 +83,7 @@ func TestTencentCode_BatchHelpers(t *testing.T) {
 	}
 
 	// SetCommitStatuses: both statuses POST through.
-	statusResults := provider.SetCommitStatuses(context.Background(), p, "owner", "repo", "abc",
+	statusResults := runtime.SetCommitStatuses(context.Background(), p, "owner", "repo", "abc",
 		[]provider.CommitStatusOptions{
 			{State: "success", Context: "ci/lint"},
 			{State: "pending", Context: "ci/test"},

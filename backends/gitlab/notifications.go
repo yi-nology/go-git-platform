@@ -11,6 +11,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // ListNotifications implements provider.NotificationManager.
@@ -29,7 +30,7 @@ import (
 func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 无 Todos 线路面（登记 mapping 台账）：合法值按 ignore 丢弃，
 	// 但 malformed 值仍必须报错（issue #52）——时间戳选项的拒绝面全后端一致。
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitLab, "ListNotifications", err)
 	}
 	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
@@ -53,7 +54,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // Filters todos by project ID (resolved from owner/repo via the project
 // API) with the same dual-mode pagination as ListNotifications (issue #60).
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitLab, "ListRepoNotifications", err)
 	}
 	pid, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
@@ -97,7 +98,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // 是不可逆的全量副作用，畸形值必须报错而非静默退化成「全部标已读」——
 // 与 #52/#75/#97 的时间戳选项拒绝面全后端一致。
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+	if _, err := runtime.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
 		return provider.Wrap(model.PlatformGitLab, "MarkNotificationsRead", err)
 	}
 	_, err := p.client.Todos.MarkAllTodosAsDone(gitlab.WithContext(ctx))
@@ -134,7 +135,7 @@ func convertTodo(t *gitlab.Todo) *model.Notification {
 			ID:       t.Project.ID,
 			FullName: t.Project.PathWithNamespace,
 		}
-		owner, name := provider.SplitFullName(t.Project.PathWithNamespace)
+		owner, name := runtime.SplitFullName(t.Project.PathWithNamespace)
 		n.Repo.Owner = owner
 		n.Repo.Name = name
 	}

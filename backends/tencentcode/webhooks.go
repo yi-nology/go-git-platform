@@ -12,6 +12,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // applyWebhookEvents maps the unified event vocabulary onto 工蜂's boolean
@@ -130,7 +131,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*mod
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformTencentCode, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformTencentCode, r, secret); err != nil {
 		return provider.Wrap(model.PlatformTencentCode, "ValidateWebhookSignature", err)
 	}
 	return nil
@@ -139,7 +140,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // ParseWebhookEvent implements provider.WebhookManager.
 // tencentEnvelope is TencentCODE's webhook dialect for the shared envelope
 // steps (dispatch rides the payload's object_kind, not an event header).
-var tencentEnvelope = provider.WebhookEnvelope{
+var tencentEnvelope = runtime.WebhookEnvelope{
 	Platform: model.PlatformTencentCode,
 	IDPrefix: "tc",
 	// 投递 ID 头（issue #48）：工蜂是 GitLab-v3 衍生，投递带 per-webhook
@@ -221,7 +222,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 	if repoName == "" {
 		repoName = pl.Repository.Name
 	}
-	er := provider.BuildEventRepo(repoName)
+	er := runtime.BuildEventRepo(repoName)
 	er.ID = pl.Project.ID
 	actor := &model.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
@@ -232,11 +233,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 	switch pl.ObjectKind {
 	case "merge_request":
 		state := mapState(pl.ObjectAttributes.State)
-		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
+		action := runtime.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
 		event.Type = "cr." + action
 		event.Action = action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
-		headSHA, baseSHA, startSHA := provider.ResolveMRSHAs(
+		headSHA, baseSHA, startSHA := runtime.ResolveMRSHAs(
 			pl.ObjectAttributes.DiffRefs.HeadSHA,
 			pl.ObjectAttributes.DiffRefs.BaseSHA,
 			pl.ObjectAttributes.DiffRefs.StartSHA,
@@ -265,8 +266,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// 删除归一（issue #67，同族 #47 的 push 案）：工蜂家族没有独立
 		// delete 事件，分支删除以 push + 全零 after 投递——此前一律归一成
 		// push，消费方 switch branch.deleted 静默漏掉。before 非零确认真删除。
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
-			event.Type = provider.EventTypeBranch + "deleted"
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = runtime.EventTypeBranch + "deleted"
 			event.Action = "deleted"
 			// 全零 after 是删除标记而非提交,不设 commit_sha。
 		} else {
@@ -276,7 +277,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 	case "tag_push":
 		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
 			event.Type = "tag.deleted"
 			event.Action = "deleted"
 		} else {
@@ -285,8 +286,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
 	case "issue":
-		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
-		event.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(pl.ObjectAttributes.Action)
+		event.Type = runtime.EventTypeIssue + action
 		event.Action = action
 		event.Issue = &model.Issue{
 			ID:     int64(pl.ObjectAttributes.IID),
@@ -297,8 +298,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			Author: actor,
 		}
 	case "note":
-		event.Type = provider.EventTypeComment + provider.CommentActionCreated
-		event.Action = provider.CommentActionCreated
+		event.Type = runtime.EventTypeComment + runtime.CommentActionCreated
+		event.Action = runtime.CommentActionCreated
 		event.Comment = &model.IssueComment{Body: pl.ObjectAttributes.Note, Author: actor}
 		if pl.MergeRequest.IID != 0 {
 			event.CR = &model.ChangeRequest{

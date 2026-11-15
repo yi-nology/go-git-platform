@@ -8,6 +8,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // GetCommit implements provider.CommitManager.
@@ -32,10 +33,10 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	// 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的接受/
 	// 拒绝面必须全后端一致——RFC3339 之外的值在这里报 ErrInvalidInput，
 	// 与解析型后端同判，而不是把「平台自己报什么」交给 wire。
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 	}
-	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+	if _, err := runtime.ParseTimestamp("Until", opts.Until); err != nil {
 		return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 	}
 	baseOpts := gitee.CommitListOptions{}

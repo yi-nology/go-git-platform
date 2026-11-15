@@ -14,6 +14,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // gitcodeHookEventFlags maps the platform-neutral webhook event names onto
@@ -165,7 +166,7 @@ func hookFlag(h *gitcode.Webhook, field string) bool {
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitCode, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitCode, r, secret); err != nil {
 		return provider.Wrap(model.PlatformGitCode, "ValidateWebhookSignature", err)
 	}
 	return nil
@@ -175,7 +176,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // gitcodeEnvelope is GitCode's webhook dialect for the shared envelope
 // steps: GitCode brands both the Gitea event header and its own, so the
 // dialect lists the fallback chain; it never set an event ID (no prefix).
-var gitcodeEnvelope = provider.WebhookEnvelope{
+var gitcodeEnvelope = runtime.WebhookEnvelope{
 	Platform:     model.PlatformGitCode,
 	EventHeaders: []string{"X-Gitea-Event", "X-GitCode-Event"},
 	// 投递 ID(重投时值不变)⇒ 真幂等键;没有该头时回落到本地合成的 ID
@@ -197,8 +198,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		if err != nil {
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		action := provider.NormalizeCRAction(prEvent.Action, prEvent.PullRequest != nil && prEvent.PullRequest.Merged)
-		ne.Type = provider.EventTypeCR + action
+		action := runtime.NormalizeCRAction(prEvent.Action, prEvent.PullRequest != nil && prEvent.PullRequest.Merged)
+		ne.Type = runtime.EventTypeCR + action
 		ne.Action = action
 		if prEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(prEvent.Sender.ID)
@@ -207,7 +208,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 		if prEvent.Repository != nil {
-			ne.Repo = provider.BuildEventRepo(prEvent.Repository.FullName)
+			ne.Repo = runtime.BuildEventRepo(prEvent.Repository.FullName)
 		}
 		if prEvent.PullRequest != nil {
 			ne.CR = convertPullRequest(prEvent.PullRequest)
@@ -224,8 +225,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// push + 全零 after 投递（其独立 delete 事件路径只覆盖部分场景）——
 		// 此前一律归一成 push，消费方 switch branch.deleted 静默漏掉。
 		// before 非零确认真删除。
-		if provider.IsWebhookDeletionSHA(pushEvent.After) && !provider.IsWebhookDeletionSHA(pushEvent.Before) {
-			ne.Type = provider.EventTypeBranch + "deleted"
+		if runtime.IsWebhookDeletionSHA(pushEvent.After) && !runtime.IsWebhookDeletionSHA(pushEvent.Before) {
+			ne.Type = runtime.EventTypeBranch + "deleted"
 			ne.Action = "deleted"
 			// 全零 after 是删除标记而非提交,不设 commit_sha。
 		} else {
@@ -240,7 +241,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 		if pushEvent.Repository != nil {
-			ne.Repo = provider.BuildEventRepo(pushEvent.Repository.FullName)
+			ne.Repo = runtime.BuildEventRepo(pushEvent.Repository.FullName)
 		}
 	case "tag_push":
 		tagEvent, err := p.client.ParseTagPushEvent(body)
@@ -248,15 +249,15 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
-		if provider.IsWebhookDeletionSHA(tagEvent.After) && !provider.IsWebhookDeletionSHA(tagEvent.Before) {
-			ne.Type = provider.EventTypeTag + "deleted"
+		if runtime.IsWebhookDeletionSHA(tagEvent.After) && !runtime.IsWebhookDeletionSHA(tagEvent.Before) {
+			ne.Type = runtime.EventTypeTag + "deleted"
 			ne.Action = "deleted"
 		} else {
-			ne.Type = provider.EventTypeTag + "created"
+			ne.Type = runtime.EventTypeTag + "created"
 			ne.Action = "created"
 		}
 		ne.Tag = strings.TrimPrefix(tagEvent.Ref, "refs/tags/")
-		if !provider.IsWebhookDeletionSHA(tagEvent.After) {
+		if !runtime.IsWebhookDeletionSHA(tagEvent.After) {
 			ne.CommitSHA = tagEvent.After
 		}
 		if tagEvent.Sender != nil {
@@ -266,7 +267,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 		if tagEvent.Repository != nil {
-			ne.Repo = provider.BuildEventRepo(tagEvent.Repository.FullName)
+			ne.Repo = runtime.BuildEventRepo(tagEvent.Repository.FullName)
 		}
 	case "create":
 		var createEvent struct {
@@ -279,11 +280,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		if createEvent.RefType == "tag" {
-			ne.Type = provider.EventTypeTag + "created"
+			ne.Type = runtime.EventTypeTag + "created"
 			ne.Action = "created"
 			ne.Tag = createEvent.Ref
 		} else {
-			ne.Type = provider.EventTypeBranch + "created"
+			ne.Type = runtime.EventTypeBranch + "created"
 			ne.Action = "created"
 			ne.Branch = createEvent.Ref
 		}
@@ -294,7 +295,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 		if createEvent.Repository != nil {
-			ne.Repo = provider.BuildEventRepo(createEvent.Repository.FullName)
+			ne.Repo = runtime.BuildEventRepo(createEvent.Repository.FullName)
 		}
 	case "delete":
 		var deleteEvent struct {
@@ -307,11 +308,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		if deleteEvent.RefType == "tag" {
-			ne.Type = provider.EventTypeTag + "deleted"
+			ne.Type = runtime.EventTypeTag + "deleted"
 			ne.Action = "deleted"
 			ne.Tag = deleteEvent.Ref
 		} else {
-			ne.Type = provider.EventTypeBranch + "deleted"
+			ne.Type = runtime.EventTypeBranch + "deleted"
 			ne.Action = "deleted"
 			ne.Branch = deleteEvent.Ref
 		}
@@ -322,7 +323,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 		if deleteEvent.Repository != nil {
-			ne.Repo = provider.BuildEventRepo(deleteEvent.Repository.FullName)
+			ne.Repo = runtime.BuildEventRepo(deleteEvent.Repository.FullName)
 		}
 	case "issues":
 		var issueEvent struct {
@@ -334,8 +335,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		if err := json.Unmarshal(body, &issueEvent); err != nil {
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		action := provider.NormalizeIssueAction(issueEvent.Action)
-		ne.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(issueEvent.Action)
+		ne.Type = runtime.EventTypeIssue + action
 		ne.Action = action
 		attachGitCodeIssue(ne, issueEvent.Issue, issueEvent.Sender, issueEvent.Repository)
 	case "issue_comment":
@@ -351,8 +352,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		if err := json.Unmarshal(body, &commentEvent); err != nil {
 			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
-		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
-		ne.Action = provider.CommentActionCreated
+		ne.Type = runtime.EventTypeComment + runtime.CommentActionCreated
+		ne.Action = runtime.CommentActionCreated
 		if commentEvent.Comment != nil && commentEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(commentEvent.Sender.ID)
 			ne.Comment = &model.IssueComment{
@@ -388,7 +389,7 @@ func attachGitCodeIssue(ne *model.NormalizedEvent, issue *gitcodeIssuePayload, s
 		ne.Actor = &model.CRUser{ID: senderID, Username: sender.Login, AvatarURL: sender.AvatarURL}
 	}
 	if repo != nil {
-		ne.Repo = provider.BuildEventRepo(repo.FullName)
+		ne.Repo = runtime.BuildEventRepo(repo.FullName)
 	}
 	if issue == nil {
 		return

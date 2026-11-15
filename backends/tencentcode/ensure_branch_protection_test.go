@@ -9,10 +9,11 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // TestTencentCode_EnsureBranchProtection verifies that the cross-platform
-// expect-state helper provider.EnsureBranchProtection converges over the
+// expect-state helper runtime.EnsureBranchProtection converges over the
 // tencentcode backend now that it implements BranchProtectionManager:
 // a missing rule is Created, a matching rule is left Unchanged, and a
 // diverging force-push flag is Updated.
@@ -61,23 +62,23 @@ func TestTencentCode_EnsureBranchProtection(t *testing.T) {
 
 	// 1. Unprotected branch → the helper Creates.
 	protected = false
-	action, _, err := provider.EnsureBranchProtection(context.Background(), p, "owner", "repo", desired)
-	if err != nil || action != provider.EnsureCreated {
+	action, _, err := runtime.EnsureBranchProtection(context.Background(), p, "owner", "repo", desired)
+	if err != nil || action != runtime.EnsureCreated {
 		t.Fatalf("want EnsureCreated, got %q err=%v", action, err)
 	}
 
 	// 2. Protected with the same rule → Unchanged (no PUT fired).
 	protected = true
-	action, got, err := provider.EnsureBranchProtection(context.Background(), p, "owner", "repo", desired)
-	if err != nil || action != provider.EnsureUnchanged {
+	action, got, err := runtime.EnsureBranchProtection(context.Background(), p, "owner", "repo", desired)
+	if err != nil || action != runtime.EnsureUnchanged {
 		t.Fatalf("want EnsureUnchanged, got %q err=%v (rule %+v)", action, err, got)
 	}
 
 	// 3. Force-push desired true (platform reports false) → Updated, and
 	// the PUT carries allow_force_push=true.
-	action, _, err = provider.EnsureBranchProtection(context.Background(), p, "owner", "repo",
+	action, _, err = runtime.EnsureBranchProtection(context.Background(), p, "owner", "repo",
 		provider.CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 1, AllowForcePushes: true})
-	if err != nil || action != provider.EnsureUpdated {
+	if err != nil || action != runtime.EnsureUpdated {
 		t.Fatalf("want EnsureUpdated, got %q err=%v", action, err)
 	}
 	if !forcePushOnWire {

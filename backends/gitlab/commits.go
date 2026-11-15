@@ -8,6 +8,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // GetCommit implements provider.CommitManager.
@@ -23,11 +24,11 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*mod
 func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// Since/Until 解析失败必须报错（issue #52，批2 #75 LastReadAt 同型）：
 	// 静默丢弃会把格式笔误升级成不过滤的全量历史。
-	since, err := provider.ParseTimestamp("Since", opts.Since)
+	since, err := runtime.ParseTimestamp("Since", opts.Since)
 	if err != nil {
 		return nil, provider.Wrap(model.PlatformGitLab, "ListCommits", err)
 	}
-	until, err := provider.ParseTimestamp("Until", opts.Until)
+	until, err := runtime.ParseTimestamp("Until", opts.Until)
 	if err != nil {
 		return nil, provider.Wrap(model.PlatformGitLab, "ListCommits", err)
 	}

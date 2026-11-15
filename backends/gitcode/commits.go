@@ -8,6 +8,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // GetCommit implements provider.CommitManager.
@@ -28,10 +29,10 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	// Since/Until 先经共享解析器校验（issue #52）——malformed 报
 	// ErrInvalidInput，与其他后端同判；校验通过的值本平台无法下传
 	// （SDK 的 commit-list 选项不带时间过滤），按 divergence 台账登记。
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitCode, "ListCommits", err)
 	}
-	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+	if _, err := runtime.ParseTimestamp("Until", opts.Until); err != nil {
 		return nil, provider.Wrap(model.PlatformGitCode, "ListCommits", err)
 	}
 	fetch := func(page, perPage int) ([]*gitcode.Commit, error) {

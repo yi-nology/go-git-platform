@@ -9,6 +9,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // ListNotifications implements provider.NotificationManager. GitCode
@@ -29,7 +30,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
 	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(model.PlatformGitCode, "ListRepoNotifications", err)
 	}
 	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
@@ -77,7 +78,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 // 与其他后端一致（ErrInvalidInput），合法值照旧透传（GitCode wire 支持
 // last_read_at）。
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
+	if _, err := runtime.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
 		return provider.Wrap(model.PlatformGitCode, "MarkRepoNotificationsRead", err)
 	}
 	return provider.Wrap(model.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, owner, repo, gitcode.MarkNotificationsOptions{

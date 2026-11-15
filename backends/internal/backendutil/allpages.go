@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // maxAllPages bounds the pagination walks run by backend list methods as a
@@ -16,7 +17,7 @@ import (
 // The bound delegates to the provider's public iterator (single ITERATOR
 // implementation for the whole SDK). Unlike pre-0.77.0 AllPages — which
 // logged and silently truncated at the cap — exhausting the budget now fails
-// the walk with an error wrapping provider.ErrPageBudgetExceeded, so a
+// the walk with an error wrapping runtime.ErrPageBudgetExceeded, so a
 // platform pagination bug surfaces instead of quietly dropping data.
 const maxAllPages = 50
 
@@ -29,7 +30,7 @@ const maxAllPages = 50
 // must honor the page parameter, which every supported platform's list API
 // does.
 func AllPages[T any](fetch func(page int) ([]T, error)) ([]T, error) {
-	return provider.CollectBounded(context.Background(), func(_ context.Context, page int) ([]T, error) {
+	return runtime.CollectBounded(context.Background(), func(_ context.Context, page int) ([]T, error) {
 		return fetch(page)
 	}, maxAllPages)
 }

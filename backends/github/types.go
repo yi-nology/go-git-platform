@@ -7,7 +7,7 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/model"
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // Internal type aliases for clarity in conversion code. The actual JSON
@@ -28,7 +28,7 @@ func convertRepo(r *ghRepo) *model.PlatformRepo {
 	if r == nil {
 		return nil
 	}
-	owner, _ := provider.SplitFullName(r.GetFullName())
+	owner, _ := runtime.SplitFullName(r.GetFullName())
 	return &model.PlatformRepo{
 		ID:            r.GetID(),
 		FullName:      r.GetFullName(),

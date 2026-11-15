@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/model"
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // signedHookRequest builds a POST carrying the family event header and a
@@ -70,11 +70,11 @@ func TestParseWebhookEvent_CommentActionDerived(t *testing.T) {
 		wire string
 		want string
 	}{
-		{wire: "created", want: provider.CommentActionCreated},
-		{wire: "edited", want: provider.CommentActionEdited},
-		{wire: "deleted", want: provider.CommentActionDeleted},
-		{wire: "", want: provider.CommentActionCreated}, // old wire without the field
-		{wire: "reacted", want: "reacted"},              // unknown passes through
+		{wire: "created", want: runtime.CommentActionCreated},
+		{wire: "edited", want: runtime.CommentActionEdited},
+		{wire: "deleted", want: runtime.CommentActionDeleted},
+		{wire: "", want: runtime.CommentActionCreated}, // old wire without the field
+		{wire: "reacted", want: "reacted"},             // unknown passes through
 	}
 	for _, tc := range cases {
 		t.Run("action="+tc.wire, func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestParseWebhookEvent_CommentActionDerived(t *testing.T) {
 			if ev.Action != tc.want {
 				t.Fatalf("comment action = %q, want %q", ev.Action, tc.want)
 			}
-			if want := provider.EventTypeComment + tc.want; ev.Type != want {
+			if want := runtime.EventTypeComment + tc.want; ev.Type != want {
 				t.Fatalf("event type = %q, want %q", ev.Type, want)
 			}
 			if ev.Comment == nil || ev.Comment.ID != 555 {

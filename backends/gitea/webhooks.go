@@ -7,6 +7,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // CreateWebhook implements provider.WebhookManager.
@@ -39,7 +40,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitea, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitea, r, secret); err != nil {
 		return provider.Wrap(model.PlatformGitea, "ValidateWebhookSignature", err)
 	}
 	return nil

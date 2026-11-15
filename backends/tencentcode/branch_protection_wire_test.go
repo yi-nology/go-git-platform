@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // TestTencentCode_BranchProtectionWire pins the provider-level branch
@@ -183,12 +184,12 @@ func TestTencentCode_EnsureBranchProtection_CreatesUnprotected(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 
-	action, rule, err := provider.EnsureBranchProtection(context.Background(), p, "owner", "repo",
+	action, rule, err := runtime.EnsureBranchProtection(context.Background(), p, "owner", "repo",
 		provider.CreateBranchProtectionOptions{BranchName: "main"})
 	if err != nil {
 		t.Fatalf("EnsureBranchProtection: %v", err)
 	}
-	if action != provider.EnsureCreated {
+	if action != runtime.EnsureCreated {
 		t.Fatalf("unprotected branch must converge via Create, got %q (rule=%+v)", action, rule)
 	}
 }

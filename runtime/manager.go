@@ -1,0 +1,256 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"reflect"
+	"sync/atomic"
+	"time"
+
+	"github.com/oekit/pkg/encoding"
+	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/provider"
+)
+
+// Manager caches provider.Provider instances keyed by configuration so repeated
+// constructions of the same (platform, baseURL, token, and every other
+// wire-affecting config field) reuse the underlying HTTP client pools
+// instead of leaking a fresh one per call.
+//
+// It automatically detects the platform from clone URLs and reuses existing
+// provider.Provider instances within the TTL window. The cache key is derived from
+// the full provider.Config: platform + baseURL + a SHA-256 hash of the token, plus
+// SkipTLS, TokenStyle, ConditionalRequests, the provider.RetryConfig fingerprint and
+// the identity of TokenSource/Hooks/Logger — so differently configured
+// callers never share a provider (issue #66) and the token itself never
+// leaks into logs or memory dumps.
+//
+// The type is deliberately thin: the cache mechanics (TTL, LRU capacity
+// eviction, counters) live in ttlCache and the background-cleanup lifecycle
+// in janitor, leaving Manager exactly key derivation + factory call.
+type Manager struct {
+	cache  *ttlCache[provider.Provider]
+	ttl    time.Duration
+	hasher func(token string) string
+
+	jan janitor
+}
+
+// Stats reports cache hit/miss counters and the current size. Counters are
+// atomically incremented and safe to read concurrently.
+type Stats struct {
+	Hits      int64
+	Misses    int64
+	Evictions int64
+	Size      int
+}
+
+// ManagerOption configures a Manager at construction time.
+type ManagerOption func(*Manager)
+
+// WithMaxSize caps the cache at n entries. When the cap is reached, the least
+// recently used entry is evicted before a new one is inserted.
+func WithMaxSize(n int) ManagerOption {
+	return func(m *Manager) { m.cache = newTTLCache[provider.Provider](m.ttl, n) }
+}
+
+// WithHasher overrides the default SHA-256 token hasher. Useful for tests
+// that want deterministic, human-readable keys.
+func WithHasher(h func(token string) string) ManagerOption {
+	return func(m *Manager) { m.hasher = h }
+}
+
+// NewManager creates a new provider.Provider Manager with the given TTL.
+// A TTL of 0 means providers never expire (until the process exits).
+func NewManager(ttl time.Duration, opts ...ManagerOption) *Manager {
+	m := &Manager{
+		cache:  newTTLCache[provider.Provider](ttl, 0),
+		ttl:    ttl,
+		hasher: defaultHasher,
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// defaultHasher returns the first 16 hex characters of SHA-256(token). The
+// truncation keeps cache keys short while still providing 64 bits of entropy
+// (collision probability ~10^-19 for 1000 keys).
+func defaultHasher(token string) string {
+	return HashToken(token)
+}
+
+// HashToken returns the first 16 hex characters of SHA-256(token). It is the
+// default token hasher used by Manager and is exported so callers can compute
+// cache keys for diagnostics or external caches.
+//
+// An empty token hashes to an empty string (no anonymous cache entries).
+func HashToken(token string) string {
+	if token == "" {
+		return ""
+	}
+	return encoding.Sha256(token)[:16]
+}
+
+// GetByURL detects the platform from the clone URL and returns a cached or
+// newly created provider.Provider.
+func (m *Manager) GetByURL(cloneURL, token string) (provider.Provider, error) {
+	result, err := DetectPlatform(cloneURL)
+	if err != nil {
+		return nil, oekiterrors.Wrap(err, "detect platform")
+	}
+	return m.Get(provider.Config{
+		Platform: result.Platform,
+		BaseURL:  result.BaseURL,
+		Token:    token,
+	})
+}
+
+// Get returns a cached or newly created provider.Provider for the given config. The
+// cache key is platform + baseURL + hash(token), so the same (platform,
+// baseURL) with a different token gets a distinct entry.
+func (m *Manager) Get(cfg provider.Config) (provider.Provider, error) {
+	key := m.buildKey(cfg)
+	return m.cache.getOrBuild(key, func() (provider.Provider, error) { return provider.NewProvider(cfg) })
+}
+
+// Remove removes a cached provider.Provider by config.
+func (m *Manager) Remove(cfg provider.Config) {
+	m.cache.remove(m.buildKey(cfg))
+}
+
+// Purge removes all cached Providers.
+func (m *Manager) Purge() {
+	m.cache.purge()
+}
+
+// Len returns the number of cached Providers.
+func (m *Manager) Len() int {
+	return m.cache.len()
+}
+
+// Stats returns a snapshot of cache counters. The counters continue to
+// accumulate across calls; reset them with ResetStats.
+//
+// Evictions 口径与本仓历史实现一致：容量淘汰与 TTL 过期回收**都计入**
+// （上游 LocalCache 把两者分列为 Evictions / Expirations，此处按历史口径合并）。
+func (m *Manager) Stats() Stats {
+	s := m.cache.stats()
+	return Stats{
+		Hits:      s.Hits,
+		Misses:    s.Misses,
+		Evictions: s.Evictions + s.Expirations,
+		Size:      int(s.Size),
+	}
+}
+
+// ResetStats zeroes the hit/miss/eviction counters. Cache entries are not
+// affected.
+func (m *Manager) ResetStats() {
+	m.cache.resetStats()
+}
+
+// Cleanup removes expired entries from the cache. Safe to call manually; also
+// invoked periodically by StartJanitor.
+func (m *Manager) Cleanup() {
+	m.cache.cleanup()
+}
+
+// StartJanitor launches a background goroutine that calls Cleanup every
+// interval until ctx is cancelled or Stop is called. Calling StartJanitor
+// more than once without an intervening Stop (or without the previous
+// goroutine having exited) is a no-op. When the goroutine exits on its own
+// — e.g. because ctx was cancelled — it resets the janitor state, so a
+// subsequent StartJanitor with a fresh ctx launches a new goroutine instead
+// of being mistaken for "already running".
+func (m *Manager) StartJanitor(ctx context.Context, interval time.Duration) {
+	m.jan.cleanup = m.Cleanup
+	m.jan.start(ctx, interval)
+}
+
+// Stop halts the background janitor and blocks until it has exited.
+func (m *Manager) Stop() {
+	m.jan.stopAndWait()
+}
+
+// buildKey derives a stable cache key from the config. The token is passed
+// through the configured hasher (SHA-256 by default) so the raw token never
+// appears in the key. This avoids accidental leakage via logs, error
+// messages, or heap dumps.
+//
+// 键必须涵盖**全部影响 wire 行为的配置字段**(issue #66):此前只含
+// Platform/BaseURL/hash(Token)/SkipTLS,两个仅差 TokenSource 的 provider.Config
+// 会命中同一个缓存 provider——旋转凭据的调用方拿到的 provider 用的是
+// **别的主体**的凭据源,静态 TokenStyle/ConditionalRequests/provider.RetryConfig
+// 的差异也被静默抹平。各字段的键入口径:
+//
+//   - Token/SkipTLS/TokenStyle/ConditionalRequests:值语义,直接进键
+//     (Token 经 hasher);provider.RetryConfig 同为值语义策略,按内容指纹进键,
+//     等值配置共享缓存是正确行为。
+//   - TokenSource/Hooks/Logger:指针语义(旋转凭据源、请求钩子、日志
+//     注入按身份生效)——指针形态取指针身份;可比较的值形态(如
+//     StaticTokenSource)取内容的 hasher 摘要(不落原文);不可比较的
+//     值形态无法判等,按调用次序发独立键(方向安全:宁可不命中,
+//     不可错命中)。
+func (m *Manager) buildKey(cfg provider.Config) string {
+	// SkipTLS 参与 key:TLS 策略变化必须产生新 provider,
+	// 否则更新平台配置后仍命中旧缓存的严格 TLS client,直到重启才生效。
+	key := fmt.Sprintf("%s:%s:%s:%t", cfg.Platform, cfg.BaseURL, m.hasher(cfg.Token), cfg.SkipTLS)
+	if cfg.TokenStyle != "" {
+		key += ":style=" + cfg.TokenStyle
+	}
+	if cfg.ConditionalRequests {
+		key += ":etag=1"
+	}
+	if fp := retryConfigFingerprint(cfg.RetryConfig); fp != "" {
+		key += ":" + fp
+	}
+	for _, part := range []string{
+		identityPart(cfg.TokenSource, m.hasher),
+		identityPart(cfg.Hooks, m.hasher),
+		identityPart(cfg.Logger, m.hasher),
+	} {
+		if part != "" {
+			key += ":" + part
+		}
+	}
+	return key
+}
+
+// retryConfigFingerprint renders the retry policy's content as a compact
+// stable string; nil (retry disabled) yields "" so the key stays identical
+// to the historical no-retry form.
+func retryConfigFingerprint(cfg *provider.RetryConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return fmt.Sprintf("retry=%d:%d:%d:%v", cfg.MaxRetries, cfg.BaseDelay, cfg.MaxDelay, cfg.RetryOn)
+}
+
+// identityPart keys a pointer-semantic config field by identity. Hasher is
+// the same one the token goes through, so a comparable value source (e.g.
+// StaticTokenSource, whose content embeds the credential) never lands in the
+// key as plaintext.
+var identitySeq atomic.Uint64
+
+func identityPart(v any, hasher func(string) string) string {
+	if v == nil {
+		return ""
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return fmt.Sprintf("%T@%p", v, rv.UnsafePointer())
+	default:
+		if rv.Comparable() {
+			// 值语义且可比较(StaticTokenSource 形态):等值共享缓存,
+			// 摘要走 token 同款 hasher,凭据不落键明文。
+			return fmt.Sprintf("%T#%s", v, hasher(fmt.Sprint(v)))
+		}
+		// 不可比较的值形态无法判等 ⇒ 每个值发独立键(方向安全:
+		// 宁可不命中,不可错命中)。
+		return fmt.Sprintf("%T@~%d", v, identitySeq.Add(1))
+	}
+}

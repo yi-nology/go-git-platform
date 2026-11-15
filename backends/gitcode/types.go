@@ -9,7 +9,7 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/model"
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 func convertUser(u *gitcode.User) *model.CRUser {
@@ -218,7 +218,7 @@ func convertNotification(t *gitcode.NotificationThread) *model.Notification {
 			ID:       t.Repository.ID,
 			FullName: t.Repository.FullName,
 		}
-		owner, name := provider.SplitFullName(t.Repository.FullName)
+		owner, name := runtime.SplitFullName(t.Repository.FullName)
 		n.Repo.Owner = owner
 		n.Repo.Name = name
 	}

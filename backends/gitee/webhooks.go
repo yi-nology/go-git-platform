@@ -10,6 +10,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/runtime"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -124,7 +125,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*mod
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitee, r, secret); err != nil {
+	if err := runtime.ValidateWebhookWithRegistry(model.PlatformGitee, r, secret); err != nil {
 		return provider.Wrap(model.PlatformGitee, "ValidateWebhookSignature", err)
 	}
 	return nil
@@ -132,7 +133,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 
 // ParseWebhookEvent implements provider.WebhookManager.
 // giteeEnvelope is Gitee's webhook dialect for the shared envelope steps.
-var giteeEnvelope = provider.WebhookEnvelope{
+var giteeEnvelope = runtime.WebhookEnvelope{
 	Platform:     model.PlatformGitee,
 	EventHeaders: []string{"X-Gitee-Event"},
 	IDPrefix:     "ge",
@@ -216,7 +217,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		return nil, provider.Wrap(model.PlatformGitee, "ParseWebhookEvent", err)
 	}
 
-	er := provider.BuildEventRepo(pl.Repository.FullName)
+	er := runtime.BuildEventRepo(pl.Repository.FullName)
 	actor := &model.CRUser{ID: int64(pl.User.ID), Username: pl.User.Login, Name: pl.User.Name}
 
 	event := giteeEnvelope.NewEventWithID(r, int64(pl.Number), body)
@@ -225,8 +226,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 
 	switch eventType {
 	case "pull_request":
-		action := provider.NormalizeCRAction(pl.Action, pl.State == "merged")
-		event.Type = provider.EventTypeCR + action
+		action := runtime.NormalizeCRAction(pl.Action, pl.State == "merged")
+		event.Type = runtime.EventTypeCR + action
 		event.Action = action
 		event.CR = &model.ChangeRequest{
 			Number:       strconv.Itoa(pl.Number),
@@ -244,8 +245,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		// 删除归一（issue #67，同族 #47 的 push 案）：Gitee 家族没有独立
 		// delete 事件，分支删除以 push + 全零 after 投递——此前一律归一成
 		// push，消费方 switch branch.deleted 静默漏掉。before 非零确认真删除。
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
-			event.Type = provider.EventTypeBranch + "deleted"
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = runtime.EventTypeBranch + "deleted"
 			event.Action = "deleted"
 			// 全零 after 是删除标记而非提交(github delete 事件与 #47 的
 			// tag.deleted 同款不设 commit_sha)。
@@ -257,20 +258,20 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 		event.Branch = strings.TrimPrefix(pl.Ref, "refs/heads/")
 	case "tag_push":
 		// 删除归一（issue #47，同 GitLab——Gitee 家族以全零 after 投递删除）
-		if provider.IsWebhookDeletionSHA(pl.After) && !provider.IsWebhookDeletionSHA(pl.Before) {
-			event.Type = provider.EventTypeTag + "deleted"
+		if runtime.IsWebhookDeletionSHA(pl.After) && !runtime.IsWebhookDeletionSHA(pl.Before) {
+			event.Type = runtime.EventTypeTag + "deleted"
 			event.Action = "deleted"
 		} else {
-			event.Type = provider.EventTypeTag + "created"
+			event.Type = runtime.EventTypeTag + "created"
 			event.Action = "created"
 		}
 		event.Tag = strings.TrimPrefix(pl.Ref, "refs/tags/")
-		if !provider.IsWebhookDeletionSHA(pl.After) {
+		if !runtime.IsWebhookDeletionSHA(pl.After) {
 			event.CommitSHA = pl.After
 		}
 	case "note", "comment":
-		event.Type = provider.EventTypeComment + provider.CommentActionCreated
-		event.Action = provider.CommentActionCreated
+		event.Type = runtime.EventTypeComment + runtime.CommentActionCreated
+		event.Action = runtime.CommentActionCreated
 		event.Comment = &model.IssueComment{Body: pl.Note, Author: actor}
 		if pl.NoteableType == "PullRequest" && pl.Number != 0 {
 			event.CR = &model.ChangeRequest{Number: strconv.Itoa(pl.Number)}
@@ -283,8 +284,8 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.Nor
 			}
 		}
 	case "issue":
-		action := provider.NormalizeIssueAction(pl.Action)
-		event.Type = provider.EventTypeIssue + action
+		action := runtime.NormalizeIssueAction(pl.Action)
+		event.Type = runtime.EventTypeIssue + action
 		event.Action = action
 		if pl.Issue != nil {
 			state := model.IssueStateOpen

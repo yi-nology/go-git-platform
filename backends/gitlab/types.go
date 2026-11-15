@@ -8,6 +8,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // convertProject maps a gitlab.Project to the provider-neutral type.
@@ -15,7 +16,7 @@ func convertProject(p *gitlab.Project) *model.PlatformRepo {
 	if p == nil {
 		return nil
 	}
-	owner, _ := provider.SplitFullName(p.PathWithNamespace)
+	owner, _ := runtime.SplitFullName(p.PathWithNamespace)
 	return &model.PlatformRepo{
 		ID:            p.ID,
 		FullName:      p.PathWithNamespace,

@@ -8,6 +8,7 @@ import (
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // --- notifications ---
@@ -59,7 +60,7 @@ var notificationReadStates = []string{"read", "unread", "pinned"}
 // 全量通知流。
 func buildListNotificationOptions(opts provider.ListNotificationsOptions) (ListNotificationOptions, error) {
 	listOpts := ListNotificationOptions{}
-	since, err := provider.ParseTimestamp("Since", opts.Since)
+	since, err := runtime.ParseTimestamp("Since", opts.Since)
 	if err != nil {
 		return listOpts, err
 	}
@@ -130,7 +131,7 @@ func MarkNotificationRead(ctx context.Context, f Family, c NotificationPort, thr
 
 // MarkNotificationsRead marks every notification read.
 //
-// LastReadAt 走 provider.ParseTimestamp（issue #97，#52/#75 同族第三处）：
+// LastReadAt 走 runtime.ParseTimestamp（issue #97，#52/#75 同族第三处）：
 // 非法时间戳此前被 `_ =` 吞成零值上 wire——标记范围被拉到异常区间、错误
 // 输入静默生效。解析失败一律 ErrInvalidInput，与全后端时间字段口径一致。
 func MarkNotificationsRead(ctx context.Context, f Family, c NotificationPort, opts provider.MarkNotificationsOptions) error {
@@ -157,7 +158,7 @@ func MarkRepoNotificationsRead(ctx context.Context, f Family, c NotificationPort
 func buildMarkOptions(op string, f Family, opts provider.MarkNotificationsOptions) (MarkNotificationOptions, error) {
 	markOpts := MarkNotificationOptions{}
 	if opts.LastReadAt != "" {
-		t, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt)
+		t, err := runtime.ParseTimestamp("LastReadAt", opts.LastReadAt)
 		if err != nil {
 			return MarkNotificationOptions{}, provider.Wrap(f.Platform, op, err)
 		}
@@ -179,7 +180,7 @@ func convertNotification(t *NotificationThread) *model.Notification {
 		URL:   t.SubjectURL,
 	}
 	n.Repo = &model.EventRepo{ID: t.RepoID, FullName: t.RepoFullName}
-	n.Repo.Owner, n.Repo.Name = provider.SplitFullName(t.RepoFullName)
+	n.Repo.Owner, n.Repo.Name = runtime.SplitFullName(t.RepoFullName)
 	n.UpdatedAt = t.UpdatedAt
 	return n
 }
@@ -257,10 +258,10 @@ func GetCommit(ctx context.Context, f Family, c CommitPort, owner, repo, sha str
 // 选项与平台 wire 都不带时间过滤），按 divergence 台账登记为 ignore，
 // 增量同步需自行客户端过滤。
 func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
-	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
+	if _, err := runtime.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCommits", err)
 	}
-	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
+	if _, err := runtime.ParseTimestamp("Until", opts.Until); err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCommits", err)
 	}
 	commits, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
@@ -461,7 +462,7 @@ func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.Sea
 	}
 	var repoOwner, repoName string
 	if opts.Repo != "" {
-		repoOwner, repoName = provider.SplitFullName(opts.Repo)
+		repoOwner, repoName = runtime.SplitFullName(opts.Repo)
 		if repoOwner == "" || repoName == "" {
 			return nil, nil, provider.Wrapf(f.Platform, "SearchIssues", "invalid repo %q, want owner/name", opts.Repo)
 		}

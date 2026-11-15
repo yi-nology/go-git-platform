@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/model"
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/runtime"
 )
 
 // corpusSecret is the shared signing secret for every corpus fixture.
@@ -56,7 +56,7 @@ func RunWebhookCorpus(t *testing.T, platform model.Platform, parser WebhookParse
 	if err != nil {
 		t.Fatalf("read corpus dir %s: %v", dir, err)
 	}
-	v := provider.DefaultWebhookRegistry().Get(platform)
+	v := runtime.DefaultWebhookRegistry().Get(platform)
 	ran := 0
 	for _, e := range entries {
 		name := e.Name()
@@ -75,7 +75,7 @@ func RunWebhookCorpus(t *testing.T, platform model.Platform, parser WebhookParse
 
 // runCorpusFixture executes one corpus fixture: decode, sign, parse,
 // normalize, and compare against (or rewrite) the golden file.
-func runCorpusFixture(t *testing.T, v provider.WebhookValidator, parser WebhookParser, dir, name string) {
+func runCorpusFixture(t *testing.T, v runtime.WebhookValidator, parser WebhookParser, dir, name string) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {

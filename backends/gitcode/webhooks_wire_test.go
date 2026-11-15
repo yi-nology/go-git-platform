@@ -154,7 +154,7 @@ func TestWebhooks_CreateWire(t *testing.T) {
 // TestWebhooks_ReadBackOneNamePerFlag pins issue #85's convertHook half:
 // each flag family reads back as exactly one canonical event name. The
 // note_events flag used to emit both "comment" and "note", which made
-// provider.EnsureWebhook's event-set comparison fail and every ensure call
+// runtime.EnsureWebhook's event-set comparison fail and every ensure call
 // delete+recreate the hook.
 func TestWebhooks_ReadBackOneNamePerFlag(t *testing.T) {
 	tests := []struct {
