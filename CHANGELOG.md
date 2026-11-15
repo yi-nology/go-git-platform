@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.139.0] - 2026-11-15
+
 ### Changed（2C：7 可选接口族 contracttest 补齐）
 
 - **test(contracttest)**：七个可选能力族全部获得 wire 级行为契约套件——
