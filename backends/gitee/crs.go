@@ -21,6 +21,10 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 		Labels:            gitee.String(strings.Join(opts.Labels, ",")),
 		PruneSourceBranch: gitee.Bool(opts.RemoveSourceBranch),
 	}
+	// Draft=true 才下发（#160）：false 保持 wire 逐字不变。
+	if opts.Draft {
+		createOpts.Draft = gitee.Bool(true)
+	}
 	pr, _, err := p.client.PullRequests.Create(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitee, "CreateCR", err)

@@ -14,6 +14,11 @@ import (
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+	// #160：GitLab 创建面无 draft 参数（draft=标题 Draft: 前缀语义）——
+	// Draft=true 显式拒绝（台账 Field:"opts.Draft" 登记）。
+	if opts.Draft {
+		return nil, provider.Wrap(provider.PlatformGitLab, "CreateCR", provider.ErrDraftNotSupported)
+	}
 	createOpts := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       new(opts.SourceBranch),
 		TargetBranch:       new(opts.TargetBranch),

@@ -111,6 +111,8 @@ func TestTencentCode_Contract(t *testing.T) {
 			GetResponse:    `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"iid":1,"title":"fix bug","state":"open","description":"desc","source_branch":"feature-x","target_branch":"main","author":{"id":1,"username":"dev"},"work_in_progress":false,"labels":[],"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			PageZeroWalks:  true,
+			// #160：gongfeng 创建面无 work_in_progress——Draft=true 显式拒绝。
+			CreateDraftUnsupported: true,
 			// 2A 三态清空期望（T7）：描述 wire "description"；指派单值面
 			// 清空 = "assignee_id":0 在场（Phase 3 验服务端）。
 			CRClear: map[string]contracttest.ClearExpect{

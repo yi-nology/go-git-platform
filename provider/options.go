@@ -58,6 +58,12 @@ type CreateCROptions struct {
 	TargetBranch       string   `json:"target_branch"`
 	Labels             []string `json:"labels,omitempty"`
 	RemoveSourceBranch bool     `json:"remove_source_branch,omitempty"`
+	// Draft 以草稿/work-in-progress 形态创建 CR（#160，读侧 ChangeRequest.Draft
+	// 对齐）。缺省 false = 现行为，wire 逐字不变。true 仅平台创建面可表达时
+	// 下发（GitHub/Gitee/GitCode）；gitlab/gitea/forgejo/tencentcode 的
+	// SDK/API 创建面无该参数——显式返回 ErrDraftNotSupported（台账
+	// Field:"opts.Draft" 登记），绝不静默产出非 draft CR。
+	Draft bool `json:"draft,omitempty"`
 }
 
 // ListCROptions contains options for listing change requests.

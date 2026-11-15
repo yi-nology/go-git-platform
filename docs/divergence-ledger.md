@@ -50,6 +50,7 @@ This document is generated from the backends' registered divergence ledgers
 | NotificationManager | ListRepoNotifications |  | mapping | Maps onto the Todos API filtered by project ID; see ListNotifications for the data-source semantics (issue #62). |
 | NotificationManager | MarkRepoNotificationsRead |  | stub | The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread. |
 | NotificationManager | MarkNotificationsRead | opts.LastReadAt (valid values) | ignore | Mark-all-todos has no last_read_at face — valid timestamps are dropped and the call degenerates to marking every todo done (irreversible); malformed values still fail the call with ErrInvalidInput (issue #129, the #52/#75/#97 family contract). |
+| ChangeRequestManager | CreateCR | opts.Draft | mapping | GitLab 创建面无 draft 参数（go-gitlab CreateMergeRequestOptions 无该字段，与官方 API 文档一致）——draft 语义在 GitLab 是标题 Draft: 前缀。Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft MR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire；标题前缀映射若要做另立单）。 |
 
 ## github
 
@@ -105,6 +106,7 @@ This document is generated from the backends' registered divergence ledgers
 | CILogManager | ListFailedJobLogs |  | mapping | A commit can fan out to multiple Actions runs (one per workflow file path); failed jobs are collected from the latest run per workflow path (runs return newest-first, first sighting wins) instead of a single pipeline. |
 | BranchProtectionManager | CreateBranchProtection | opts.AllowForcePushes | mapping | Maps onto the family wire's enable_force_push (a real gitea wire key, SDK-modelled since gitea.dev/sdk v1.5.1); reads map back from the same field. The pre-#130 mapping rode enable_push instead — a different switch (allow ANY direct push vs allow history-rewriting pushes; issue #130). |
 | BranchProtectionManager | UpdateBranchProtection | opts.AllowForcePushes | mapping | See CreateBranchProtection (issue #130). |
+| ChangeRequestManager | CreateCR | opts.Draft | mapping | gitea.dev/sdk v1.5.1 的 CreatePullRequestOption 无 draft 参数——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft PR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire）。 |
 
 ## forgejo
 
@@ -121,6 +123,7 @@ This document is generated from the backends' registered divergence ledgers
 | BranchProtectionManager | UpdateBranchProtection | opts.AllowDeletions | ignore | See CreateBranchProtection (issue #130). |
 | BranchProtectionManager | CreateBranchProtection | opts.AllowForcePushes | ignore | The forgejo SDK's branch-protection model (mvdkleijn v3) has no force-push field, so the option is dropped and reads always report false. The pre-#130 mapping rode enable_push — an unrelated switch (allow ANY direct push vs allow history-rewriting pushes; issue #130). |
 | BranchProtectionManager | UpdateBranchProtection | opts.AllowForcePushes | ignore | See CreateBranchProtection (issue #130). |
+| ChangeRequestManager | CreateCR | opts.Draft | mapping | forgejo-sdk v3 CreatePullRequestOption 无 draft 参数——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft PR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire）。 |
 
 ## gitcode
 
@@ -180,3 +183,4 @@ This document is generated from the backends' registered divergence ledgers
 | TencentCodeExtras | SubscribeMR |  | mapping | gongfeng v0.5.0 起 PUT 只回状态码、不再回显结果订阅态（gongfeng issue #7）——返回值由已确认的 PUT 语义推导（2xx ⇒ 已订阅），无回显可读（issue #156）。 |
 | TencentCodeExtras | UnsubscribeMR |  | mapping | 同 SubscribeMR：PUT 无响应体，成功即已退订（返回 false），由已确认的 PUT 语义推导（issue #156）。 |
 | TencentCodeExtras | GetMRSubscription |  | mapping | gongfeng v0.5.0 的 GET 解裸布尔（工蜂订阅面真实线形；v0.4.0 解 MRSubscription 结构体必然 unmarshal 错，gongfeng issue #7）——读路径直接透传布尔（issue #156）。 |
+| ChangeRequestManager | CreateCR | opts.Draft | mapping | gongfeng CreateMergeRequestOptions 无 work_in_progress 参数（读侧 MR.WorkInProgress 有）——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft MR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire；上游 gongfeng 若补创建参数可切换为直通）。 |

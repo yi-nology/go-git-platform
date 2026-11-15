@@ -6,6 +6,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added（四单批量：Draft 写侧 + 批量标签移除 + 种子全集导出，#160-#163）
+
+- **feat(provider)**：`CreateCROptions.Draft` 写侧（#160）——缺省 false =
+  现行为，wire 逐字不变；true 仅 GitHub/Gitee/GitCode 直通下发 draft 键。
+  gitlab/gitea/forgejo/tencentcode 的 SDK/API 创建面无该参数（GitLab 的
+  draft 语义是标题 `Draft:` 前缀），显式返回新哨兵 `ErrDraftNotSupported`
+  ——绝不静默产出非 draft CR；四家 divergence 台账 `CreateCR/opts.Draft`
+  登记 + contracttest `Create_DraftWire` 双侧钉（false 零 draft 键 /
+  true 下发或显式拒绝零请求）。标题前缀映射若要做另立单。
+- **feat(provider)**：`IssueManager.RemoveIssueLabels` 批量移除（#163）——
+  Add/Remove 接口对称，`EnsureIssueLabels` 改批量单次（N 次 HTTP 循环收口
+  SDK 一处）：循环形（GitHub/Gitea/Forgejo/GitCode/Gitee）保序首错即停、
+  GitLab `remove_labels` 单请求、TencentCode 读改写单次 PUT；空列表零
+  请求。**breaking（0.x minor 承载）**：外部 `IssueManager` 实现需补该
+  方法；单数 `RemoveIssueLabel` 兼容面不动。
+- **feat(provider)**：`AllOperations()` 种子操作全集导出（#162）——
+  `opRequirements` 单一真源派生、升序、新切片——消费方能力矩阵可用它
+  替代硬编码种子清单，SDK 种子演进自动跟随。
+
+### Fixed
+
+- **fix(provider)**：`GetBranchProtection` 契约钉死（#161）——iface 注释
+  明确绝不返回 `(nil, nil)`（缺席 = `(nil, ErrNotFound)`，tencentcode #90
+  同族语义）；`EnsureBranchProtection` 对违约 `(nil, nil)` 防御走 Create
+  （原先误走 Update）；contracttest 404 wire 钉（Get 支持的后端缺席必
+  `ErrNotFound` + nil 实体，GetUnsupported 平台跳过）。
+
 ## [0.137.0] - 2026-11-15
 
 ### Added（MutationOutcome 统一结果 + 操作级 Capability，2B）

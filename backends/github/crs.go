@@ -19,6 +19,10 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 		Head:  opts.SourceBranch,
 		Base:  opts.TargetBranch,
 	}
+	// Draft=true 才下发（#160）：false 保持 wire 逐字不变。
+	if opts.Draft {
+		newPR.Draft = new(opts.Draft)
+	}
 	pr, _, err := p.client.PullRequests.Create(ctx, opts.Owner, opts.Repo, *newPR)
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitHub, "CreateCR", err)

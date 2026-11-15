@@ -94,6 +94,12 @@ type PRPort interface {
 
 // CreateCR opens a change request.
 func CreateCR(ctx context.Context, f Family, c PRPort, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+	// #160：gitea.dev/sdk 与 forgejo-sdk 的创建面均无 draft 参数——
+	// Draft=true 显式拒绝（台账 Field:"opts.Draft" 登记），绝不静默产出
+	// 非 draft CR；false 现行为逐字保留。
+	if opts.Draft {
+		return nil, provider.Wrap(f.Platform, "CreateCR", provider.ErrDraftNotSupported)
+	}
 	pr, err := c.CreatePullRequest(ctx, opts.Owner, opts.Repo, FamilyCreatePullRequestOption{
 		Head:  opts.SourceBranch,
 		Base:  opts.TargetBranch,

@@ -34,6 +34,10 @@ var forgejoDivergences = append(giteafamily.Divergences("Forgejo"),
 		Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowForcePushes", Kind: provider.DivergenceIgnore,
 		Reason: "See CreateBranchProtection (issue #130).",
 	},
+	provider.Divergence{
+		Capability: "ChangeRequestManager", Method: "CreateCR", Field: "opts.Draft", Kind: provider.DivergenceMapping,
+		Reason: "forgejo-sdk v3 CreatePullRequestOption 无 draft 参数——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft PR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire）。",
+	},
 )
 
 // sdkPorts adapts the forgejo SDK to the family engine's ports. The Forgejo

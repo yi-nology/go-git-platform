@@ -2,6 +2,7 @@ package contracttest
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -36,6 +37,12 @@ type CRHarnessConfig struct {
 	// against the ledger's ListCRs Page divergence, so a stale flag fails
 	// the run).
 	PageZeroWalks bool
+	// CreateDraftUnsupported declares that CreateCR(Draft=true) returns
+	// provider.ErrDraftNotSupported（#160：SDK/API 创建面无 draft 参数，
+	// gitlab/gitea/forgejo/tencentcode）——cross-checked against the
+	// ledger's CreateCR Field:"opts.Draft" entry, so a stale flag fails
+	// the run.
+	CreateDraftUnsupported bool
 	// CRClear 声明各字段清空请求的期望（键：description/assignees）。
 	// nil = 两字段全部必须可清空（全 A 级平台可不设）。
 	CRClear map[string]ClearExpect
@@ -110,6 +117,12 @@ func RunCRSuite(t *testing.T, h CRHarness) {
 		assertCRCreateWire(t, cm, requests)
 	})
 
+	// Draft 写侧（#160）：Draft=false 零 wire 变化（七后端）；Draft=true
+	// 可表达平台下发 draft 键，SDK 缺面平台显式 ErrDraftNotSupported 零请求。
+	t.Run("Create_DraftWire", func(t *testing.T) {
+		assertCreateDraftWire(t, h)
+	})
+
 	// Close/Reopen wire: a state-changing verb carrying the state verb under
 	// the platform's key (state=closed/open, or state_event=close/reopen on
 	// the GitLab family).
@@ -154,6 +167,99 @@ func providerIgnoresPageZero(divs []provider.Divergence) bool {
 		}
 	}
 	return false
+}
+
+// ledgerRejectsCreateDraft reports whether the ledger registers the
+// CreateCR opts.Draft value-level departure（#160：SDK 创建面缺参数、
+// Draft=true 返回 ErrDraftNotSupported）。与 CreateDraftUnsupported
+// flag 交叉核对，二者必须同步。
+func ledgerRejectsCreateDraft(divs []provider.Divergence) bool {
+	for _, d := range provider.FindByMethod(divs, "CreateCR") {
+		if d.Kind == provider.DivergenceMapping && strings.Contains(d.Field, "Draft") {
+			return true
+		}
+	}
+	return false
+}
+
+// draftTruthy 把 wire 上的 draft 值归一为布尔：JSON true / 表单 "true"/"1"。
+func draftTruthy(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		return x == "true" || x == "1"
+	}
+	return false
+}
+
+// assertCreateDraftWire 钉 #160 Draft 写侧双侧契约：
+//  1. Draft=false（缺省）：任何平台 wire 都不得出现 draft 键——零变化回归；
+//  2. Draft=true 可表达平台：create POST 必须携带 truthy draft 键；
+//  3. Draft=true SDK 缺面平台（CreateDraftUnsupported）：显式
+//     ErrDraftNotSupported 且零请求（绝不静默产出非 draft CR），并与
+//     台账 CreateCR/opts.Draft 登记交叉核对。
+func assertCreateDraftWire(t *testing.T, h CRHarness) {
+	t.Helper()
+	srv, requests := crStubServer(CRHarness{
+		Name: h.Name, Platform: h.Platform, NewProvider: h.NewProvider, CRHarnessConfig: h.CRHarnessConfig,
+	})
+	t.Cleanup(srv.Close)
+	p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+	cm := p.(provider.ChangeRequestManager)
+
+	if ledgerRejectsCreateDraft(p.Divergences()) != h.CreateDraftUnsupported {
+		t.Fatalf("CreateDraftUnsupported=%v disagrees with the divergence ledger (%v) — update the CR harness flag and the ledger together", h.CreateDraftUnsupported, ledgerRejectsCreateDraft(p.Divergences()))
+	}
+
+	base := provider.CreateCROptions{
+		Owner: "owner", Repo: "repo",
+		Title:        "draft CR",
+		SourceBranch: "feature-x",
+		TargetBranch: "main",
+	}
+
+	// Draft=false：零 wire 变化（不带 draft 键），现行为照常成功。
+	beforeFalse := len(*requests)
+	if _, err := cm.CreateCR(context.Background(), base); err != nil {
+		t.Fatalf("CreateCR(Draft=false): %v", err)
+	}
+	for _, r := range (*requests)[beforeFalse:] {
+		if _, ok := r.Body["draft"]; ok {
+			t.Errorf("Draft=false must not put a draft key on the wire, body=%v", r.Body)
+		}
+	}
+
+	// Draft=true：
+	beforeTrue := len(*requests)
+	draftOpts := base
+	draftOpts.Draft = true
+	_, err := cm.CreateCR(context.Background(), draftOpts)
+	if h.CreateDraftUnsupported {
+		if !errors.Is(err, provider.ErrDraftNotSupported) {
+			t.Fatalf("Draft=true on %s: want ErrDraftNotSupported, got %v", h.Name, err)
+		}
+		if got := len(*requests) - beforeTrue; got != 0 {
+			t.Errorf("Draft=true must fail before the wire (zero requests), got %d", got)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("CreateCR(Draft=true): %v", err)
+	}
+	var create *recordedRequest
+	for i, r := range (*requests)[beforeTrue:] {
+		if r.Method == http.MethodPost && r.Body["title"] == "draft CR" {
+			create = &(*requests)[beforeTrue+i]
+			break
+		}
+	}
+	if create == nil {
+		t.Fatalf("Draft=true: no create POST (title=draft CR) recorded, %s", methodsOf((*requests)[beforeTrue:]))
+	}
+	if !draftTruthy(create.Body["draft"]) {
+		t.Errorf("Draft=true must put a truthy draft key on the create POST, body=%v", create.Body)
+	}
 }
 
 // assertStateVerb checks that one recorded PATCH/PUT carries want under

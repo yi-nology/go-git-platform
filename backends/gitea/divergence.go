@@ -22,6 +22,10 @@ var giteaDivergences = append(giteafamily.Divergences("Gitea"),
 		Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowForcePushes", Kind: provider.DivergenceMapping,
 		Reason: "See CreateBranchProtection (issue #130).",
 	},
+	provider.Divergence{
+		Capability: "ChangeRequestManager", Method: "CreateCR", Field: "opts.Draft", Kind: provider.DivergenceMapping,
+		Reason: "gitea.dev/sdk v1.5.1 的 CreatePullRequestOption 无 draft 参数——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft PR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire）。",
+	},
 )
 
 // Divergences returns the registered divergence ledger for the Gitea backend.

@@ -92,6 +92,8 @@ func TestForgejo_Contract(t *testing.T) {
 			ListResponse:   `[{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"id":1,"index":1,"number":1,"title":"fix bug","state":"open","body":"desc","user":{"id":1,"login":"dev"},"head":{"label":"owner:feature-x","ref":"feature-x","sha":"abc123"},"base":{"label":"main","ref":"main","sha":"def456"},"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// #160：forgejo-sdk 创建面无 draft 参数——Draft=true 显式拒绝。
+			CreateDraftUnsupported: true,
 			// 2A 三态：PR wire 的描述字段名是 body；assignees 走 PR edit
 			// 本体（清空发 "assignees":[]）。
 			CRClear: map[string]contracttest.ClearExpect{

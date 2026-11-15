@@ -72,6 +72,8 @@ var divergences = []provider.Divergence{
 		Reason: "同 SubscribeMR：PUT 无响应体，成功即已退订（返回 false），由已确认的 PUT 语义推导（issue #156）。"},
 	{Capability: "TencentCodeExtras", Method: "GetMRSubscription", Kind: provider.DivergenceMapping,
 		Reason: "gongfeng v0.5.0 的 GET 解裸布尔（工蜂订阅面真实线形；v0.4.0 解 MRSubscription 结构体必然 unmarshal 错，gongfeng issue #7）——读路径直接透传布尔（issue #156）。"},
+	{Capability: "ChangeRequestManager", Method: "CreateCR", Field: "opts.Draft", Kind: provider.DivergenceMapping,
+		Reason: "gongfeng CreateMergeRequestOptions 无 work_in_progress 参数（读侧 MR.WorkInProgress 有）——Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft MR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire；上游 gongfeng 若补创建参数可切换为直通）。"},
 }
 
 // Divergences returns the registered divergence ledger for the Tencent Code backend.

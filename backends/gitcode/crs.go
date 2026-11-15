@@ -17,6 +17,8 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	pr, err := p.client.CreatePullRequest(ctx, opts.Owner, opts.Repo, gitcode.CreatePullRequestOptions{
 		Title: opts.Title, Body: opts.Description,
 		Head: opts.SourceBranch, Base: opts.TargetBranch,
+		// bool + omitempty：false 不上 wire（#160 零变化），true 下发 draft。
+		Draft: opts.Draft,
 	})
 	if err != nil {
 		return nil, provider.Wrap(provider.PlatformGitCode, "CreateCR", err)

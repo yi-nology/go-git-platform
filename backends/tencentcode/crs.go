@@ -12,6 +12,11 @@ import (
 
 // CreateCR implements provider.ChangeRequestManager.
 func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+	// #160：gongfeng 创建面无 work_in_progress 参数——Draft=true 显式
+	// 拒绝（台账 Field:"opts.Draft" 登记），绝不静默产出非 draft MR。
+	if opts.Draft {
+		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCR", provider.ErrDraftNotSupported)
+	}
 	pid := opts.Owner + "/" + opts.Repo
 	createOpts := &gongfeng.CreateMergeRequestOptions{
 		SourceBranch: gongfeng.Ptr(opts.SourceBranch),

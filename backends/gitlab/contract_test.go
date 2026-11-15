@@ -106,6 +106,9 @@ func TestGitLab_Contract(t *testing.T) {
 			ListResponse:   `[{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}]`,
 			GetResponse:    `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
 			MutateResponse: `{"iid":1,"title":"fix bug","state":"opened","description":"desc","source_branch":"feature-x","target_branch":"main","sha":"abc123","detailed_merge_status":"mergeable","author":{"id":1,"username":"dev"},"draft":false,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`,
+			// #160：GitLab 创建面无 draft 参数（draft=标题前缀语义）——
+			// Draft=true 显式拒绝。
+			CreateDraftUnsupported: true,
 			// 2A 三态：GitLab MR wire 的描述字段名是 description（非 GitHub
 			// 的 body）；assignees 走 assignee_ids（清空发 []）。
 			CRClear: map[string]contracttest.ClearExpect{

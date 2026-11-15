@@ -37,6 +37,13 @@ var (
 	// 清空（结构不可表达且无侧端点，或既有登记 no-op）。只由 patch
 	// 字段触发；旧字段路径永不返回。kv 携带 platform/op/field。
 	ErrClearNotSupported = errors.New("clear not supported on this platform")
+	// ErrDraftNotSupported 是创建面值级平台限制哨兵（#160）：平台读得到
+	// draft（ChangeRequest.Draft 统一映射），但创建 SDK/API 面无法表达
+	// Draft=true——CreateCR(Draft=true) 显式返回本哨兵，绝不静默产出
+	// 非 draft CR。分界：ErrNotImplemented=方法级不支持（台账 stub）；
+	// ErrClearNotSupported=清空不可表达（2A）；本哨兵=创建 Draft=true
+	// 不可表达。Draft=false（缺省）不受影响，七后端现行为逐字保留。
+	ErrDraftNotSupported = errors.New("draft=true not supported on this platform")
 	// ErrPermissionDenied 是凭据权限类哨兵（2B）：操作级声明判定
 	// 「平台支持但当前 token 无权」时由 CheckOperation 返回。
 	// 分界：ErrNotImplemented=平台不支持（台账锁定）；ErrForbidden=
