@@ -3,6 +3,7 @@ package contracttest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -227,26 +228,28 @@ func testAssetRedirect(t *testing.T, h ReleaseAssetsHarness) {
 }
 
 // testAssetEmptyBody pins the zero-length-body face: a 200 with no bytes
-// must deliver nothing to w.
+// must error per the iface contract and write nothing to w.
 //
-// Site-verified (2C T2): the error branch the provider documents
-// (release_assets.go's rc==nil "empty asset response") is UNREACHABLE under
-// go-github v93 — the SDK returns a nil rc only when followRedirectsClient
-// is nil, and this provider always passes a non-nil followClient; a
-// zero-length 200 therefore hands back a non-nil rc over a zero-length
-// reader. Actual wire behavior: nil error, zero bytes written. That
-// contradicts the iface_releases.go doc ("非 2xx 响应或无响应体时返回错误");
-// the gap is reported for a separate fix ticket (zero production changes in
-// this plan) and this subtest pins the CURRENT wire reality — if the fix
-// lands, flip this assertion together with the doc.
+// #164 contract fix landed: the pre-fix wire reality was "200-empty returns
+// nil error, 0 bytes written" (site-verified 2C T2 — the rc==nil guard is
+// unreachable under go-github v93 with a non-nil followClient), which
+// contradicted the iface_releases.go promise. The provider now re-checks the
+// byte face (io.Copy n==0 → error), doc + guard + this flip landed together;
+// zero-byte assets are indistinguishable from an empty body on the wire, so
+// both surface as an error instead of a silent 0-byte success.
 func testAssetEmptyBody(t *testing.T, h ReleaseAssetsHarness) {
 	t.Helper()
 	rec := &releaseAssetsWire{}
 	rm := newAssetManager(t, h, assetEmptyHandler(rec))
 	var buf bytes.Buffer
 	err := rm.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf)
-	if err != nil {
-		t.Errorf("current wire reality: 200-with-empty-body returns nil error (rc==nil guard unreachable under go-github v93), got %v — deliberate contract fix? flip this subtest together with the iface_releases.go doc", err)
+	if err == nil {
+		t.Error("200-with-empty-body must error per iface_releases.go contract (#164), got nil error — silent 0-byte success is the pre-fix reality")
+	} else {
+		var pe *provider.ProviderError
+		if !errors.As(err, &pe) {
+			t.Errorf("empty-body err type %T, want *provider.ProviderError (unified shape)", err)
+		}
 	}
 	if buf.Len() != 0 {
 		t.Errorf("empty body must write 0 bytes to w, got %d (%q)", buf.Len(), buf.String())

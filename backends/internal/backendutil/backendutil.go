@@ -158,13 +158,21 @@ const LabelScanMaxPages = 50
 
 // --- Shared number parsing ---
 
+// The parse-rejection family wraps provider.ErrInvalidInput (#165): a
+// malformed number is bad input, not a transport/platform failure — the
+// surfaced *provider.ProviderError keeps StatusCode 0 (pre-wire) with the
+// sentinel in the cause chain, so consumers can uniformly pin
+// errors.Is(err, provider.ErrInvalidInput) instead of matching message text
+// (规则二 sentinel-only). Valid numbers are unaffected.
+
 // ParseIssueNumber parses a string issue number into the platform's native
 // integer type. The op and platform arguments are forwarded to the standard
-// error wrapping so callers produce identical error messages.
+// error wrapping so callers produce identical error messages. Rejections
+// carry provider.ErrInvalidInput (#165).
 func ParseIssueNumber(platform provider.Platform, op, number string) (int, error) {
 	n, err := strconv.Atoi(number)
 	if err != nil {
-		return 0, provider.Wrapf(platform, op, "invalid issue number %q", number)
+		return 0, provider.Wrapf(platform, op, "%w: invalid issue number %q", provider.ErrInvalidInput, number)
 	}
 	return n, nil
 }
@@ -174,16 +182,19 @@ func ParseIssueNumber(platform provider.Platform, op, number string) (int, error
 func ParseIssueNumber64(platform provider.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
-		return 0, provider.Wrapf(platform, op, "invalid issue number %q", number)
+		return 0, provider.Wrapf(platform, op, "%w: invalid issue number %q", provider.ErrInvalidInput, number)
 	}
 	return n, nil
 }
 
-// ParsePRNumber parses a string PR/MR number into int.
+// ParsePRNumber parses a string PR/MR number into int. Rejections carry
+// provider.ErrInvalidInput (#165): previously the surfaced error was a bare
+// ProviderError{Status:0} with no sentinel in the chain, so negative cases
+// across the CR/PR surface could only pin the structural face.
 func ParsePRNumber(platform provider.Platform, op, number string) (int, error) {
 	n, err := strconv.Atoi(number)
 	if err != nil {
-		return 0, provider.Wrapf(platform, op, "invalid pull request number %q", number)
+		return 0, provider.Wrapf(platform, op, "%w: invalid pull request number %q", provider.ErrInvalidInput, number)
 	}
 	return n, nil
 }
@@ -192,7 +203,7 @@ func ParsePRNumber(platform provider.Platform, op, number string) (int, error) {
 func ParsePRNumber64(platform provider.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
-		return 0, provider.Wrapf(platform, op, "invalid pull request number %q", number)
+		return 0, provider.Wrapf(platform, op, "%w: invalid pull request number %q", provider.ErrInvalidInput, number)
 	}
 	return n, nil
 }
@@ -201,7 +212,7 @@ func ParsePRNumber64(platform provider.Platform, op, number string) (int64, erro
 func ParseMilestoneNumber(platform provider.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
-		return 0, provider.Wrapf(platform, op, "invalid milestone number %q", number)
+		return 0, provider.Wrapf(platform, op, "%w: invalid milestone number %q", provider.ErrInvalidInput, number)
 	}
 	return n, nil
 }

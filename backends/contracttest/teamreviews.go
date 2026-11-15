@@ -147,18 +147,18 @@ func runRequestTeamReviewersCase(t *testing.T, h TeamReviewsHarness) {
 
 // runRequestTeamReviewersInvalidNumberCase pins the pre-wire number guard:
 // a non-numeric PR number must fail closed BEFORE any HTTP, at the unified
-// ProviderError shape.
+// ProviderError shape with the ErrInvalidInput sentinel in the chain.
 //
-// Site-verified (2C T4 probe): backendutil.ParsePRNumber / ParsePRNumber64
-// reject via provider.Wrapf — the surfaced error is a *provider.ProviderError
-// with Op="RequestTeamReviewers", Platform=<platform>, StatusCode=0
-// (never HTTP-classified) whose cause is the plain "invalid pull request
-// number" message. There is NO classification sentinel: errors.Is(err,
-// provider.ErrInvalidInput) is FALSE (unlike the 422 write-side rejections
-// pinned by assertPreWireInvalidInput). 规则二 forbids matching error
-// message text, so the cause text is deliberately NOT asserted — the pin is
-// the structured face (unified error at the right Op, status 0) plus the
-// load-bearing zero-requests contract. Sentinel gap → report (2C T4).
+// #165 fixed the sentinel gap found by the 2C T4 probe: ParsePRNumber /
+// ParsePRNumber64 used to reject via provider.Wrapf without any
+// classification sentinel — the surfaced *provider.ProviderError had
+// StatusCode 0 and errors.Is(err, provider.ErrInvalidInput) was FALSE,
+// so this pin (and every CR/PR negative case) could only hold the
+// structural face. Parse rejections now wrap ErrInvalidInput (matching the
+// 422 write-side rejections pinned by assertPreWireInvalidInput); the pin
+// asserts both faces: sentinel matchability + structured shape (unified
+// error at the right Op, status 0) + the load-bearing zero-requests
+// contract. 规则二 still forbids matching error message text.
 func runRequestTeamReviewersInvalidNumberCase(t *testing.T, h TeamReviewsHarness) {
 	t.Helper()
 	rec := &teamReviewsWire{}
@@ -167,6 +167,9 @@ func runRequestTeamReviewersInvalidNumberCase(t *testing.T, h TeamReviewsHarness
 	_, _, _, n := rec.last()
 	if err == nil {
 		t.Fatal("RequestTeamReviewers(not-a-number): expected a pre-wire rejection, got nil")
+	}
+	if !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("errors.Is(err, provider.ErrInvalidInput) = false (#165: parse rejection must carry the sentinel), got %v", err)
 	}
 	var pe *provider.ProviderError
 	if !errors.As(err, &pe) {

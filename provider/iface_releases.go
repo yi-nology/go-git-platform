@@ -21,7 +21,9 @@ type ReleaseAsset struct {
 // 因此是流式接口而非返回 []byte,避免整读内存。
 type ReleaseAssetManager interface {
 	// DownloadReleaseAsset 下载 assetID 对应附件并流式写入 w。
-	// 非 2xx 响应或无响应体时返回错误。
+	// 非 2xx 响应、传输错误或空响应体（0 字节）时返回错误（#164：零字节
+	// 资产与「无响应体」在 wire 上不可区分，统一按契约报错——200 空体
+	// 静默成功会让调用方拿 0 字节当下载成功）。
 	DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error
 }
 

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -732,6 +733,33 @@ func TestDownloadReleaseAsset_Non2xx(t *testing.T) {
 	}
 	if !provider.IsNotFound(err) {
 		t.Errorf("expected IsNotFound, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no bytes written on error, got %q", buf.String())
+	}
+}
+
+// TestDownloadReleaseAsset_EmptyBody pins the iface contract (#164): a 200
+// with a zero-length body must error instead of silently succeeding — the
+// rc==nil guard is unreachable under go-github v93 (non-nil followClient
+// always hands back a non-nil reader), so the byte-face re-check (io.Copy
+// n==0) is what makes the documented promise hold. Zero-byte assets are
+// indistinguishable from an empty body on the wire; both error.
+func TestDownloadReleaseAsset_EmptyBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	p := newTestProvider(t, srv.URL+"/api/v3")
+	var buf bytes.Buffer
+	err := p.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf)
+	if err == nil {
+		t.Fatal("expected error on 200-with-empty-body (#164 contract), got nil")
+	}
+	var pe *provider.ProviderError
+	if !errors.As(err, &pe) {
+		t.Errorf("err type %T, want *provider.ProviderError (unified shape)", err)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("expected no bytes written on error, got %q", buf.String())

@@ -1,6 +1,7 @@
 package backendutil
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -66,5 +67,56 @@ func TestHTTPTransport_SecureDefault(t *testing.T) {
 	// When SkipTLS is false we must get the default transport (verification on).
 	if HTTPTransport(false) == nil {
 		t.Fatal("expected non-nil transport")
+	}
+}
+
+// TestParseNumberRejectionsCarryInvalidInput_Issue165 pins the sentinel
+// contract of the shared parse-rejection family: every rejection is
+// matchable via errors.Is(err, provider.ErrInvalidInput) at the unified
+// ProviderError shape (pre-wire: StatusCode 0), and valid numbers are
+// unaffected. Before #165 the rejections were bare ProviderErrors with no
+// sentinel in the cause chain, so CR/PR negative cases could only pin the
+// structural face.
+func TestParseNumberRejectionsCarryInvalidInput_Issue165(t *testing.T) {
+	const (
+		platform = provider.PlatformGitHub
+		op       = "GetThing"
+		bad      = "not-a-number"
+	)
+	if _, err := ParseIssueNumber(platform, op, bad); !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("ParseIssueNumber: errors.Is(err, ErrInvalidInput) = false, got %v", err)
+	}
+	if _, err := ParseIssueNumber64(platform, op, bad); !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("ParseIssueNumber64: errors.Is(err, ErrInvalidInput) = false, got %v", err)
+	}
+	if _, err := ParsePRNumber(platform, op, bad); !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("ParsePRNumber: errors.Is(err, ErrInvalidInput) = false, got %v", err)
+	}
+	if _, err := ParsePRNumber64(platform, op, bad); !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("ParsePRNumber64: errors.Is(err, ErrInvalidInput) = false, got %v", err)
+	}
+	if _, err := ParseMilestoneNumber(platform, op, bad); !errors.Is(err, provider.ErrInvalidInput) {
+		t.Errorf("ParseMilestoneNumber: errors.Is(err, ErrInvalidInput) = false, got %v", err)
+	}
+
+	// Unified shape: pre-wire ProviderError keeps StatusCode 0.
+	_, err := ParsePRNumber(platform, "RequestTeamReviewers", bad)
+	var pe *provider.ProviderError
+	if !errors.As(err, &pe) {
+		t.Fatalf("err type %T, want *provider.ProviderError", err)
+	}
+	if pe.StatusCode != 0 {
+		t.Errorf("ProviderError.StatusCode = %d, want 0 (pre-wire, never HTTP-classified)", pe.StatusCode)
+	}
+	if pe.Op != "RequestTeamReviewers" {
+		t.Errorf("ProviderError.Op = %q, want RequestTeamReviewers", pe.Op)
+	}
+
+	// Valid numbers are unaffected (success path unchanged).
+	if n, err := ParsePRNumber(platform, op, "42"); err != nil || n != 42 {
+		t.Errorf("ParsePRNumber(42) = %d, %v; want 42, nil", n, err)
+	}
+	if n, err := ParsePRNumber64(platform, op, "42"); err != nil || n != 42 {
+		t.Errorf("ParsePRNumber64(42) = %d, %v; want 42, nil", n, err)
 	}
 }
