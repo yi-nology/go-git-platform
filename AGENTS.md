@@ -275,7 +275,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   真源，全换 SignHMAC 会让 sign 与 verify 共用同一 hmacSum 自我抵消；上
   游 sign 测试自留独立实现先例（sign_hmac_test.go signRaw/giteeSign）；
   空密钥伪造向量上游拒签，手算是唯一形态。contracttest 是 wire 级端到端
-  夹具（HMAC 数学由 provider 单测与上游 golden 向量双钉），域不同故收编。
+  夹具（HMAC 数学由 runtime 单测与上游 golden 向量双钉），域不同故收编。
   **#353 特别复核——ttlcache 自建单飞维持**：上游注入路径
   （GetOrLoadWithSource/TTL）有意不进 singleflight（source 不可比较，合
   并会串味）、Refresh 分键 `\x00refresh:`；本仓回源闭包捕获 per-call cfg

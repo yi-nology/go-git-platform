@@ -592,7 +592,7 @@ go-git-platform/
 │   │   └── backendutil/         # HTTP client / retry / hooks 共享管线
 │   └── all/                     # 一行 blank import 注册所有平台 + README 矩阵对账
 │
-├── contracttest/                # 跨平台契约套件 + webhook 事件语料库 (testdata/webhooks)
+├── contracttest/                # 跨平台契约套件 (语料驱动; golden 语料在 adapter/<platform>/testdata/webhooks)
 │
 ├── auth/
 │   ├── githubapp/               # GitHub App 凭证: MintJWT + FetchInstallationToken
