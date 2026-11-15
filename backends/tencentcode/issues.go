@@ -360,6 +360,37 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）：工蜂整集写
+// 面——一次读 + 过滤全部目标名 + 单次 PUT（比逐个单删省 N-1 次读）。
+// 整集为空的既有限制见 labelUpdate 注释（divergence 台账已登记）。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	if len(labels) == 0 {
+		return nil
+	}
+	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "RemoveIssueLabels", number)
+	if err != nil {
+		return err
+	}
+	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
+	if err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabels", err)
+	}
+	drop := make(map[string]struct{}, len(labels))
+	for _, l := range labels {
+		drop[l] = struct{}{}
+	}
+	remaining := make([]string, 0, len(issue.Labels))
+	for _, l := range issue.Labels {
+		if _, gone := drop[l]; !gone {
+			remaining = append(remaining, l)
+		}
+	}
+	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(remaining)); err != nil {
+		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabels", err)
+	}
+	return nil
+}
+
 // labelUpdate builds the issue update carrying names as the full label
 // set. An empty set cannot travel (Labels is a csv string behind
 // omitempty), so the field stays nil — the registered last-label-removal

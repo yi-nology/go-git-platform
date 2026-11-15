@@ -304,6 +304,25 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）：GitLab 原生
+// remove_labels 批量面——单请求移除全部目标，保序由服务端语义保证。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	if len(labels) == 0 {
+		return nil
+	}
+	n, err := backendutil.ParseIssueNumber64(provider.PlatformGitLab, "RemoveIssueLabels", number)
+	if err != nil {
+		return err
+	}
+	rl := gitlab.LabelOptions(labels)
+	_, _, err = p.client.Issues.UpdateIssue(pidOf(owner, repo), n,
+		&gitlab.UpdateIssueOptions{RemoveLabels: &rl}, gitlab.WithContext(ctx))
+	if err != nil {
+		return provider.Wrap(provider.PlatformGitLab, "RemoveIssueLabels", err)
+	}
+	return nil
+}
+
 // convertUser maps a gitlab.IssueAuthor to a provider.CRUser. Returns nil if
 // a is nil.
 func convertUser(a *gitlab.IssueAuthor) *provider.CRUser {

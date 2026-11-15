@@ -322,4 +322,15 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）：SDK 仅单删面，
+// 内部循环保序收口、首错即停——失败时错误链携带失败单元的 singular op。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	for _, name := range labels {
+		if err := p.RemoveIssueLabel(ctx, owner, repo, number, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var _ provider.IssueManager = (*Provider)(nil)

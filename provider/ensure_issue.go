@@ -45,10 +45,11 @@ func EnsureIssueState(ctx context.Context, p Provider, owner, repo, number strin
 
 // EnsureIssueLabels 收敛 issue 标签（2B spec）：GET 现状 labels，集合相等
 // （map 归一，顺序与重复无关）零写入返 Unchanged（返 current 原样）；否则
-// 按差集写入——toAdd = want∖current（保序去重）先批量 AddIssueLabels
-// （非空才调一次），再对 toRemove = current∖want 逐个 RemoveIssueLabel
-// ——返 Updated。写撞 409 返 (OutcomeConflict, 写前快照, err)，其余写错与
-// GET 错误一律 ("", nil, err)。
+// 按差集写入——toAdd = want∖current（保序去重）批量 AddIssueLabels、
+// toRemove = current∖want 批量 RemoveIssueLabels（各非空才调一次，
+// #163 循环收口 SDK 单点）——返 Updated。写撞 409 返
+// (OutcomeConflict, 写前快照, err)，其余写错与 GET 错误一律
+// ("", nil, err)。
 //
 // 全集替换语义：want 即目标全集，current 中多余标签一律删除，want 缺失者
 // 补齐。返回值为本地计算的收敛目标（want 去重保序），非再读回——并发窗口
@@ -80,8 +81,8 @@ func EnsureIssueLabels(ctx context.Context, p Provider, owner, repo, number stri
 			return "", nil, err
 		}
 	}
-	for _, l := range toRemove {
-		if err := im.RemoveIssueLabel(ctx, owner, repo, number, l); err != nil {
+	if len(toRemove) > 0 {
+		if err := im.RemoveIssueLabels(ctx, owner, repo, number, toRemove); err != nil {
 			if IsConflict(err) {
 				return OutcomeConflict, current, err
 			}

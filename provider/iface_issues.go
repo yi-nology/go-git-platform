@@ -55,4 +55,11 @@ type IssueManager interface {
 	ListIssueLabels(ctx context.Context, owner, repo string) ([]*IssueLabel, error)
 	AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error
 	RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error
+	// RemoveIssueLabels 移除多个标签（AddIssueLabels 的对称面，#163）：
+	// 保序处理、首错即停——已移除的不回滚，部分失败语义在本方法单点收口，
+	// 消费方不再各自循环 N 次 HTTP。labels 为空返回 nil、零请求。
+	// 无原生 bulk-remove-some 的平台在后端内部循环保序收口
+	// （GitHub/Gitea/Forgejo/GitCode/Gitee）；GitLab 走 remove_labels
+	// 单请求、TencentCode 走读改写单次 PUT（其整集写限制见 divergence 台账）。
+	RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error
 }

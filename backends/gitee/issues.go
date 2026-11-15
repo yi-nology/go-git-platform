@@ -227,6 +227,18 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）。Gitee 无
+// bulk-remove-some 端点，内部循环保序收口、首错即停（逐名走 singular，
+// 保 #84 的路径段转义语义）。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	for _, name := range labels {
+		if err := p.RemoveIssueLabel(ctx, owner, repo, number, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ListIssueLabels implements provider.IssueManager: repository-level labels.
 // The SDK's LabelsService.List takes ListOptions with Page/PerPage, so the
 // list is paginated via backendutil.AllPages until an empty page.

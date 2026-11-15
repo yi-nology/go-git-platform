@@ -251,6 +251,18 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return nil
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）。GitHub 无
+// bulk-remove-some 端点（仅单 label DELETE 与全清 DELETE），内部循环保序
+// 收口、首错即停——失败时错误链携带失败单元的 singular op。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	for _, name := range labels {
+		if err := p.RemoveIssueLabel(ctx, owner, repo, number, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // convertIssue maps a github.Issue to a provider.Issue.
 func convertIssue(i *github.Issue) *provider.Issue {
 	if i == nil {

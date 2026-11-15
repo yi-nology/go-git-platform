@@ -72,4 +72,16 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 	return giteafamily.RemoveIssueLabel(ctx, p.family, p.ports, p.ports, p.labelIDs, owner, repo, number, name)
 }
 
+// RemoveIssueLabels implements provider.IssueManager（#163）：家族 port 层
+// 仅单删面，内部循环保序收口、首错即停——失败透传 singular 错误链
+// （与 github/gitee/gitcode 同约：op 标注失败单元）。
+func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	for _, name := range labels {
+		if err := p.RemoveIssueLabel(ctx, owner, repo, number, name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var _ provider.IssueManager = (*Provider)(nil)

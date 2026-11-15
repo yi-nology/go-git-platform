@@ -84,6 +84,9 @@ func (f fakeProvider) AddIssueLabels(ctx context.Context, owner, repo, number st
 func (f fakeProvider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
 	return nil
 }
+func (f fakeProvider) RemoveIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
+	return nil
+}
 
 // connect starts an in-memory MCP session against a server built over
 // the given provider and returns a client for tool calls.

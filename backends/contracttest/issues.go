@@ -475,6 +475,28 @@ func assertIssueLabelOps(t *testing.T, im provider.IssueManager, requests *[]rec
 	if !sawLabelRemoval(*requests) {
 		t.Errorf("expected label removal via DELETE, a PATCH/PUT write carrying remove_labels, or a non-empty PATCH/PUT labels replacement omitting the removed name, recorded %s", methodsOf(*requests))
 	}
+
+	// #163 批量形：快照后驱动 RemoveIssueLabels——(a) 空列表零请求
+	// （循环形天然为零、原生形靠守卫），(b) 非空批量的三形态 wire 证据
+	// 与 singular 面同判据。快照 tail 隔离批量调用自身，不被前面的
+	// singular 记录搭便车。
+	before := len(*requests)
+	if err := im.RemoveIssueLabels(context.Background(), "owner", "repo", "1", nil); err != nil {
+		t.Fatalf("RemoveIssueLabels(empty): %v", err)
+	}
+	if got := len(*requests) - before; got != 0 {
+		t.Errorf("empty RemoveIssueLabels must send zero requests, got %d", got)
+	}
+	if err := im.RemoveIssueLabels(context.Background(), "owner", "repo", "1", []string{"bug"}); err != nil {
+		t.Fatalf("RemoveIssueLabels: %v", err)
+	}
+	tail := (*requests)[before:]
+	if len(tail) == 0 {
+		t.Fatal("RemoveIssueLabels(non-empty) sent no requests")
+	}
+	if !sawLabelRemoval(tail) {
+		t.Errorf("bulk RemoveIssueLabels: want DELETE, remove_labels write, or labels replacement omitting bug; recorded %s", methodsOf(tail))
+	}
 }
 
 // sawLabelRemoval reports whether label removal used one of the three wire

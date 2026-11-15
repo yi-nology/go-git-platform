@@ -15,16 +15,18 @@ type fakeIssueMgr struct {
 	Provider
 	IssueManager
 
-	getCalls    int
-	getErr      error
-	cur         *Issue
-	writeErr    error // 非 nil 时写方法返回它
-	closeCalls  int
-	reopenCalls int
-	closed      *Issue // CloseIssue 返回体
-	reopened    *Issue // ReopenIssue 返回体
-	addCalls    [][]string
-	removed     []string
+	getCalls        int
+	getErr          error
+	cur             *Issue
+	writeErr        error // 非 nil 时写方法返回它
+	closeCalls      int
+	reopenCalls     int
+	closed          *Issue // CloseIssue 返回体
+	reopened        *Issue // ReopenIssue 返回体
+	addCalls        [][]string
+	removed         []string
+	bulkRemoved     []string
+	bulkRemoveCalls int
 }
 
 func (f *fakeIssueMgr) GetIssue(context.Context, string, string, string) (*Issue, error) {
@@ -58,6 +60,14 @@ func (f *fakeIssueMgr) AddIssueLabels(_ context.Context, _, _, _ string, labels 
 
 func (f *fakeIssueMgr) RemoveIssueLabel(_ context.Context, _, _, _, name string) error {
 	f.removed = append(f.removed, name)
+	return f.writeErr
+}
+
+// RemoveIssueLabels 记录批量参数与调用次数（#163：Ensure 必须走批量形、
+// 恰一次），内容进 bulkRemoved 供 wantRemove 断言。
+func (f *fakeIssueMgr) RemoveIssueLabels(_ context.Context, _, _, _ string, names []string) error {
+	f.bulkRemoved = append(f.bulkRemoved, names...)
+	f.bulkRemoveCalls++
 	return f.writeErr
 }
 
@@ -197,7 +207,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		wantErr     error
 		getCalls    int
 		wantAdd     [][]string // 期望的 AddIssueLabels 批次（次数+参数）
-		wantRemove  []string   // 期望的 RemoveIssueLabel 逐个参数
+		wantRemove  []string   // 期望的 RemoveIssueLabels 批量参数（恰一次调用）
 	}{
 		{
 			name:        "5_集合相等顺序无关_Unchanged零写返现状原样",
@@ -217,7 +227,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 			wantAdd:     [][]string{{"b", "c"}},
 		},
 		{
-			name:        "7_want子集_逐个Remove差集_Updated",
+			name:        "7_want子集_批量Remove差集恰一次_Updated",
 			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"a", "b", "c"}}},
 			want:        []string{"a"},
 			wantOutcome: OutcomeUpdated,
@@ -226,13 +236,26 @@ func TestEnsureIssueLabels(t *testing.T) {
 			wantRemove:  []string{"b", "c"},
 		},
 		{
-			name:        "8_want空_current非空_N次Remove_Updated返空",
+			name:        "8_want空_current非空_批量Remove恰一次_Updated返空",
 			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"x", "y"}}},
 			want:        []string{},
 			wantOutcome: OutcomeUpdated,
 			wantLabels:  []string{},
 			getCalls:    1,
 			wantRemove:  []string{"x", "y"},
+		},
+		{
+			name: "Remove写409_Conflict带写前快照（批量形）",
+			fake: &fakeIssueMgr{
+				cur:      &Issue{Number: "7", Labels: []string{"a", "b"}},
+				writeErr: fmt.Errorf("remove: %w", ErrConflict),
+			},
+			want:        []string{"a"},
+			wantOutcome: OutcomeConflict,
+			wantLabels:  []string{"a", "b"},
+			wantErr:     ErrConflict,
+			getCalls:    1,
+			wantRemove:  []string{"b"},
 		},
 		{
 			name:     "9_GET失败_错误透传零outcome",
@@ -300,8 +323,18 @@ func TestEnsureIssueLabels(t *testing.T) {
 					t.Errorf("AddIssueLabels[%d] = %v, want %v", i, f.addCalls[i], tt.wantAdd[i])
 				}
 			}
-			if !slices.Equal(f.removed, tt.wantRemove) {
-				t.Errorf("RemoveIssueLabel calls = %v, want %v", f.removed, tt.wantRemove)
+			if !slices.Equal(f.bulkRemoved, tt.wantRemove) {
+				t.Errorf("RemoveIssueLabels args = %v, want %v", f.bulkRemoved, tt.wantRemove)
+			}
+			wantBulkCalls := 0
+			if len(tt.wantRemove) > 0 {
+				wantBulkCalls = 1
+			}
+			if f.bulkRemoveCalls != wantBulkCalls {
+				t.Errorf("RemoveIssueLabels calls = %d, want %d（批量形恰一次）", f.bulkRemoveCalls, wantBulkCalls)
+			}
+			if len(f.removed) != 0 {
+				t.Errorf("singular RemoveIssueLabel must not be called by Ensure, got %v", f.removed)
 			}
 		})
 	}
