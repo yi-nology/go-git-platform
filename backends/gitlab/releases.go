@@ -6,21 +6,22 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
-func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*model.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*gitlab.Tag, error) {
 		list, _, err := p.client.Tags.ListTags(pidOf(owner, repo), &gitlab.ListTagsOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListTags", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
-		ti := &provider.TagInfo{Name: t.Name}
+		ti := &model.TagInfo{Name: t.Name}
 		if t.Commit != nil {
 			ti.Commit = t.Commit.ID
 		}
@@ -30,17 +31,17 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 }
 
 // ListReleases implements provider.ReleaseManager.
-func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*model.ReleaseInfo, error) {
 	releases, err := backendutil.AllPages(func(page int) ([]*gitlab.Release, error) {
 		list, _, err := p.client.Releases.ListReleases(pidOf(owner, repo), &gitlab.ListReleasesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListReleases", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
-		ri := &provider.ReleaseInfo{
+		ri := &model.ReleaseInfo{
 			TagName:   r.TagName,
 			Title:     r.Name,
 			Body:      r.Description,
@@ -56,7 +57,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateRelease implements provider.ReleaseManager.
-func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Releases.CreateRelease(pidOf(owner, repo), &gitlab.CreateReleaseOptions{
 		TagName:     new(opts.TagName),
 		Ref:         new(opts.Target),
@@ -64,9 +65,9 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 		Description: new(opts.Body),
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateRelease", err)
 	}
-	ri := &provider.ReleaseInfo{
+	ri := &model.ReleaseInfo{
 		TagName:   r.TagName,
 		Title:     r.Name,
 		Body:      r.Description,
@@ -81,10 +82,10 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 
 // GetReleaseByTag implements provider.ReleaseManager. GitLab's release
 // endpoints are tag-addressed natively.
-func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Releases.GetRelease(pidOf(owner, repo), tag, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetReleaseByTag", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetReleaseByTag", err)
 	}
 	return convertGitLabRelease(r), nil
 }
@@ -94,13 +95,13 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // prerelease concepts (a release is created from a tag and published
 // immediately), so UpdateReleaseOptions.Draft and .Prerelease are ignored
 // on this platform — only Name and Body are carried.
-func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Releases.UpdateRelease(pidOf(owner, repo), tag, &gitlab.UpdateReleaseOptions{
 		Name:        opts.Name,
 		Description: opts.Body,
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateRelease", err)
 	}
 	return convertGitLabRelease(r), nil
 }
@@ -111,18 +112,18 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
 	_, _, err := p.client.Releases.DeleteRelease(pidOf(owner, repo), tag, gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteRelease", err)
 	}
 	return nil
 }
 
-// convertGitLabRelease maps a gitlab.Release to a provider.ReleaseInfo
+// convertGitLabRelease maps a gitlab.Release to a model.ReleaseInfo
 // (description is the release body; released_at is the publish timestamp).
-func convertGitLabRelease(r *gitlab.Release) *provider.ReleaseInfo {
+func convertGitLabRelease(r *gitlab.Release) *model.ReleaseInfo {
 	if r == nil {
 		return nil
 	}
-	ri := &provider.ReleaseInfo{
+	ri := &model.ReleaseInfo{
 		TagName:   r.TagName,
 		Title:     r.Name,
 		Body:      r.Description,
@@ -145,7 +146,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 		&gitlab.ArchiveOptions{Format: new(fmtVal), SHA: new(ref)},
 		gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetArchive", err)
 	}
 	return data, nil
 }

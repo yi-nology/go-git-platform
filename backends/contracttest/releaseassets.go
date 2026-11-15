@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -51,7 +52,7 @@ func testReleaseAssetsSuite(t *testing.T, h Harness) {
 // ReleaseAssetsHarness bundles inputs for the release-asset download suite.
 type ReleaseAssetsHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	AssetBytes  string
 }

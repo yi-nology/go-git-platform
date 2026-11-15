@@ -10,11 +10,12 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateWebhook implements provider.WebhookManager.
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
@@ -30,16 +31,16 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	}
 	h, _, err := p.client.Repositories.CreateHook(ctx, opts.Owner, opts.Repo, hook)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateWebhook", err)
 	}
 	return convertHook(h), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	h, _, err := p.client.Repositories.GetHook(ctx, owner, repo, webhookID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetWebhook", err)
 	}
 	return convertHook(h), nil
 }
@@ -48,7 +49,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // semantics keep unprovided settings; the config object is only attached
 // when at least one of URL/Secret is being changed so the remaining config
 // keys stay server-side.
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	hook := &github.Hook{}
 	if opts.Events != nil {
 		hook.Events = opts.Events
@@ -65,7 +66,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 	}
 	h, _, err := p.client.Repositories.EditHook(ctx, owner, repo, webhookID, hook)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateWebhook", err)
 	}
 	return convertHook(h), nil
 }
@@ -74,7 +75,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Repositories.DeleteHook(ctx, owner, repo, webhookID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteWebhook", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteWebhook", err)
 	}
 	return nil
 }
@@ -82,7 +83,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 // ListWebhooks implements provider.WebhookManager. The provider interface
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	hooks, err := backendutil.AllPages(func(page int) ([]*github.Hook, error) {
 		list, _, err := p.client.Repositories.ListHooks(ctx, owner, repo, &github.ListOptions{
 			Page: page, PerPage: 100,
@@ -90,9 +91,9 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListWebhooks", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
 		result = append(result, convertHook(h))
 	}
@@ -104,8 +105,8 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitHub, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
+		return provider.Wrap(model.PlatformGitHub, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
@@ -115,14 +116,14 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // The event header and payload decoding stay on the go-github library's
 // path; GitHub never set an event ID, so the prefix stays empty.
 var githubEnvelope = provider.WebhookEnvelope{
-	Platform: provider.PlatformGitHub,
+	Platform: model.PlatformGitHub,
 	// X-GitHub-Delivery:GitHub 每次投递都带(重投时值不变)⇒ 真正的幂等键。
 	// 以前 GitHub 的事件 ID 恒为空串 ⇒ 上层按 event_id 去重/唯一索引时,
 	// 第 2 条起的事件被静默丢弃(入站同步从第 2 条起完全失效)。
 	IDHeaders: []string{"X-GitHub-Delivery"},
 }
 
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	// 签名校验走平台注册表单源（issue #43）：go-github 的 ValidatePayload
 	// 对空 secret 不设防——HMAC(key="") 可被攻击者自行计算，fail-open 于
 	// 可预测载荷；且它还会在缺 X-Hub-Signature-256 时回落接受 SHA-1
@@ -130,17 +131,17 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	// 空 secret（可伪造），ValidateWebhookSignature 已经走它——同平台的
 	// parse 路径此前却保留内联 go-github 调用，一个 SDK 对一个平台暴露
 	// 两种空 secret 策略。先经注册表校验（读体并回填），再解码载荷。
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitHub, r, secret); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitHub, r, secret); err != nil {
+		return nil, provider.Wrap(model.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 	eventType := github.WebHookType(r)
 	event, err := github.ParseWebHook(eventType, payload)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ParseWebhookEvent", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ParseWebhookEvent", err)
 	}
 
 	ne := githubEnvelope.NewEventWithID(r, 0, payload)
@@ -209,7 +210,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			ne.Issue = convertIssue(e.GetIssue())
 		}
 		if pr := e.GetIssue().GetPullRequestLinks(); pr != nil {
-			ne.CR = &provider.ChangeRequest{Number: ne.Issue.Number}
+			ne.CR = &model.ChangeRequest{Number: ne.Issue.Number}
 		}
 	case *github.PullRequestReviewCommentEvent:
 		action := normalizeCommentAction(e.GetAction())
@@ -226,7 +227,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		if c := e.GetComment(); c != nil {
 			// PullRequestComment is a different SDK type from IssueComment
 			// but carries the same normalized fields.
-			ne.Comment = &provider.IssueComment{
+			ne.Comment = &model.IssueComment{
 				ID:     c.GetID(),
 				Body:   c.GetBody(),
 				Author: convertUser(c.GetUser()),

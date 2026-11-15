@@ -89,7 +89,7 @@ func TestWebhooks_UpdateWire(t *testing.T) {
 
 // TestWebhooks_GetWire_MapsFlagsToEvents pins the response mapping: the
 // per-family flags (documented as integers) render as the neutral event
-// names on provider.PlatformWebhook.Events.
+// names on model.PlatformWebhook.Events.
 func TestWebhooks_GetWire_MapsFlagsToEvents(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{

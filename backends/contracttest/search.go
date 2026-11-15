@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -42,7 +43,7 @@ type SearchHarnessConfig struct {
 // builds it from the enclosing Harness plus SearchHarnessConfig.
 type SearchHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	SearchHarnessConfig
 }

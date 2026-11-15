@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // TestWebhookEnvelope_EventIDNeverEmpty 事件 ID 绝不能为空。
@@ -18,7 +20,7 @@ import (
 //
 // 这条用例是**反向验证**:把 NewEvent 改回"前缀为空就不写 ID",本用例变红。
 func TestWebhookEnvelope_EventIDNeverEmpty(t *testing.T) {
-	for _, p := range []Platform{PlatformGitHub, PlatformGitCode, PlatformGitea, PlatformForgejo, PlatformGitee, PlatformGitLab, PlatformTencentCode} {
+	for _, p := range []model.Platform{model.PlatformGitHub, model.PlatformGitCode, model.PlatformGitea, model.PlatformForgejo, model.PlatformGitee, model.PlatformGitLab, model.PlatformTencentCode} {
 		env := WebhookEnvelope{Platform: p}
 		ev := env.NewEvent(0, []byte(`{}`))
 		assert.NotEmpty(t, ev.ID, "platform=%s 的事件 ID 不能为空", p)
@@ -28,7 +30,7 @@ func TestWebhookEnvelope_EventIDNeverEmpty(t *testing.T) {
 
 // TestWebhookEnvelope_ExplicitPrefixKept 显式 IDPrefix 的格式不变(向后兼容)。
 func TestWebhookEnvelope_ExplicitPrefixKept(t *testing.T) {
-	env := WebhookEnvelope{Platform: PlatformGitLab, IDPrefix: "gl"}
+	env := WebhookEnvelope{Platform: model.PlatformGitLab, IDPrefix: "gl"}
 	ev := env.NewEvent(42, []byte(`{}`))
 	assert.Contains(t, ev.ID, "gl-")
 	assert.Contains(t, ev.ID, "-42")
@@ -38,7 +40,7 @@ func TestWebhookEnvelope_ExplicitPrefixKept(t *testing.T) {
 //
 // 平台重投同一事件时投递 ID 不变 ⇒ 上层按事件 ID 去重能真正生效。
 func TestWebhookEnvelope_NewEventWithID_UsesDeliveryID(t *testing.T) {
-	env := WebhookEnvelope{Platform: PlatformGitHub, IDHeaders: []string{"X-GitHub-Delivery"}}
+	env := WebhookEnvelope{Platform: model.PlatformGitHub, IDHeaders: []string{"X-GitHub-Delivery"}}
 
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
 	r.Header.Set("X-GitHub-Delivery", "11111111-2222-3333-4444-555555555555")
@@ -59,7 +61,7 @@ func TestWebhookEnvelope_NewEventWithID_UsesDeliveryID(t *testing.T) {
 
 // TestWebhookEnvelope_NewEventWithID_MultipleHeaders 多个候选头按顺序取第一个非空。
 func TestWebhookEnvelope_NewEventWithID_MultipleHeaders(t *testing.T) {
-	env := WebhookEnvelope{Platform: PlatformGitCode, IDHeaders: []string{"X-GitHub-Delivery", "X-GitCode-Delivery"}}
+	env := WebhookEnvelope{Platform: model.PlatformGitCode, IDHeaders: []string{"X-GitHub-Delivery", "X-GitCode-Delivery"}}
 
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
 	r.Header.Set("X-GitCode-Delivery", "gc-delivery-1")

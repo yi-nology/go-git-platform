@@ -6,16 +6,17 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // convertProject maps a gitlab.Project to the provider-neutral type.
-func convertProject(p *gitlab.Project) *provider.PlatformRepo {
+func convertProject(p *gitlab.Project) *model.PlatformRepo {
 	if p == nil {
 		return nil
 	}
 	owner, _ := provider.SplitFullName(p.PathWithNamespace)
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            p.ID,
 		FullName:      p.PathWithNamespace,
 		Name:          p.Name,
@@ -25,7 +26,7 @@ func convertProject(p *gitlab.Project) *provider.PlatformRepo {
 		SSHURL:        p.SSHURLToRepo,
 		DefaultBranch: p.DefaultBranch,
 		Private:       p.Visibility != "public",
-		Platform:      provider.PlatformGitLab,
+		Platform:      model.PlatformGitLab,
 		Archived:      p.Archived,
 		Fork:          p.ForkedFromProject != nil,
 		Stars:         int(p.StarCount),
@@ -34,23 +35,23 @@ func convertProject(p *gitlab.Project) *provider.PlatformRepo {
 }
 
 // convertMR maps a gitlab.MergeRequest to the provider-neutral type.
-func convertMR(mr *gitlab.MergeRequest) *provider.ChangeRequest {
+func convertMR(mr *gitlab.MergeRequest) *model.ChangeRequest {
 	if mr == nil {
 		return nil
 	}
-	var author *provider.CRUser
+	var author *model.CRUser
 	if mr.Author != nil {
-		author = &provider.CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
+		author = &model.CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
 	}
-	var reviewers []*provider.CRUser
+	var reviewers []*model.CRUser
 	for _, r := range mr.Reviewers {
-		reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
+		reviewers = append(reviewers, &model.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
 	}
-	var assignees []*provider.CRUser
+	var assignees []*model.CRUser
 	for _, a := range mr.Assignees {
-		assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
+		assignees = append(assignees, &model.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
 	}
-	return &provider.ChangeRequest{
+	return &model.ChangeRequest{
 		ID:           mr.IID,
 		Number:       strconv.FormatInt(mr.IID, 10),
 		Title:        mr.Title,
@@ -82,23 +83,23 @@ func mrHeadSHA(mr *gitlab.MergeRequest) string {
 
 // convertBasicMR maps the lighter-weight gitlab.BasicMergeRequest (returned
 // by list endpoints) to the provider-neutral type.
-func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
+func convertBasicMR(mr *gitlab.BasicMergeRequest) *model.ChangeRequest {
 	if mr == nil {
 		return nil
 	}
-	var author *provider.CRUser
+	var author *model.CRUser
 	if mr.Author != nil {
-		author = &provider.CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
+		author = &model.CRUser{ID: mr.Author.ID, Username: mr.Author.Username, Name: mr.Author.Name, AvatarURL: mr.Author.AvatarURL}
 	}
-	var reviewers []*provider.CRUser
+	var reviewers []*model.CRUser
 	for _, r := range mr.Reviewers {
-		reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
+		reviewers = append(reviewers, &model.CRUser{ID: r.ID, Username: r.Username, Name: r.Name, AvatarURL: r.AvatarURL})
 	}
-	var assignees []*provider.CRUser
+	var assignees []*model.CRUser
 	for _, a := range mr.Assignees {
-		assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
+		assignees = append(assignees, &model.CRUser{ID: a.ID, Username: a.Username, Name: a.Name, AvatarURL: a.AvatarURL})
 	}
-	return &provider.ChangeRequest{
+	return &model.ChangeRequest{
 		ID:          mr.IID,
 		Number:      strconv.FormatInt(mr.IID, 10),
 		Title:       mr.Title,
@@ -122,14 +123,14 @@ func convertBasicMR(mr *gitlab.BasicMergeRequest) *provider.ChangeRequest {
 	}
 }
 
-func convertBranch(b *gitlab.Branch) *provider.PlatformBranch {
+func convertBranch(b *gitlab.Branch) *model.PlatformBranch {
 	if b == nil {
 		return nil
 	}
-	return &provider.PlatformBranch{Name: b.Name}
+	return &model.PlatformBranch{Name: b.Name}
 }
 
-func convertHook(h *gitlab.ProjectHook) *provider.PlatformWebhook {
+func convertHook(h *gitlab.ProjectHook) *model.PlatformWebhook {
 	if h == nil {
 		return nil
 	}
@@ -146,21 +147,21 @@ func convertHook(h *gitlab.ProjectHook) *provider.PlatformWebhook {
 	if h.NoteEvents {
 		events = append(events, "note")
 	}
-	return &provider.PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
+	return &model.PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
 }
 
-func convertCommit(c *gitlab.Commit) *provider.CommitInfo {
+func convertCommit(c *gitlab.Commit) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{SHA: c.ID, Message: c.Message}
+	ci := &model.CommitInfo{SHA: c.ID, Message: c.Message}
 	if c.Stats != nil {
 		ci.Additions = int(c.Stats.Additions)
 		ci.Deletions = int(c.Stats.Deletions)
 	}
 	ci.CreatedAt = timeOrZero(c.CreatedAt)
 	if c.AuthorName != "" || c.AuthorEmail != "" {
-		ci.Author = &provider.CRUser{Name: c.AuthorName}
+		ci.Author = &model.CRUser{Name: c.AuthorName}
 	}
 	return ci
 }
@@ -173,7 +174,7 @@ func timeOrZero(t *time.Time) time.Time {
 	return *t
 }
 
-func mapGLState(state string) provider.CRState {
+func mapGLState(state string) model.CRState {
 	return provider.MapMRStateToCR(state)
 }
 

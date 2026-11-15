@@ -27,6 +27,7 @@ import (
 
 	"github.com/oekit/pkg/webhook"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -35,8 +36,8 @@ import (
 type Harness struct {
 	// Name is the human-readable platform identifier (e.g. "GitHub").
 	Name string
-	// Platform is the provider.Platform constant for this backend.
-	Platform provider.Platform
+	// Platform is the model.Platform constant for this backend.
+	Platform model.Platform
 	// NewProvider builds a provider.Provider from the given config. The harness
 	// fills in BaseURL (and, for the retry subtest, RetryConfig) before calling,
 	// so the function should forward any supplied RetryConfig/Hooks rather than
@@ -391,7 +392,7 @@ func signBody(body []byte, secret, prefix string) string {
 // tests use it to exercise payload mapping without hand-rolling per-platform
 // signature code — and since v0.77.0 an empty secret is rejected by every
 // validator, so unsigned fixture requests no longer pass validation.
-func ParseSigned(t testing.TB, p provider.Provider, req *http.Request, secret string) *provider.NormalizedEvent {
+func ParseSigned(t testing.TB, p provider.Provider, req *http.Request, secret string) *model.NormalizedEvent {
 	t.Helper()
 	v := provider.DefaultWebhookRegistry().Get(p.Platform())
 	if v == nil {

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -161,7 +162,7 @@ const LabelScanMaxPages = 50
 // ParseIssueNumber parses a string issue number into the platform's native
 // integer type. The op and platform arguments are forwarded to the standard
 // error wrapping so callers produce identical error messages.
-func ParseIssueNumber(platform provider.Platform, op, number string) (int, error) {
+func ParseIssueNumber(platform model.Platform, op, number string) (int, error) {
 	n, err := strconv.Atoi(number)
 	if err != nil {
 		return 0, provider.Wrapf(platform, op, "invalid issue number %q", number)
@@ -171,7 +172,7 @@ func ParseIssueNumber(platform provider.Platform, op, number string) (int, error
 
 // ParseIssueNumber64 is like ParseIssueNumber but returns int64 for platforms
 // whose SDK uses int64 IDs (Gitea, Forgejo, GitLab).
-func ParseIssueNumber64(platform provider.Platform, op, number string) (int64, error) {
+func ParseIssueNumber64(platform model.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
 		return 0, provider.Wrapf(platform, op, "invalid issue number %q", number)
@@ -180,7 +181,7 @@ func ParseIssueNumber64(platform provider.Platform, op, number string) (int64, e
 }
 
 // ParsePRNumber parses a string PR/MR number into int.
-func ParsePRNumber(platform provider.Platform, op, number string) (int, error) {
+func ParsePRNumber(platform model.Platform, op, number string) (int, error) {
 	n, err := strconv.Atoi(number)
 	if err != nil {
 		return 0, provider.Wrapf(platform, op, "invalid pull request number %q", number)
@@ -189,7 +190,7 @@ func ParsePRNumber(platform provider.Platform, op, number string) (int, error) {
 }
 
 // ParsePRNumber64 is like ParsePRNumber but returns int64.
-func ParsePRNumber64(platform provider.Platform, op, number string) (int64, error) {
+func ParsePRNumber64(platform model.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
 		return 0, provider.Wrapf(platform, op, "invalid pull request number %q", number)
@@ -198,7 +199,7 @@ func ParsePRNumber64(platform provider.Platform, op, number string) (int64, erro
 }
 
 // ParseMilestoneNumber parses a string milestone number/ID into int64.
-func ParseMilestoneNumber(platform provider.Platform, op, number string) (int64, error) {
+func ParseMilestoneNumber(platform model.Platform, op, number string) (int64, error) {
 	n, err := strconv.ParseInt(number, 10, 64)
 	if err != nil {
 		return 0, provider.Wrapf(platform, op, "invalid milestone number %q", number)

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -43,7 +44,7 @@ func testForkSyncSuite(t *testing.T, h Harness) {
 // ForkSyncHarness bundles inputs for the fork-sync suite.
 type ForkSyncHarness struct {
 	Name          string
-	Platform      provider.Platform
+	Platform      model.Platform
 	NewProvider   func(t *testing.T, cfg provider.Config) provider.Provider
 	MergeResponse string
 }

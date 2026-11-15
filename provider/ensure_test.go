@@ -6,34 +6,36 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // --- fakes ---
 
 type fakeWebhookManager struct {
-	hooks       []*PlatformWebhook
+	hooks       []*model.PlatformWebhook
 	nextID      int64
 	created     CreateWebhookOptions
 	updatedByID map[int64]string // webhook ID → secret patched in
 }
 
-func (f *fakeWebhookManager) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
+func (f *fakeWebhookManager) ListWebhooks(context.Context, string, string) ([]*model.PlatformWebhook, error) {
 	return f.hooks, nil
 }
 
-func (f *fakeWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
+func (f *fakeWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	f.nextID++
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
 	}
 	f.created = opts
-	h := &PlatformWebhook{ID: f.nextID, URL: opts.URL, Events: events}
+	h := &model.PlatformWebhook{ID: f.nextID, URL: opts.URL, Events: events}
 	f.hooks = append(f.hooks, h)
 	return h, nil
 }
 
-func (f *fakeWebhookManager) UpdateWebhook(_ context.Context, _, _ string, webhookID int64, opts UpdateWebhookOptions) (*PlatformWebhook, error) {
+func (f *fakeWebhookManager) UpdateWebhook(_ context.Context, _, _ string, webhookID int64, opts UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	if f.updatedByID == nil {
 		f.updatedByID = map[int64]string{}
 	}
@@ -48,7 +50,7 @@ func (f *fakeWebhookManager) UpdateWebhook(_ context.Context, _, _ string, webho
 	return nil, errors.New("no such hook")
 }
 
-func (f *fakeWebhookManager) GetWebhook(_ context.Context, _, _ string, webhookID int64) (*PlatformWebhook, error) {
+func (f *fakeWebhookManager) GetWebhook(_ context.Context, _, _ string, webhookID int64) (*model.PlatformWebhook, error) {
 	for _, h := range f.hooks {
 		if h.ID == webhookID {
 			return h, nil
@@ -67,26 +69,26 @@ func (f *fakeWebhookManager) DeleteWebhook(_ context.Context, _, _ string, id in
 	return nil
 }
 
-func (f *fakeWebhookManager) ParseWebhookEvent(*http.Request, string) (*NormalizedEvent, error) {
+func (f *fakeWebhookManager) ParseWebhookEvent(*http.Request, string) (*model.NormalizedEvent, error) {
 	return nil, ErrNotImplemented
 }
 
 func (f *fakeWebhookManager) ValidateWebhookSignature(*http.Request, string) error { return nil }
 
 type fakeBranchProtection struct {
-	rules    map[string]*BranchProtection
+	rules    map[string]*model.BranchProtection
 	getFails error
 }
 
-func (f *fakeBranchProtection) ListBranchProtections(context.Context, string, string) ([]*BranchProtection, error) {
-	out := make([]*BranchProtection, 0, len(f.rules))
+func (f *fakeBranchProtection) ListBranchProtections(context.Context, string, string) ([]*model.BranchProtection, error) {
+	out := make([]*model.BranchProtection, 0, len(f.rules))
 	for _, r := range f.rules {
 		out = append(out, r)
 	}
 	return out, nil
 }
 
-func (f *fakeBranchProtection) GetBranchProtection(_ context.Context, _, _, branch string) (*BranchProtection, error) {
+func (f *fakeBranchProtection) GetBranchProtection(_ context.Context, _, _, branch string) (*model.BranchProtection, error) {
 	if f.getFails != nil {
 		return nil, f.getFails
 	}
@@ -97,8 +99,8 @@ func (f *fakeBranchProtection) GetBranchProtection(_ context.Context, _, _, bran
 	return r, nil
 }
 
-func (f *fakeBranchProtection) CreateBranchProtection(_ context.Context, _, _ string, opts CreateBranchProtectionOptions) (*BranchProtection, error) {
-	r := &BranchProtection{
+func (f *fakeBranchProtection) CreateBranchProtection(_ context.Context, _, _ string, opts CreateBranchProtectionOptions) (*model.BranchProtection, error) {
+	r := &model.BranchProtection{
 		BranchName: opts.BranchName, RequiredApprovingReviews: opts.RequiredApprovingReviews,
 		RequiredStatusChecks: opts.RequiredStatusChecks, AllowForcePushes: opts.AllowForcePushes,
 		AllowDeletions: opts.AllowDeletions,
@@ -107,7 +109,7 @@ func (f *fakeBranchProtection) CreateBranchProtection(_ context.Context, _, _ st
 	return r, nil
 }
 
-func (f *fakeBranchProtection) UpdateBranchProtection(_ context.Context, _, _, branch string, opts UpdateBranchProtectionOptions) (*BranchProtection, error) {
+func (f *fakeBranchProtection) UpdateBranchProtection(_ context.Context, _, _, branch string, opts UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	r := f.rules[branch]
 	if opts.RequiredApprovingReviews != nil {
 		r.RequiredApprovingReviews = *opts.RequiredApprovingReviews
@@ -130,19 +132,19 @@ func (f *fakeBranchProtection) DeleteBranchProtection(_ context.Context, _, _, b
 }
 
 type fakeDeployKeys struct {
-	keys  []*DeployKey
+	keys  []*model.DeployKey
 	next  int64
 	added AddDeployKeyOptions
 }
 
-func (f *fakeDeployKeys) ListDeployKeys(context.Context, string, string) ([]*DeployKey, error) {
+func (f *fakeDeployKeys) ListDeployKeys(context.Context, string, string) ([]*model.DeployKey, error) {
 	return f.keys, nil
 }
 
-func (f *fakeDeployKeys) AddDeployKey(_ context.Context, _, _ string, opts AddDeployKeyOptions) (*DeployKey, error) {
+func (f *fakeDeployKeys) AddDeployKey(_ context.Context, _, _ string, opts AddDeployKeyOptions) (*model.DeployKey, error) {
 	f.next++
 	f.added = opts
-	k := &DeployKey{ID: f.next, Title: opts.Title, Key: opts.Key, ReadOnly: opts.ReadOnly}
+	k := &model.DeployKey{ID: f.next, Title: opts.Title, Key: opts.Key, ReadOnly: opts.ReadOnly}
 	f.keys = append(f.keys, k)
 	return k, nil
 }
@@ -331,15 +333,15 @@ func TestEnsureWebhookSecretAlwaysUpdateSkipsEmptySecret(t *testing.T) {
 // the always-update mode must fail loudly on such a manager instead of
 // silently keeping a possibly-stale secret.
 type bareWebhookManager struct {
-	hooks []*PlatformWebhook
+	hooks []*model.PlatformWebhook
 }
 
-func (f *bareWebhookManager) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
+func (f *bareWebhookManager) ListWebhooks(context.Context, string, string) ([]*model.PlatformWebhook, error) {
 	return f.hooks, nil
 }
 
-func (f *bareWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error) {
-	h := &PlatformWebhook{ID: int64(len(f.hooks) + 1), URL: opts.URL, Events: opts.Events}
+func (f *bareWebhookManager) CreateWebhook(_ context.Context, opts CreateWebhookOptions) (*model.PlatformWebhook, error) {
+	h := &model.PlatformWebhook{ID: int64(len(f.hooks) + 1), URL: opts.URL, Events: opts.Events}
 	f.hooks = append(f.hooks, h)
 	return h, nil
 }
@@ -354,7 +356,7 @@ func (f *bareWebhookManager) DeleteWebhook(_ context.Context, _, _ string, id in
 	return nil
 }
 
-func (f *bareWebhookManager) ParseWebhookEvent(*http.Request, string) (*NormalizedEvent, error) {
+func (f *bareWebhookManager) ParseWebhookEvent(*http.Request, string) (*model.NormalizedEvent, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -374,7 +376,7 @@ func TestEnsureWebhookSecretAlwaysUpdateRequiresConfigManager(t *testing.T) {
 // --- branch protection ---
 
 func TestEnsureBranchProtectionLifecycle(t *testing.T) {
-	f := &fakeBranchProtection{rules: map[string]*BranchProtection{}}
+	f := &fakeBranchProtection{rules: map[string]*model.BranchProtection{}}
 	opts := CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 2, RequiredStatusChecks: true}
 
 	action, _, err := EnsureBranchProtection(t.Context(), f, "o", "r", opts)
@@ -487,11 +489,11 @@ func TestEnsureWebhook_VocabularyMismatchConverges(t *testing.T) {
 // 测试里不会被调用）。
 type conflictWebhookMgr struct {
 	WebhookManager
-	hooks  []*PlatformWebhook
+	hooks  []*model.PlatformWebhook
 	delErr error // 非 nil 时 DeleteWebhook 返回它（默认 409 冲突）
 }
 
-func (m conflictWebhookMgr) ListWebhooks(context.Context, string, string) ([]*PlatformWebhook, error) {
+func (m conflictWebhookMgr) ListWebhooks(context.Context, string, string) ([]*model.PlatformWebhook, error) {
 	return m.hooks, nil
 }
 
@@ -502,13 +504,13 @@ func (m conflictWebhookMgr) DeleteWebhook(context.Context, string, string, int64
 	return fmt.Errorf("delete: %w", ErrConflict)
 }
 
-func (m conflictWebhookMgr) CreateWebhook(context.Context, CreateWebhookOptions) (*PlatformWebhook, error) {
+func (m conflictWebhookMgr) CreateWebhook(context.Context, CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	return nil, fmt.Errorf("create: %w", ErrConflict)
 }
 
 // GetWebhook/UpdateWebhook 让桩同时满足 WebhookConfigManager（always-update
 // 路径的类型断言）；实际只有 UpdateWebhook 会被调用。
-func (m conflictWebhookMgr) GetWebhook(_ context.Context, _ string, _ string, id int64) (*PlatformWebhook, error) {
+func (m conflictWebhookMgr) GetWebhook(_ context.Context, _ string, _ string, id int64) (*model.PlatformWebhook, error) {
 	for _, h := range m.hooks {
 		if h.ID == id {
 			return h, nil
@@ -517,7 +519,7 @@ func (m conflictWebhookMgr) GetWebhook(_ context.Context, _ string, _ string, id
 	return nil, fmt.Errorf("get: %w", ErrConflict)
 }
 
-func (m conflictWebhookMgr) UpdateWebhook(context.Context, string, string, int64, UpdateWebhookOptions) (*PlatformWebhook, error) {
+func (m conflictWebhookMgr) UpdateWebhook(context.Context, string, string, int64, UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	return nil, fmt.Errorf("update: %w", ErrConflict)
 }
 
@@ -525,7 +527,7 @@ func (m conflictWebhookMgr) UpdateWebhook(context.Context, string, string, int64
 // create 撞 409 → (OutcomeConflict, nil, err)——err 经 IsConflict 可判，
 // outcome 必须是 OutcomeConflict（唯一同时带 outcome 与非 nil error 的分支）。
 func TestEnsureWebhook_ConflictOutcome(t *testing.T) {
-	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 1, URL: "https://a", Events: []string{"push"}}}}
+	m := conflictWebhookMgr{hooks: []*model.PlatformWebhook{{ID: 1, URL: "https://a", Events: []string{"push"}}}}
 	outcome, entity, err := EnsureWebhook(t.Context(), m,
 		CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push"}})
 	if !IsConflict(err) {
@@ -541,7 +543,7 @@ func TestEnsureWebhook_ConflictOutcome(t *testing.T) {
 
 // 删除路径：URL 命中但事件漂移 → delete 撞 409 → (OutcomeConflict, matches[0], err)。
 func TestEnsureWebhook_DeleteConflictOutcome(t *testing.T) {
-	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}}}
+	m := conflictWebhookMgr{hooks: []*model.PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}}}
 	outcome, entity, err := EnsureWebhook(t.Context(), m,
 		CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push", "pull_request"}})
 	if !IsConflict(err) {
@@ -558,7 +560,7 @@ func TestEnsureWebhook_DeleteConflictOutcome(t *testing.T) {
 // secret 补写路径：URL+事件全匹配 + always-update → UpdateWebhook 撞 409 →
 // (OutcomeConflict, 该钩子, err)。
 func TestEnsureWebhook_SecretUpdateConflictOutcome(t *testing.T) {
-	m := conflictWebhookMgr{hooks: []*PlatformWebhook{{ID: 7, URL: "https://b", Events: []string{"push", "pull_request"}}}}
+	m := conflictWebhookMgr{hooks: []*model.PlatformWebhook{{ID: 7, URL: "https://b", Events: []string{"push", "pull_request"}}}}
 	outcome, entity, err := EnsureWebhook(t.Context(), m, CreateWebhookOptions{
 		Owner: "o", Repo: "r", URL: "https://b", Events: []string{"push", "pull_request"},
 		Secret: "rotated", EnsureSecretMode: EnsureSecretAlwaysUpdate,
@@ -578,7 +580,7 @@ func TestEnsureWebhook_SecretUpdateConflictOutcome(t *testing.T) {
 func TestEnsureWebhook_NonConflictWriteErrorKeepsZeroOutcome(t *testing.T) {
 	boom := errors.New("boom")
 	m := conflictWebhookMgr{
-		hooks:  []*PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}},
+		hooks:  []*model.PlatformWebhook{{ID: 1, URL: "https://b", Events: []string{"push"}}},
 		delErr: boom,
 	}
 	outcome, entity, err := EnsureWebhook(t.Context(), m,
@@ -594,25 +596,25 @@ func TestEnsureWebhook_NonConflictWriteErrorKeepsZeroOutcome(t *testing.T) {
 // conflictBranchProtection：Get 返回 cur（nil = 未找到，→ ErrNotFound），
 // 写操作一律撞 409。
 type conflictBranchProtection struct {
-	cur *BranchProtection
+	cur *model.BranchProtection
 }
 
-func (m conflictBranchProtection) ListBranchProtections(context.Context, string, string) ([]*BranchProtection, error) {
+func (m conflictBranchProtection) ListBranchProtections(context.Context, string, string) ([]*model.BranchProtection, error) {
 	return nil, nil
 }
 
-func (m conflictBranchProtection) GetBranchProtection(context.Context, string, string, string) (*BranchProtection, error) {
+func (m conflictBranchProtection) GetBranchProtection(context.Context, string, string, string) (*model.BranchProtection, error) {
 	if m.cur == nil {
 		return nil, &ProviderError{Op: "GetBranchProtection", Cause: ErrNotFound}
 	}
 	return m.cur, nil
 }
 
-func (m conflictBranchProtection) CreateBranchProtection(context.Context, string, string, CreateBranchProtectionOptions) (*BranchProtection, error) {
+func (m conflictBranchProtection) CreateBranchProtection(context.Context, string, string, CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	return nil, fmt.Errorf("create: %w", ErrConflict)
 }
 
-func (m conflictBranchProtection) UpdateBranchProtection(context.Context, string, string, string, UpdateBranchProtectionOptions) (*BranchProtection, error) {
+func (m conflictBranchProtection) UpdateBranchProtection(context.Context, string, string, string, UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	return nil, fmt.Errorf("update: %w", ErrConflict)
 }
 
@@ -622,7 +624,7 @@ func (m conflictBranchProtection) DeleteBranchProtection(context.Context, string
 
 // 更新路径：已有规则与期望不符 → Update 撞 409 → (OutcomeConflict, cur, err)。
 func TestEnsureBranchProtection_UpdateConflictOutcome(t *testing.T) {
-	cur := &BranchProtection{BranchName: "main", RequiredApprovingReviews: 1}
+	cur := &model.BranchProtection{BranchName: "main", RequiredApprovingReviews: 1}
 	m := conflictBranchProtection{cur: cur}
 	outcome, entity, err := EnsureBranchProtection(t.Context(), m, "o", "r",
 		CreateBranchProtectionOptions{BranchName: "main", RequiredApprovingReviews: 2})
@@ -655,20 +657,20 @@ func TestEnsureBranchProtection_CreateConflictOutcome(t *testing.T) {
 
 // conflictDeployKeys：写操作按配置返回错误，deleteErr/addErr 为 nil 即成功。
 type conflictDeployKeys struct {
-	keys      []*DeployKey
+	keys      []*model.DeployKey
 	deleteErr error
 	addErr    error
 }
 
-func (m conflictDeployKeys) ListDeployKeys(context.Context, string, string) ([]*DeployKey, error) {
+func (m conflictDeployKeys) ListDeployKeys(context.Context, string, string) ([]*model.DeployKey, error) {
 	return m.keys, nil
 }
 
-func (m conflictDeployKeys) AddDeployKey(context.Context, string, string, AddDeployKeyOptions) (*DeployKey, error) {
+func (m conflictDeployKeys) AddDeployKey(context.Context, string, string, AddDeployKeyOptions) (*model.DeployKey, error) {
 	if m.addErr != nil {
 		return nil, m.addErr
 	}
-	return &DeployKey{ID: 99, Title: "replaced"}, nil
+	return &model.DeployKey{ID: 99, Title: "replaced"}, nil
 }
 
 func (m conflictDeployKeys) DeleteDeployKey(context.Context, string, string, int64) error {
@@ -677,9 +679,9 @@ func (m conflictDeployKeys) DeleteDeployKey(context.Context, string, string, int
 
 // 删除路径：标题命中但材料不同 → Delete 撞 409 → (OutcomeConflict, 旧键 k, err)。
 func TestEnsureDeployKey_DeleteConflictOutcome(t *testing.T) {
-	k := &DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
+	k := &model.DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
 	m := conflictDeployKeys{
-		keys:      []*DeployKey{k},
+		keys:      []*model.DeployKey{k},
 		deleteErr: fmt.Errorf("delete: %w", ErrConflict),
 	}
 	outcome, entity, err := EnsureDeployKey(t.Context(), m, "o", "r",
@@ -697,9 +699,9 @@ func TestEnsureDeployKey_DeleteConflictOutcome(t *testing.T) {
 
 // 替换路径：删除成功后 re-add 撞 409 → (OutcomeConflict, 旧键 k, err)。
 func TestEnsureDeployKey_ReplaceAddConflictOutcome(t *testing.T) {
-	k := &DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
+	k := &model.DeployKey{ID: 3, Title: "ci", Key: "ssh-old"}
 	m := conflictDeployKeys{
-		keys:   []*DeployKey{k},
+		keys:   []*model.DeployKey{k},
 		addErr: fmt.Errorf("add: %w", ErrConflict),
 	}
 	outcome, entity, err := EnsureDeployKey(t.Context(), m, "o", "r",
@@ -737,16 +739,16 @@ type nilGetBPM struct {
 	created, updated int
 }
 
-func (b *nilGetBPM) GetBranchProtection(context.Context, string, string, string) (*BranchProtection, error) {
+func (b *nilGetBPM) GetBranchProtection(context.Context, string, string, string) (*model.BranchProtection, error) {
 	return nil, nil
 }
-func (b *nilGetBPM) CreateBranchProtection(_ context.Context, _, _ string, opts CreateBranchProtectionOptions) (*BranchProtection, error) {
+func (b *nilGetBPM) CreateBranchProtection(_ context.Context, _, _ string, opts CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	b.created++
-	return &BranchProtection{BranchName: opts.BranchName}, nil
+	return &model.BranchProtection{BranchName: opts.BranchName}, nil
 }
-func (b *nilGetBPM) UpdateBranchProtection(_ context.Context, _, _, branch string, _ UpdateBranchProtectionOptions) (*BranchProtection, error) {
+func (b *nilGetBPM) UpdateBranchProtection(_ context.Context, _, _, branch string, _ UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	b.updated++
-	return &BranchProtection{BranchName: branch}, nil
+	return &model.BranchProtection{BranchName: branch}, nil
 }
 
 // 违约 (nil,nil) 必须被防御为缺席→Create（#161）：绝不能误走 Update。

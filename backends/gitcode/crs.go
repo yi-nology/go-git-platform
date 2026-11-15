@@ -8,12 +8,13 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
-func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	pr, err := p.client.CreatePullRequest(ctx, opts.Owner, opts.Repo, gitcode.CreatePullRequestOptions{
 		Title: opts.Title, Body: opts.Description,
 		Head: opts.SourceBranch, Base: opts.TargetBranch,
@@ -21,20 +22,20 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 		Draft: opts.Draft,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "GetCR", number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, err := p.client.GetPullRequest(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -46,17 +47,17 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 // 代价与 github 的 SourceBranch 客户端过滤（issue #78）同型：caller-driven
 // 页在后过滤后可能短于 PerPage 且仍有后续页（total 本就不上报，调用方以
 // 短页判断分页终点，语义不受影响）。
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	// **未指定状态(零值)⇒ 不过滤**(平台上不加 state = 全部)。
 	// 以前默认 "open" ⇒ closed/merged 的 PR **静默丢失**。
 	var state gitcode.PullRequestState
 	switch opts.State {
-	case provider.CRStateClosed:
+	case model.CRStateClosed:
 		state = gitcode.PullRequestStateClosed
-	case provider.CRStateMerged:
+	case model.CRStateMerged:
 		state = gitcode.PullRequestStateClosed
-	case provider.CRStateOpened:
+	case model.CRStateOpened:
 		state = gitcode.PullRequestStateOpen
 	}
 	prs, err := p.client.ListPullRequests(ctx, opts.Owner, opts.Repo, gitcode.ListPullRequestsOptions{
@@ -64,9 +65,9 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		State:       state,
 	})
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitCode, "ListCRs", err)
+		return nil, nil, provider.Wrap(model.PlatformGitCode, "ListCRs", err)
 	}
-	if opts.State == provider.CRStateMerged {
+	if opts.State == model.CRStateMerged {
 		merged := make([]*gitcode.PullRequest, 0, len(prs))
 		for _, pr := range prs {
 			if pr != nil && pr.Merged {
@@ -75,7 +76,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		}
 		prs = merged
 	}
-	result := make([]*provider.ChangeRequest, 0, len(prs))
+	result := make([]*model.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		result = append(result, convertPullRequest(pr))
 	}
@@ -86,8 +87,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "MergeCR", number)
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -96,33 +97,33 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 		Squash:        opts.Squash,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "MergeCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "MergeCR", err)
 	}
 	return p.GetCR(ctx, owner, repo, number)
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "CloseCR", number)
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, err := p.client.ClosePullRequest(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CloseCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CloseCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ReopenCR", number)
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, err := p.client.ReopenPullRequest(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ReopenCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ReopenCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
@@ -135,8 +136,8 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 // 任意指定（置值或清空）也是 B 级——pull-update wire 根本没有 assignee
 // 字段（既有 divergence ignore 只登记旧字段 opts.Assignees 的静默丢弃，
 // legacy 路径维持不变：不报错、不上线）。
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "UpdateCR", number)
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -158,20 +159,20 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 		Title: opts.Title, Body: desc, Base: opts.TargetBranch,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateCR", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
 	err = p.client.AddIssueLabels(ctx, owner, repo, n, labels)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "UpdateCRLabels", err)
+		return provider.Wrap(model.PlatformGitCode, "UpdateCRLabels", err)
 	}
 	return nil
 }
@@ -182,8 +183,8 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 // ListIssueComments uses — because the plain SDK helper delegates with empty
 // options whose defaults pin page/per_page to 1/20 and silently truncate
 // longer threads at 20 (issue #81).
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ListCRComments", number)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*model.CRComment, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -193,14 +194,14 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		})
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCRComments", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(comments))
+	result := make([]*model.CRComment, 0, len(comments))
 	for _, c := range comments {
-		cc := &provider.CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		cc := &model.CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 		if c.Author != nil {
 			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
-			cc.Author = &provider.CRUser{
+			cc.Author = &model.CRUser{
 				ID: authorID, Username: c.Author.Login, AvatarURL: c.Author.AvatarURL,
 			}
 		}
@@ -212,21 +213,21 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 // ListCRCommits implements provider.ChangeRequestManager. The SDK's
 // ListPullRequestCommits endpoint exposes no pagination parameters, so the
 // call stays single-shot.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ListCRCommits", number)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*model.CRCommit, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
 	commits, err := p.client.ListPullRequestCommits(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCRCommits", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
-		cc := &provider.CRCommit{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
+		cc := &model.CRCommit{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
 		if c.Author != nil {
 			authorID, _ := strconv.ParseInt(string(c.Author.ID), 10, 64)
-			cc.Author = &provider.CRUser{
+			cc.Author = &model.CRUser{
 				ID: authorID, Username: c.Author.Login, AvatarURL: c.Author.AvatarURL,
 			}
 		}

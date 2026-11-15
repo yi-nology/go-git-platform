@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -33,11 +34,11 @@ func registerWebhooks(s *mcp.Server, st *state) {
 	add(s, st, "list_webhooks", "List webhooks", "List the webhooks of a repository with their IDs, delivery URLs and subscribed events.", false, func(ctx context.Context, in struct {
 		Owner string `json:"owner"`
 		Repo  string `json:"repo"`
-	}) ([]*provider.PlatformWebhook, error) {
+	}) ([]*model.PlatformWebhook, error) {
 		return wm.ListWebhooks(ctx, in.Owner, in.Repo)
 	})
 
-	add(s, st, "create_webhook", "Create webhook", "Create a repository webhook that delivers platform events to the given URL.", true, func(ctx context.Context, in createWebhookIn) (*provider.PlatformWebhook, error) {
+	add(s, st, "create_webhook", "Create webhook", "Create a repository webhook that delivers platform events to the given URL.", true, func(ctx context.Context, in createWebhookIn) (*model.PlatformWebhook, error) {
 		return wm.CreateWebhook(ctx, provider.CreateWebhookOptions{
 			Owner: in.Owner, Repo: in.Repo, URL: in.URL, Secret: in.Secret, Events: in.Events,
 		})
@@ -66,7 +67,7 @@ func registerWebhooks(s *mcp.Server, st *state) {
 		Owner string `json:"owner"`
 		Repo  string `json:"repo"`
 		ID    int64  `json:"id" jsonschema:"webhook ID (platform-addressed)"`
-	}) (*provider.PlatformWebhook, error) {
+	}) (*model.PlatformWebhook, error) {
 		return cm.GetWebhook(ctx, in.Owner, in.Repo, in.ID)
 	})
 
@@ -78,7 +79,7 @@ func registerWebhooks(s *mcp.Server, st *state) {
 		Secret *string  `json:"secret,omitempty" jsonschema:"new shared secret; omitted = unchanged"`
 		Events []string `json:"events,omitempty" jsonschema:"event names; the full replacement set (an empty array clears every event where the platform supports it); omitted = unchanged"`
 	}
-	add(s, st, "update_webhook", "Update webhook", "Patch a webhook: nil fields are left unchanged; a non-nil events array replaces the whole event set.", true, func(ctx context.Context, in updateWebhookIn) (*provider.PlatformWebhook, error) {
+	add(s, st, "update_webhook", "Update webhook", "Patch a webhook: nil fields are left unchanged; a non-nil events array replaces the whole event set.", true, func(ctx context.Context, in updateWebhookIn) (*model.PlatformWebhook, error) {
 		if in.URL == nil && in.Secret == nil && in.Events == nil {
 			return nil, fmt.Errorf("update_webhook needs at least one of url, secret, events")
 		}

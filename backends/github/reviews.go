@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/google/go-github/v93/github"
 
@@ -15,8 +16,8 @@ import (
 // ListReviews implements provider.ReviewManager. The provider interface
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListReviews", number)
+func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -27,9 +28,9 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListReviews", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListReviews", err)
 	}
-	result := make([]provider.Review, 0, len(reviews))
+	result := make([]model.Review, 0, len(reviews))
 	for _, r := range reviews {
 		result = append(result, convertReview(r))
 	}
@@ -37,14 +38,14 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 }
 
 // GetReview implements provider.ReviewManager.
-func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "GetReview", number)
+func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
 	review, _, err := p.client.PullRequests.GetReview(ctx, owner, repo, n, reviewID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetReview", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetReview", err)
 	}
 	r := convertReview(review)
 	return &r, nil
@@ -52,8 +53,8 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 
 // CreateReview implements provider.ReviewManager. It moved here from
 // DiffManager; the change request number is now addressed as a string.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CreateReview", number)
+func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +91,9 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	}
 	review, _, err := p.client.PullRequests.CreateReview(ctx, owner, repo, n, reviewRequest)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateReview", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateReview", err)
 	}
-	result := &provider.ReviewResult{
+	result := &model.ReviewResult{
 		ID: strconv.FormatInt(review.GetID(), 10),
 	}
 	if review.GetHTMLURL() != "" {
@@ -106,13 +107,13 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 
 // RequestReviewers implements provider.ReviewManager.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "RequestReviewers", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "RequestReviewers", number)
 	if err != nil {
 		return err
 	}
 	req := github.ReviewersRequest{Reviewers: reviewers}
 	if _, _, err := p.client.PullRequests.RequestReviewers(ctx, owner, repo, n, req); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "RequestReviewers", err)
+		return provider.Wrap(model.PlatformGitHub, "RequestReviewers", err)
 	}
 	return nil
 }
@@ -122,57 +123,57 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // channel next to the user reviewers; the unified ReviewManager only
 // expresses the user half.
 func (p *Provider) RequestTeamReviewers(ctx context.Context, owner, repo, number string, teams []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "RequestTeamReviewers", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "RequestTeamReviewers", number)
 	if err != nil {
 		return err
 	}
 	req := github.ReviewersRequest{TeamReviewers: teams}
 	if _, _, err := p.client.PullRequests.RequestReviewers(ctx, owner, repo, n, req); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "RequestTeamReviewers", err)
+		return provider.Wrap(model.PlatformGitHub, "RequestTeamReviewers", err)
 	}
 	return nil
 }
 
 // DismissReview implements provider.ReviewManager.
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "DismissReview", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "DismissReview", number)
 	if err != nil {
 		return err
 	}
 	if _, _, err := p.client.PullRequests.DismissReview(ctx, owner, repo, n, reviewID, github.PullRequestDismissReviewRequest{
 		Message: message,
 	}); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DismissReview", err)
+		return provider.Wrap(model.PlatformGitHub, "DismissReview", err)
 	}
 	return nil
 }
 
-// convertReview maps a github.PullRequestReview to a provider.Review,
+// convertReview maps a github.PullRequestReview to a model.Review,
 // normalizing the UPPERCASE wire states to the SDK's lowercase ReviewState
 // constants. Unknown states pass through lowercased rather than being
 // silently dropped.
-func convertReview(r *github.PullRequestReview) provider.Review {
-	var review provider.Review
+func convertReview(r *github.PullRequestReview) model.Review {
+	var review model.Review
 	if r == nil {
 		return review
 	}
-	review = provider.Review{
+	review = model.Review{
 		ID:   r.GetID(),
 		User: r.GetUser().GetLogin(),
 		Body: r.GetBody(),
 	}
 	switch r.GetState() {
 	case "APPROVED":
-		review.State = provider.ReviewStateApproved
+		review.State = model.ReviewStateApproved
 	case "CHANGES_REQUESTED":
-		review.State = provider.ReviewStateChangesRequested
+		review.State = model.ReviewStateChangesRequested
 	case "COMMENTED":
-		review.State = provider.ReviewStateCommented
+		review.State = model.ReviewStateCommented
 	case "PENDING":
-		review.State = provider.ReviewStatePending
+		review.State = model.ReviewStatePending
 	default:
 		if s := r.GetState(); s != "" {
-			review.State = provider.ReviewState(strings.ToLower(s))
+			review.State = model.ReviewState(strings.ToLower(s))
 		}
 	}
 	if t := r.GetSubmittedAt(); !t.IsZero() {

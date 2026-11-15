@@ -6,6 +6,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -19,7 +20,7 @@ import (
 // opts.PerPage only sizes the underlying requests and defaults to Gitee's
 // per_page maximum of 100. Both shapes apply to the authenticated-user
 // list and the by-user list alike.
-func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	var repos []*gitee.Project
 	var err error
 	if opts.Page > 0 {
@@ -52,9 +53,9 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		})
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListRepos", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListRepos", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(repos))
+	result := make([]*model.PlatformRepo, 0, len(repos))
 	for _, r := range repos {
 		result = append(result, convertProject(r))
 	}
@@ -62,10 +63,10 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 }
 
 // GetRepo implements provider.RepoManager.
-func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
 	r, _, err := p.client.Repositories.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetRepo", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetRepo", err)
 	}
 	return convertProject(r), nil
 }
@@ -74,7 +75,7 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	_, err := p.client.Repositories.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteRepo", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteRepo", err)
 	}
 	return nil
 }
@@ -83,7 +84,7 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 // (issue #88)：go-gitee 的选项字段是 *string+omitempty，空串指针照上
 // wire 会清空对侧字段（或 422）——非空才落线，与 UpdateIssue/UpdateCR
 // 同做法。
-func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	updateOpts := &gitee.UpdateRepositoryOptions{}
 	if opts.Name != "" {
 		updateOpts.Name = gitee.String(opts.Name)
@@ -99,26 +100,26 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	}
 	r, _, err := p.client.Repositories.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateRepo", err)
 	}
 	return convertProject(r), nil
 }
 
 // ForkRepo implements provider.RepoManager.
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	forkOpts := &gitee.CreateForkOptions{}
 	if opts.Organization != "" {
 		forkOpts.Organization = gitee.String(opts.Organization)
 	}
 	r, _, err := p.client.Repositories.CreateFork(ctx, backendutil.Esc(owner), backendutil.Esc(repo), forkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ForkRepo", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ForkRepo", err)
 	}
 	return convertProject(r), nil
 }
 
 // CreateRepo implements provider.RepoManager.
-func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	createOpts := &gitee.CreateRepositoryOptions{
 		Name:    gitee.String(opts.Name),
 		Private: gitee.Bool(opts.Private),
@@ -146,7 +147,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		r, _, err = p.client.Repositories.Create(ctx, createOpts)
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateRepo", err)
 	}
 	return convertProject(r), nil
 }

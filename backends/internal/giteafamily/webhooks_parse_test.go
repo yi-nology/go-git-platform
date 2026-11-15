@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -32,10 +33,10 @@ func signedHookRequest(t *testing.T, eventType string, payload map[string]any) *
 	return req
 }
 
-func mustParse(t *testing.T, req *http.Request) *provider.NormalizedEvent {
+func mustParse(t *testing.T, req *http.Request) *model.NormalizedEvent {
 	t.Helper()
 	ev, err := ParseWebhookEvent(Family{
-		Platform:             provider.PlatformGitea,
+		Platform:             model.PlatformGitea,
 		EventIDPrefix:        "gt",
 		EventHeaders:         []string{"X-Gitea-Event"},
 		EventDeliveryHeaders: []string{"X-Gitea-Delivery"},

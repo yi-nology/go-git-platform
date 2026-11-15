@@ -7,6 +7,7 @@ import (
 	sdkgithub "github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -15,7 +16,7 @@ import (
 // 失败 job → presigned job log 拉取尾部。一个 SHA 可有多个 run（每
 // workflow 文件一条）——按 workflowID 去重只取最新 run（runs 按 created
 // 倒序返回，首见即最新；mapping 分歧已登记）。
-func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
+func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]model.JobLog, error) {
 	runs, _, err := p.client.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, &sdkgithub.ListWorkflowRunsOptions{
 		HeadSHA: sha,
 		ListOptions: sdkgithub.ListOptions{
@@ -23,10 +24,10 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		},
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListFailedJobLogs", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListFailedJobLogs", err)
 	}
 	seen := make(map[int64]struct{}, len(runs.WorkflowRuns))
-	out := make([]provider.JobLog, 0, 4)
+	out := make([]model.JobLog, 0, 4)
 	for _, run := range runs.WorkflowRuns {
 		if run == nil {
 			continue
@@ -47,14 +48,14 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 
 // failedJobsForRun collects the failed jobs of one workflow run, each with
 // the tail of its presigned log.
-func (p *Provider) failedJobsForRun(ctx context.Context, owner, repo string, run *sdkgithub.WorkflowRun) ([]provider.JobLog, error) {
+func (p *Provider) failedJobsForRun(ctx context.Context, owner, repo string, run *sdkgithub.WorkflowRun) ([]model.JobLog, error) {
 	jobs, _, err := p.client.Actions.ListWorkflowJobs(ctx, owner, repo, run.GetID(), &sdkgithub.ListWorkflowJobsOptions{
 		ListOptions: sdkgithub.ListOptions{PerPage: 100},
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListFailedJobLogs", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListFailedJobLogs", err)
 	}
-	out := make([]provider.JobLog, 0, 2)
+	out := make([]model.JobLog, 0, 2)
 	for _, job := range jobs.Jobs {
 		// canceled/skipped 是连带或未执行，不产生可归因日志；failure/
 		// timed_out/startup_failure 是真失败（timed_out 跑挂了、startup_
@@ -63,7 +64,7 @@ func (p *Provider) failedJobsForRun(ctx context.Context, owner, repo string, run
 			continue
 		}
 		tail, truncated := p.jobLogTail(ctx, owner, repo, job.GetID())
-		out = append(out, provider.JobLog{
+		out = append(out, model.JobLog{
 			Name:      job.GetName(),
 			Stage:     run.GetName(),
 			WebURL:    job.GetHTMLURL(),

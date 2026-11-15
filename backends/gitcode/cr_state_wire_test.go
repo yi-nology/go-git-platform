@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -24,7 +25,7 @@ func TestGitCode_ListCRs_ZeroStateSendsNoFilter(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -35,7 +36,7 @@ func TestGitCode_ListCRs_ZeroStateSendsNoFilter(t *testing.T) {
 		t.Fatalf("ListCRs: %v", err)
 	}
 	// 显式 opened ⇒ state=open
-	if _, _, err := cm.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: provider.CRStateOpened}); err != nil {
+	if _, _, err := cm.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: model.CRStateOpened}); err != nil {
 		t.Fatalf("ListCRs: %v", err)
 	}
 
@@ -64,7 +65,7 @@ func TestGitCode_GetFileContent_DecodesBase64(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -99,20 +100,20 @@ func TestGitCode_ListCRs_MergedPostFilterExact(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
 	cm := p.(provider.ChangeRequestManager)
 
-	crs, total, err := cm.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: provider.CRStateMerged})
+	crs, total, err := cm.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: model.CRStateMerged})
 	if err != nil {
 		t.Fatalf("ListCRs(merged): %v", err)
 	}
 	if len(crs) != 1 {
 		t.Fatalf("State=merged 必须返回纯 merged 集（1 条）, got %d 条: %+v", len(crs), crs)
 	}
-	if crs[0].Number != "1" || crs[0].State != provider.CRStateMerged {
+	if crs[0].Number != "1" || crs[0].State != model.CRStateMerged {
 		t.Errorf("返回的 merged CR = %s/%s, want 1/merged", crs[0].Number, crs[0].State)
 	}
 	if total != nil {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // fakeDiffPort 记录 ListPullRequestFiles 的每次调用（page/size），按
@@ -44,7 +44,7 @@ func TestGetCRFilesWalksAllPages(t *testing.T) {
 		fake.pages[2] = append(fake.pages[2], &FamilyChangedFile{Filename: fmt.Sprintf("p2-%d", i), Additions: 1})
 	}
 
-	fam := Family{Platform: provider.PlatformGitea, PageSize: pageSize}
+	fam := Family{Platform: model.PlatformGitea, PageSize: pageSize}
 	files, err := GetCRFiles(context.Background(), fam, fake, "o", "r", "7")
 	if err != nil {
 		t.Fatal(err)

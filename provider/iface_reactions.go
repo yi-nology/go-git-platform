@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // ReactionManager provides emoji reaction CRUD on issues and their comments
 // (both issue comments and change-request comments). It is an optional
@@ -18,27 +22,27 @@ import "context"
 // constants across all platforms.
 type ReactionManager interface {
 	// ListIssueReactions returns all reactions on an issue.
-	ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*Reaction, error)
+	ListIssueReactions(ctx context.Context, owner, repo, number string) ([]*model.Reaction, error)
 	// AddIssueReaction adds a reaction emoji to an issue. emoji is one of
 	// the Reaction* constants (e.g. ReactionHeart).
-	AddIssueReaction(ctx context.Context, owner, repo, number, emoji string) (*Reaction, error)
+	AddIssueReaction(ctx context.Context, owner, repo, number, emoji string) (*model.Reaction, error)
 	// RemoveIssueReaction removes a reaction by its platform ID.
 	RemoveIssueReaction(ctx context.Context, owner, repo, number string, reactionID int64) error
 
 	// ListIssueCommentReactions returns all reactions on an issue comment.
-	ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*Reaction, error)
+	ListIssueCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*model.Reaction, error)
 	// AddIssueCommentReaction adds a reaction emoji to an issue comment.
-	AddIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*Reaction, error)
+	AddIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*model.Reaction, error)
 	// RemoveIssueCommentReaction removes a reaction by its platform ID.
 	RemoveIssueCommentReaction(ctx context.Context, owner, repo string, commentID int64, reactionID int64) error
 
 	// ListCRReactions returns all reactions on a change request (PR/MR).
-	ListCRReactions(ctx context.Context, owner, repo, number string) ([]*Reaction, error)
+	ListCRReactions(ctx context.Context, owner, repo, number string) ([]*model.Reaction, error)
 	// ListCRCommentReactions returns all reactions on a change-request
 	// comment (PR review comment / MR note).
-	ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*Reaction, error)
+	ListCRCommentReactions(ctx context.Context, owner, repo string, commentID int64) ([]*model.Reaction, error)
 	// AddCRCommentReaction adds a reaction emoji to a change-request comment.
-	AddCRCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*Reaction, error)
+	AddCRCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*model.Reaction, error)
 	// RemoveCRCommentReaction removes a reaction by its platform ID.
 	RemoveCRCommentReaction(ctx context.Context, owner, repo string, commentID int64, reactionID int64) error
 }

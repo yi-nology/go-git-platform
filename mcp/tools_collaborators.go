@@ -6,6 +6,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -27,7 +28,7 @@ func registerCollaborators(s *mcp.Server, st *state) {
 	add(s, st, "list_collaborators", "List collaborators", "List the collaborators (members) of a repository with their permissions.", false, func(ctx context.Context, in struct {
 		Owner string `json:"owner"`
 		Repo  string `json:"repo"`
-	}) ([]*provider.Collaborator, error) {
+	}) ([]*model.Collaborator, error) {
 		return cm.ListCollaborators(ctx, in.Owner, in.Repo)
 	})
 

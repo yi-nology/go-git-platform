@@ -9,6 +9,7 @@ import (
 	giteasdk "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/backends/gitea"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -25,7 +26,7 @@ func TestListCRs_NormalizesOpenStateFilter(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 	if _, _, err := p.ListCRs(context.Background(), provider.ListCROptions{
-		Owner: "owner", Repo: "repo", State: provider.CRStateOpened,
+		Owner: "owner", Repo: "repo", State: model.CRStateOpened,
 	}); err != nil {
 		t.Fatal(err)
 	}

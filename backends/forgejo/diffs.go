@@ -4,16 +4,17 @@ import (
 	"context"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*model.MergeDiff, error) {
 	return giteafamily.GetCRDiff(ctx, p.family, p.ports, owner, repo, number)
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*model.ChangedFile, error) {
 	return giteafamily.GetCRFiles(ctx, p.family, p.ports, owner, repo, number)
 }
 

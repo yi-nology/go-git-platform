@@ -3,6 +3,10 @@
 // (工蜂), plus the local-git entry points that hang off the same unified
 // models.
 //
+// Entity types (repositories, change requests, issues, reviews, events,
+// commit statuses, deployments, …) live in package model; this package is
+// the contract seam — interfaces, options, errors and shared helpers.
+//
 // # Overview
 //
 // Start with NewProvider and the blank import that registers every shipped
@@ -11,7 +15,7 @@
 //	import _ "github.com/yi-nology/go-git-platform/backends/all"
 //
 //	p, err := provider.NewProvider(provider.Config{
-//	    Platform: provider.PlatformGitHub,
+//	    Platform: model.PlatformGitHub,
 //	    Token:    "ghp_...",
 //	})
 //

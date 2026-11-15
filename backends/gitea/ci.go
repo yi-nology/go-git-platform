@@ -6,6 +6,7 @@ import (
 	gitea "gitea.dev/sdk"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -13,15 +14,15 @@ import (
 // runs-by-SHA（ListRepoRuns 的 head_sha 过滤）→ 每个 run 的失败 job →
 // job log reader 拉尾部。一个 SHA 可有多个 run（每 workflow 一条）——
 // 按 workflowID 去重只取最新 run（首见即最新；mapping 分歧已登记）。
-func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
+func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]model.JobLog, error) {
 	runs, _, err := p.client.Actions.ListRepoRuns(ctx, owner, repo, gitea.ListRepoActionsRunsOptions{
 		HeadSHA: sha,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitea, "ListFailedJobLogs", err)
+		return nil, provider.Wrap(model.PlatformGitea, "ListFailedJobLogs", err)
 	}
 	seen := make(map[string]struct{}, len(runs.WorkflowRuns))
-	out := make([]provider.JobLog, 0, 4)
+	out := make([]model.JobLog, 0, 4)
 	for _, run := range runs.WorkflowRuns {
 		if run == nil {
 			continue
@@ -33,7 +34,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		seen[wid] = struct{}{}
 		jobs, _, err := p.client.Actions.ListRepoJobsByRun(ctx, owner, repo, run.ID, gitea.ListRepoActionsJobsOptions{})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitea, "ListFailedJobLogs", err)
+			return nil, provider.Wrap(model.PlatformGitea, "ListFailedJobLogs", err)
 		}
 		for _, job := range jobs.Jobs {
 			// canceled/skipped 是连带或未执行，不产生可归因日志；failure/
@@ -42,7 +43,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 				continue
 			}
 			tail, truncated := p.jobLogTail(ctx, owner, repo, job.ID)
-			out = append(out, provider.JobLog{
+			out = append(out, model.JobLog{
 				Name:      job.Name,
 				Stage:     run.Path,
 				WebURL:    job.HTMLURL,

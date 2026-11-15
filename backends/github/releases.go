@@ -8,13 +8,14 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListTags implements provider.ReleaseManager. The provider interface
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*model.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*github.RepositoryTag, error) {
 		list, _, err := p.client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{
 			Page: page, PerPage: 100,
@@ -22,11 +23,11 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListTags", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
-		result = append(result, &provider.TagInfo{Name: t.GetName(), Commit: t.GetCommit().GetSHA()})
+		result = append(result, &model.TagInfo{Name: t.GetName(), Commit: t.GetCommit().GetSHA()})
 	}
 	return result, nil
 }
@@ -34,7 +35,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 // ListReleases implements provider.ReleaseManager. The provider interface
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*model.ReleaseInfo, error) {
 	releases, err := backendutil.AllPages(func(page int) ([]*github.RepositoryRelease, error) {
 		list, _, err := p.client.Repositories.ListReleases(ctx, owner, repo, &github.ListOptions{
 			Page: page, PerPage: 100,
@@ -42,9 +43,9 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListReleases", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
 		result = append(result, convertRelease(r))
 	}
@@ -52,7 +53,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateRelease implements provider.ReleaseManager.
-func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.CreateRelease(ctx, owner, repo, github.CreateReleaseRequest{
 		TagName:         opts.TagName,
 		TargetCommitish: new(opts.Target),
@@ -62,17 +63,17 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 		Prerelease:      new(opts.Prerelease),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateRelease", err)
 	}
 	return convertRelease(r), nil
 }
 
 // GetReleaseByTag implements provider.ReleaseManager. GitHub exposes a
 // dedicated tag-addressed endpoint, so no id resolution is needed.
-func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetReleaseByTag", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetReleaseByTag", err)
 	}
 	return convertRelease(r), nil
 }
@@ -82,7 +83,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // (exact lookup, no list window). go-github's UpdateReleaseRequest carries
 // pointer fields, and GitHub's PATCH leaves omitted fields
 // unchanged, so nil options pass through untouched.
-func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	id, err := p.resolveReleaseID(ctx, "UpdateRelease", owner, repo, tag)
 	if err != nil {
 		return nil, err
@@ -94,7 +95,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 		Prerelease: opts.Prerelease,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateRelease", err)
 	}
 	return convertRelease(r), nil
 }
@@ -107,7 +108,7 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 		return err
 	}
 	if _, err := p.client.Repositories.DeleteRelease(ctx, owner, repo, id); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -121,7 +122,7 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 func (p *Provider) resolveReleaseID(ctx context.Context, op, owner, repo, tag string) (int64, error) {
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
-		return 0, provider.Wrap(provider.PlatformGitHub, op, err)
+		return 0, provider.Wrap(model.PlatformGitHub, op, err)
 	}
 	return r.GetID(), nil
 }
@@ -139,25 +140,25 @@ func (p *Provider) resolveReleaseID(ctx context.Context, op, owner, repo, tag st
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
 	url, _, err := p.client.Repositories.GetArchiveLink(ctx, owner, repo, github.ArchiveFormat(format), &github.RepositoryContentGetOptions{Ref: ref}, 1)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetArchive", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), http.NoBody)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetArchive", err)
 	}
 	resp, err := p.followClient.Do(req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetArchive", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		// 错误体只截前 4KB 进错误信息,避免把超大错误页整个吞进内存。
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, provider.New(provider.PlatformGitHub, "GetArchive", resp.StatusCode, string(body))
+		return nil, provider.New(model.PlatformGitHub, "GetArchive", resp.StatusCode, string(body))
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetArchive", err)
 	}
 	return data, nil
 }

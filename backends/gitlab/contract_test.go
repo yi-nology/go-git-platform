@@ -5,13 +5,14 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	glbackend "github.com/yi-nology/go-git-platform/backends/gitlab"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitLab_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "GitLab",
-		Platform: provider.PlatformGitLab,
+		Platform: model.PlatformGitLab,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			p, err := provider.NewProvider(cfg)
 			if err != nil {
@@ -188,5 +189,5 @@ func TestGitLab_Contract(t *testing.T) {
 }
 
 func TestGitLab_WebhookCorpus(t *testing.T) {
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitLab, &glbackend.Provider{}, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformGitLab, &glbackend.Provider{}, "testdata/webhooks")
 }

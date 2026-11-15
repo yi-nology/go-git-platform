@@ -8,6 +8,8 @@ import (
 
 	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // DetectResult holds the platform, owner, repo, and base API URL extracted
@@ -19,7 +21,7 @@ import (
 // and Repo="sub/repo". Callers must therefore treat Repo as a path (it may
 // contain "/"), not a bare repository name.
 type DetectResult struct {
-	Platform Platform
+	Platform model.Platform
 	Owner    string
 	Repo     string
 	BaseURL  string
@@ -133,16 +135,16 @@ func cleanRepoPath(p string) string {
 // the platform they identify and its public API base URL.
 var knownHostPlatforms = []struct {
 	host     string
-	platform Platform
+	platform model.Platform
 	baseURL  string
 }{
-	{"github.com", PlatformGitHub, "https://api.github.com"},
-	{"code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
-	{"codeberg.org", PlatformForgejo, "https://codeberg.org"},
-	{"gitlab.com", PlatformGitLab, "https://gitlab.com/api/v4"},
-	{"gitea.com", PlatformGitea, "https://gitea.com/api/v1"},
-	{"gitee.com", PlatformGitee, "https://gitee.com/api/v5"},
-	{"gitcode.com", PlatformGitCode, "https://api.gitcode.com/api/v5"},
+	{"github.com", model.PlatformGitHub, "https://api.github.com"},
+	{"code.tencent.com", model.PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+	{"codeberg.org", model.PlatformForgejo, "https://codeberg.org"},
+	{"gitlab.com", model.PlatformGitLab, "https://gitlab.com/api/v4"},
+	{"gitea.com", model.PlatformGitea, "https://gitea.com/api/v1"},
+	{"gitee.com", model.PlatformGitee, "https://gitee.com/api/v5"},
+	{"gitcode.com", model.PlatformGitCode, "https://api.gitcode.com/api/v5"},
 }
 
 // hostAliases holds hosts registered at init time via RegisterHostAlias, so
@@ -157,7 +159,7 @@ var hostAliases = container.NewSlice[hostEntry]()
 
 type hostEntry struct {
 	host     string
-	platform Platform
+	platform model.Platform
 	baseURL  string
 }
 
@@ -166,7 +168,7 @@ type hostEntry struct {
 // matching Register: adding a self-hosted alias no longer requires editing
 // the provider core. Panics on an empty host, an empty platform, or a
 // duplicate host (same fail-fast convention as Register).
-func RegisterHostAlias(host string, platform Platform, baseURL string) {
+func RegisterHostAlias(host string, platform model.Platform, baseURL string) {
 	if host == "" {
 		panic("provider: RegisterHostAlias with empty host")
 	}
@@ -182,7 +184,7 @@ func RegisterHostAlias(host string, platform Platform, baseURL string) {
 	}
 }
 
-func classifyHost(host string) (Platform, string, error) {
+func classifyHost(host string) (model.Platform, string, error) {
 	lower := strings.ToLower(host)
 	// Strip a trailing port ("github.com:8443"); SplitHostPort also handles
 	// bracketed IPv6 ("[::1]:22"). Hosts without a port fail the split and

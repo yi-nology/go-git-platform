@@ -11,11 +11,12 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateWebhook implements provider.WebhookManager.
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	pid := pidOf(opts.Owner, opts.Repo)
 	hookOpts := &gitlab.AddProjectHookOptions{
 		URL:   new(opts.URL),
@@ -36,16 +37,16 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	}
 	hook, _, err := p.client.Projects.AddProjectHook(pid, hookOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	hook, _, err := p.client.Projects.GetProjectHook(pidOf(owner, repo), webhookID, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -55,7 +56,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // non-nil Events slice must set every derived flag explicitly (true for
 // members, false for the rest) to express removal — mirroring the create
 // mapping's scope (push / merge-request / tag-push / note families).
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	hookOpts := &gitlab.EditProjectHookOptions{}
 	if opts.URL != nil {
 		hookOpts.URL = opts.URL
@@ -78,7 +79,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 	}
 	hook, _, err := p.client.Projects.EditProjectHook(pidOf(owner, repo), webhookID, hookOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -87,21 +88,21 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Projects.DeleteProjectHook(pidOf(owner, repo), webhookID, gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteWebhook", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteWebhook", err)
 	}
 	return nil
 }
 
 // ListWebhooks implements provider.WebhookManager.
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	hooks, err := backendutil.AllPages(func(page int) ([]*gitlab.ProjectHook, error) {
 		list, _, err := p.client.Projects.ListProjectHooks(pidOf(owner, repo), &gitlab.ListProjectHooksOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListWebhooks", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
 		result = append(result, convertHook(h))
 	}
@@ -113,8 +114,8 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitLab, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitLab, r, secret); err != nil {
+		return provider.Wrap(model.PlatformGitLab, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
@@ -123,13 +124,13 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // gitlabEnvelope is GitLab's webhook dialect for the shared envelope steps
 // (dispatch rides the payload's object_kind, not an event header).
 var gitlabEnvelope = provider.WebhookEnvelope{
-	Platform: provider.PlatformGitLab,
+	Platform: model.PlatformGitLab,
 	IDPrefix: "gl",
 	// X-Gitlab-Event-UUID:GitLab 每次投递都带(重投时值不变)⇒ 真幂等键。
 	IDHeaders: []string{"X-Gitlab-Event-UUID"},
 }
 
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	_, body, err := gitlabEnvelope.Read(r, secret)
 	if err != nil {
 		return nil, err
@@ -190,12 +191,12 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		After  string `json:"after"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ParseWebhookEvent", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ParseWebhookEvent", err)
 	}
 
 	er := provider.BuildEventRepo(pl.Project.PathWithNS)
 	er.ID = pl.Project.ID
-	actor := &provider.CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
+	actor := &model.CRUser{ID: pl.User.ID, Username: pl.User.Username, Name: pl.User.Name}
 
 	event := gitlabEnvelope.NewEventWithID(r, pl.ObjectAttributes.IID, body)
 	event.Actor = actor
@@ -204,7 +205,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	switch pl.ObjectKind {
 	case "merge_request":
 		state := mapGLState(pl.ObjectAttributes.State)
-		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == provider.CRStateMerged)
+		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
 		event.Type = "cr." + action
 		event.Action = action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
@@ -215,7 +216,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			pl.ObjectAttributes.MergeCommitSHA,
 			pl.ObjectAttributes.LastCommit.ID,
 		)
-		event.CR = &provider.ChangeRequest{
+		event.CR = &model.ChangeRequest{
 			ID:           pl.ObjectAttributes.IID,
 			Number:       strconv.FormatInt(pl.ObjectAttributes.IID, 10),
 			Title:        pl.ObjectAttributes.Title,
@@ -273,14 +274,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			// 噪声过滤显式化（issue #45）：(nil, nil) 是契约陷阱——只判
 			// err 的调用方在 ev 上空指针。改返回哨兵错误，调用方
 			// errors.Is(err, provider.ErrWebhookFiltered) 显式忽略。
-			return nil, provider.Wrapf(provider.PlatformGitLab, "ParseWebhookEvent",
+			return nil, provider.Wrapf(model.PlatformGitLab, "ParseWebhookEvent",
 				"%w: pipeline status %q is noise", provider.ErrWebhookFiltered, status)
 		}
 		event.Type = "pipeline." + status
 		event.Action = status
 		event.CommitSHA = pl.ObjectAttributes.SHA
 		if pl.MergeRequest.IID != 0 {
-			event.CR = &provider.ChangeRequest{
+			event.CR = &model.ChangeRequest{
 				ID:     pl.MergeRequest.IID,
 				Number: strconv.FormatInt(pl.MergeRequest.IID, 10),
 			}
@@ -294,16 +295,16 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Action = provider.CommentActionCreated
 		// GitLab note hooks carry no comment timestamps; leave them zero
 		// rather than fabricating the parse time.
-		event.Comment = &provider.IssueComment{
+		event.Comment = &model.IssueComment{
 			Body: pl.ObjectAttributes.Note, Author: actor,
 		}
 		if pl.MergeRequest.IID != 0 {
-			event.CR = &provider.ChangeRequest{
+			event.CR = &model.ChangeRequest{
 				ID: pl.MergeRequest.IID, Number: strconv.FormatInt(pl.MergeRequest.IID, 10),
 			}
 		}
 		if pl.Issue.IID != 0 {
-			event.Issue = &provider.Issue{
+			event.Issue = &model.Issue{
 				ID: pl.Issue.IID, Number: strconv.FormatInt(pl.Issue.IID, 10),
 				Title:     pl.Issue.Title,
 				State:     mapGLIssueState(pl.Issue.State),
@@ -317,7 +318,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
 		event.Type = provider.EventTypeIssue + action
 		event.Action = action
-		event.Issue = &provider.Issue{
+		event.Issue = &model.Issue{
 			ID: pl.ObjectAttributes.IID, Number: strconv.FormatInt(pl.ObjectAttributes.IID, 10),
 			Title: pl.ObjectAttributes.Title, Body: pl.ObjectAttributes.Description,
 			State:     mapGLIssueState(pl.ObjectAttributes.State),
@@ -330,14 +331,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 
 // mapGLIssueState maps GitLab issue states ("opened"/"reopened"/"closed")
 // onto the unified IssueState vocabulary.
-func mapGLIssueState(state string) provider.IssueState {
+func mapGLIssueState(state string) model.IssueState {
 	switch state {
 	case "closed":
-		return provider.IssueStateClosed
+		return model.IssueStateClosed
 	case "opened", "reopened", "":
-		return provider.IssueStateOpen
+		return model.IssueStateOpen
 	default:
-		return provider.IssueState(state)
+		return model.IssueState(state)
 	}
 }
 

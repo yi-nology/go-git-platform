@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -71,7 +72,7 @@ type ReviewPort interface {
 
 // ListReviews lists a change request's reviews (the provider surface carries
 // no pagination parameters; the engine walks the family list).
-func ListReviews(ctx context.Context, f Family, c ReviewPort, owner, repo, number string) ([]provider.Review, error) {
+func ListReviews(ctx context.Context, f Family, c ReviewPort, owner, repo, number string) ([]model.Review, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "ListReviews", number)
 	if err != nil {
 		return nil, err
@@ -84,7 +85,7 @@ func ListReviews(ctx context.Context, f Family, c ReviewPort, owner, repo, numbe
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListReviews", err)
 	}
-	result := make([]provider.Review, 0, len(reviews))
+	result := make([]model.Review, 0, len(reviews))
 	for _, r := range reviews {
 		result = append(result, convertReview(r))
 	}
@@ -92,7 +93,7 @@ func ListReviews(ctx context.Context, f Family, c ReviewPort, owner, repo, numbe
 }
 
 // GetReview fetches one review.
-func GetReview(ctx context.Context, f Family, c ReviewPort, owner, repo, number string, reviewID int64) (*provider.Review, error) {
+func GetReview(ctx context.Context, f Family, c ReviewPort, owner, repo, number string, reviewID int64) (*model.Review, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "GetReview", number)
 	if err != nil {
 		return nil, err
@@ -108,7 +109,7 @@ func GetReview(ctx context.Context, f Family, c ReviewPort, owner, repo, number 
 // CreateReview creates a review. The provider's GitHub-style event values
 // (APPROVE/REQUEST_CHANGES/COMMENT) map onto the family's review-state
 // vocabulary; anything unrecognized (COMMENT included) becomes a comment.
-func CreateReview(ctx context.Context, f Family, c ReviewPort, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+func CreateReview(ctx context.Context, f Family, c ReviewPort, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "CreateReview", number)
 	if err != nil {
 		return nil, err
@@ -188,12 +189,12 @@ func DismissReview(ctx context.Context, f Family, c ReviewPort, owner, repo, num
 }
 
 // convertReview maps a family PullReview to the provider Review.
-func convertReview(r *PullReview) provider.Review {
-	var review provider.Review
+func convertReview(r *PullReview) model.Review {
+	var review model.Review
 	if r == nil {
 		return review
 	}
-	review = provider.Review{
+	review = model.Review{
 		ID:          r.ID,
 		Body:        r.Body,
 		SubmittedAt: r.SubmittedAt,
@@ -203,32 +204,32 @@ func convertReview(r *PullReview) provider.Review {
 	}
 	switch strings.ToLower(r.State) {
 	case "approved":
-		review.State = provider.ReviewStateApproved
+		review.State = model.ReviewStateApproved
 	case "request_changes":
-		review.State = provider.ReviewStateChangesRequested
+		review.State = model.ReviewStateChangesRequested
 	case "comment":
-		review.State = provider.ReviewStateCommented
+		review.State = model.ReviewStateCommented
 	case "pending":
-		review.State = provider.ReviewStatePending
+		review.State = model.ReviewStatePending
 	default:
 		if r.State != "" {
-			review.State = provider.ReviewState(r.State)
+			review.State = model.ReviewState(r.State)
 		}
 	}
 	return review
 }
 
 // convertReviewResult maps a family PullReview to the create-call result.
-func convertReviewResult(r *PullReview) *provider.ReviewResult {
+func convertReviewResult(r *PullReview) *model.ReviewResult {
 	if r == nil {
 		return nil
 	}
-	result := &provider.ReviewResult{
+	result := &model.ReviewResult{
 		ID:      strconv.FormatInt(r.ID, 10),
 		HTMLURL: r.HTMLURL,
 	}
 	if r.Reviewer != nil {
-		result.User = &provider.CRUser{
+		result.User = &model.CRUser{
 			ID:        r.Reviewer.ID,
 			Username:  r.Reviewer.UserName,
 			AvatarURL: r.Reviewer.AvatarURL,
@@ -280,7 +281,7 @@ type DiffPort interface {
 // GetCRDiff returns the unified diff plus the per-file breakdown of a change
 // request (the engine fetches the raw diff and the file list, summing the
 // family's per-file add/del counts for the totals).
-func GetCRDiff(ctx context.Context, f Family, c DiffPort, owner, repo, number string) (*provider.MergeDiff, error) {
+func GetCRDiff(ctx context.Context, f Family, c DiffPort, owner, repo, number string) (*model.MergeDiff, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
@@ -300,12 +301,12 @@ func GetCRDiff(ctx context.Context, f Family, c DiffPort, owner, repo, number st
 		totalAdd += cf.Additions
 		totalDel += cf.Deletions
 	}
-	return &provider.MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel, RawDiff: rawDiff}, nil
+	return &model.MergeDiff{Files: files, TotalAdd: totalAdd, TotalDel: totalDel, RawDiff: rawDiff}, nil
 }
 
 // GetCRFiles lists the files changed by a change request, normalizing the
 // family's status vocabulary onto the provider's ChangedFile flags.
-func GetCRFiles(ctx context.Context, f Family, c DiffPort, owner, repo, number string) ([]*provider.ChangedFile, error) {
+func GetCRFiles(ctx context.Context, f Family, c DiffPort, owner, repo, number string) ([]*model.ChangedFile, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "GetCRFiles", number)
 	if err != nil {
 		return nil, err
@@ -321,9 +322,9 @@ func GetCRFiles(ctx context.Context, f Family, c DiffPort, owner, repo, number s
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "GetCRFiles", err)
 	}
-	result := make([]*provider.ChangedFile, 0, len(changedFiles))
+	result := make([]*model.ChangedFile, 0, len(changedFiles))
 	for _, cf := range changedFiles {
-		out := &provider.ChangedFile{
+		out := &model.ChangedFile{
 			OldPath:   cf.PreviousFilename,
 			NewPath:   cf.Filename,
 			Additions: cf.Additions,
@@ -432,7 +433,7 @@ func GetFileContent(ctx context.Context, f Family, c FilePort, owner, repo, path
 }
 
 // CreateFile creates a file on a branch.
-func CreateFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func CreateFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	res, err := c.CreateFile(ctx, owner, repo, opts.Path, FamilyFileOptions{
 		Message: opts.Message,
 		Branch:  opts.Branch,
@@ -443,11 +444,11 @@ func CreateFile(ctx context.Context, f Family, c FilePort, owner, repo string, o
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "CreateFile", err)
 	}
-	return &provider.FileResult{CommitSHA: res.CommitSHA}, nil
+	return &model.FileResult{CommitSHA: res.CommitSHA}, nil
 }
 
 // UpdateFile updates a file on a branch.
-func UpdateFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func UpdateFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	res, err := c.UpdateFile(ctx, owner, repo, opts.Path, FamilyFileOptions{
 		Message: opts.Message,
 		Branch:  opts.Branch,
@@ -459,11 +460,11 @@ func UpdateFile(ctx context.Context, f Family, c FilePort, owner, repo string, o
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "UpdateFile", err)
 	}
-	return &provider.FileResult{CommitSHA: res.CommitSHA}, nil
+	return &model.FileResult{CommitSHA: res.CommitSHA}, nil
 }
 
 // DeleteFile deletes a file from a branch.
-func DeleteFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileDeleteOptions) (*provider.FileResult, error) {
+func DeleteFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileDeleteOptions) (*model.FileResult, error) {
 	res, _, err := c.DeleteFile(ctx, owner, repo, opts.Path, FamilyFileOptions{
 		Message: opts.Message,
 		Branch:  opts.Branch,
@@ -474,7 +475,7 @@ func DeleteFile(ctx context.Context, f Family, c FilePort, owner, repo string, o
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "DeleteFile", err)
 	}
-	return &provider.FileResult{CommitSHA: res.CommitSHA}, nil
+	return &model.FileResult{CommitSHA: res.CommitSHA}, nil
 }
 
 // --- repos ---
@@ -537,7 +538,7 @@ type RepoPort interface {
 // keyword and filtered client-side": an owner's repos silently vanished
 // whenever they didn't happen to sit on the globally-Nth page, and the page
 // semantics were wrong (Page=2 was the global page, not the owner's).
-func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	if opts.Owner != "" {
 		orgOpts := FamilyListReposOptions{ListOptions: ListOptions{Page: opts.Page, PageSize: opts.PerPage}}
@@ -551,7 +552,7 @@ func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepo
 				return nil, familyError(f, "ListRepos", status, err)
 			}
 		}
-		result := make([]*provider.PlatformRepo, 0, len(repos))
+		result := make([]*model.PlatformRepo, 0, len(repos))
 		for _, r := range repos {
 			result = append(result, ConvertRepo(r, f.Platform))
 		}
@@ -563,7 +564,7 @@ func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepo
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListRepos", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(repos))
+	result := make([]*model.PlatformRepo, 0, len(repos))
 	for _, r := range repos {
 		result = append(result, ConvertRepo(r, f.Platform))
 	}
@@ -571,7 +572,7 @@ func ListRepos(ctx context.Context, f Family, c RepoPort, opts provider.ListRepo
 }
 
 // GetRepo fetches one repository.
-func GetRepo(ctx context.Context, f Family, c RepoPort, owner, repo string) (*provider.PlatformRepo, error) {
+func GetRepo(ctx context.Context, f Family, c RepoPort, owner, repo string) (*model.PlatformRepo, error) {
 	r, status, err := c.GetRepo(ctx, owner, repo)
 	if err != nil {
 		return nil, familyError(f, "GetRepo", status, err)
@@ -580,7 +581,7 @@ func GetRepo(ctx context.Context, f Family, c RepoPort, owner, repo string) (*pr
 }
 
 // CreateRepo creates a user- or owner(org)-scoped repository.
-func CreateRepo(ctx context.Context, f Family, c RepoPort, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func CreateRepo(ctx context.Context, f Family, c RepoPort, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	opt := FamilyCreateRepoOption{
 		Name:        opts.Name,
 		Description: opts.Description,
@@ -604,7 +605,7 @@ func CreateRepo(ctx context.Context, f Family, c RepoPort, owner string, opts pr
 }
 
 // ForkRepo forks a repository.
-func ForkRepo(ctx context.Context, f Family, c RepoPort, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func ForkRepo(ctx context.Context, f Family, c RepoPort, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	forkOpts := FamilyForkRepoOption{}
 	if opts.Organization != "" {
 		org := opts.Organization
@@ -631,7 +632,7 @@ func DeleteRepo(ctx context.Context, f Family, c RepoPort, owner, repo string) e
 
 // UpdateRepo edits a repository; empty option fields leave the value
 // unchanged.
-func UpdateRepo(ctx context.Context, f Family, c RepoPort, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func UpdateRepo(ctx context.Context, f Family, c RepoPort, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	editOpts := FamilyEditRepoOption{}
 	if opts.Name != "" {
 		editOpts.Name = &opts.Name

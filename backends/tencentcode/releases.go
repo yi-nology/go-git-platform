@@ -7,6 +7,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -18,7 +19,7 @@ const maxReleaseScanPages = 50
 // ListTags implements provider.ReleaseManager. The endpoint has no
 // caller-facing pagination knobs, so every page is fetched via AllPages
 // (工蜂's page-size ceiling is 100).
-func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*model.TagInfo, error) {
 	pid := owner + "/" + repo
 	tags, err := backendutil.AllPages(func(page int) ([]*gongfeng.Tag, error) {
 		list, _, err := p.client.Tags.ListTags(ctx, pid,
@@ -26,9 +27,9 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListTags", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
 		result = append(result, convertTag(t))
 	}
@@ -38,7 +39,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 // ListReleases implements provider.ReleaseManager. The endpoint has no
 // caller-facing pagination knobs, so every page is fetched via AllPages
 // (工蜂's page-size ceiling is 100).
-func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*model.ReleaseInfo, error) {
 	pid := owner + "/" + repo
 	releases, err := backendutil.AllPages(func(page int) ([]*gongfeng.Release, error) {
 		list, _, err := p.client.Releases.ListReleases(ctx, pid,
@@ -46,9 +47,9 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReleases", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
 		result = append(result, convertRelease(r))
 	}
@@ -58,7 +59,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 // CreateRelease implements provider.ReleaseManager. Registration: the
 // create endpoint carries only tag/title/description, so opts.Target and
 // the draft/prerelease flags have no equivalent here (registered ignores).
-func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	pid := owner + "/" + repo
 	createOpts := &gongfeng.CreateReleaseOptions{
 		Tag:         gongfeng.Ptr(opts.TagName),
@@ -67,7 +68,7 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	}
 	release, _, err := p.client.Releases.CreateRelease(ctx, pid, createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateRelease", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateRelease", err)
 	}
 	return convertRelease(release), nil
 }
@@ -83,7 +84,7 @@ func (p *Provider) findReleaseByTag(ctx context.Context, op, owner, repo, tag st
 		list, _, err := p.client.Releases.ListReleases(ctx, pid,
 			&gongfeng.ListReleasesOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: 100}})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
+			return nil, provider.Wrap(model.PlatformTencentCode, op, err)
 		}
 		for _, r := range list {
 			if r != nil && r.Tag == tag {
@@ -96,14 +97,14 @@ func (p *Provider) findReleaseByTag(ctx context.Context, op, owner, repo, tag st
 		}
 	}
 	if found == nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, op, provider.ErrNotFound)
+		return nil, provider.Wrap(model.PlatformTencentCode, op, provider.ErrNotFound)
 	}
 	return found, nil
 }
 
 // GetReleaseByTag implements provider.ReleaseManager via the registered
 // list-scan detour (see findReleaseByTag).
-func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	release, err := p.findReleaseByTag(ctx, "GetReleaseByTag", owner, repo, tag)
 	if err != nil {
 		return nil, err
@@ -118,7 +119,7 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // platform — only Body is carried. An update carrying nothing (Body nil,
 // the only field forwarded) short-circuits to the GetReleaseByTag result
 // instead of PUTting an empty update body.
-func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	if opts.Body == nil {
 		return p.GetReleaseByTag(ctx, owner, repo, tag)
 	}
@@ -132,7 +133,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	}
 	updated, _, err := p.client.Releases.UpdateRelease(ctx, pid, release.ID, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateRelease", err)
 	}
 	return convertRelease(updated), nil
 }
@@ -147,7 +148,7 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 	pid := owner + "/" + repo
 	_, err = p.client.Releases.DeleteRelease(ctx, pid, release.ID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -162,7 +163,7 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	}
 	_, err := p.client.Repositories.Archive(ctx, pid, &buf, opts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetArchive", err)
 	}
 	return buf.Bytes(), nil
 }

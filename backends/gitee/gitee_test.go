@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/backends/gitee"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -26,7 +27,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 func newTestProvider(t *testing.T, srv *httptest.Server) *gitee.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitee,
+		Platform: model.PlatformGitee,
 		BaseURL:  srv.URL,
 		Token:    "test-token",
 	})
@@ -79,7 +80,7 @@ func TestBasePath_NoDoubledV5Prefix(t *testing.T) {
 			defer srv.Close()
 
 			p, err := provider.NewProvider(provider.Config{
-				Platform: provider.PlatformGitee,
+				Platform: model.PlatformGitee,
 				BaseURL:  tc.baseURL(srv.URL),
 				Token:    "test-token",
 			})
@@ -133,7 +134,7 @@ func TestListRepos(t *testing.T) {
 	if len(repos) != 1 {
 		t.Fatalf("expected 1, got %d", len(repos))
 	}
-	if repos[0].Platform != provider.PlatformGitee {
+	if repos[0].Platform != model.PlatformGitee {
 		t.Errorf("expected Gitee, got %s", repos[0].Platform)
 	}
 }
@@ -188,7 +189,7 @@ func TestGetCR_Conversion(t *testing.T) {
 	if cr.Number != "7011" || cr.ID != 15971649 {
 		t.Errorf("number/id: got %q/%d", cr.Number, cr.ID)
 	}
-	if cr.State != provider.CRStateMerged {
+	if cr.State != model.CRStateMerged {
 		t.Errorf("state: got %s, want merged", cr.State)
 	}
 	if cr.SourceBranch != "feature" || cr.TargetBranch != "master" {
@@ -235,7 +236,7 @@ func TestListCRs_SDKQueryAndTotal(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 	crs, total, err := p.ListCRs(context.Background(), provider.ListCROptions{
-		Owner: "owner", Repo: "repo", State: provider.CRStateMerged,
+		Owner: "owner", Repo: "repo", State: model.CRStateMerged,
 		SourceBranch: "feat", TargetBranch: "main", Page: 2, PerPage: 30,
 	})
 	if err != nil {
@@ -309,7 +310,7 @@ func TestMergeCR_PutThenRefetch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.State != provider.CRStateMerged {
+	if cr.State != model.CRStateMerged {
 		t.Errorf("state: got %s", cr.State)
 	}
 	if len(methods) != 2 || methods[0] != "PUT" || methods[1] != "GET" {
@@ -716,7 +717,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, err := gitee.New(provider.Config{
-		Platform:    provider.PlatformGitee,
+		Platform:    model.PlatformGitee,
 		BaseURL:     srv.URL,
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},

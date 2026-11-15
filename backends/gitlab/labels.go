@@ -9,6 +9,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -20,7 +21,7 @@ import (
 // pre-fix shape normalized Page==0 to page 1 and silently returned only
 // GitLab's default 20-label page while every other backend returned the
 // full set.
-func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitlab.Label, error) {
 			list, _, err := p.client.Labels.ListLabels(pidOf(owner, repo),
@@ -29,9 +30,9 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListLabels", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListLabels", err)
 	}
-	result := make([]*provider.Label, 0, len(labels))
+	result := make([]*model.Label, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, convertLabel(l))
 	}
@@ -40,7 +41,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 
 // CreateLabel implements provider.LabelManager. GitLab requires colors with
 // a leading '#'.
-func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	createOpts := &gitlab.CreateLabelOptions{
 		Name:  new(opts.Name),
 		Color: new("#" + opts.Color),
@@ -50,14 +51,14 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 	}
 	label, _, err := p.client.Labels.CreateLabel(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
 
 // UpdateLabel implements provider.LabelManager. GitLab addresses labels by
 // numeric ID, so the label is resolved by name first.
-func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	id, err := p.resolveLabelID(ctx, "UpdateLabel", owner, repo, name)
 	if err != nil {
 		return nil, err
@@ -74,7 +75,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, _, err := p.client.Labels.UpdateLabel(pidOf(owner, repo), id, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -86,7 +87,7 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 		return err
 	}
 	if _, err := p.client.Labels.DeleteLabel(pidOf(owner, repo), id, nil, gitlab.WithContext(ctx)); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteLabel", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteLabel", err)
 	}
 	return nil
 }
@@ -114,20 +115,20 @@ func (p *Provider) resolveLabelID(ctx context.Context, op, owner, repo, name str
 	if err != nil {
 		if errors.Is(err, backendutil.ErrLabelScanLimit) {
 			msg := fmt.Sprintf("label %q not found within 50 pages (scan limit)", name)
-			return 0, provider.Wrap(provider.PlatformGitLab, op, backendutil.NewScanLimitError(msg))
+			return 0, provider.Wrap(model.PlatformGitLab, op, backendutil.NewScanLimitError(msg))
 		}
-		return 0, provider.Wrap(provider.PlatformGitLab, op, err)
+		return 0, provider.Wrap(model.PlatformGitLab, op, err)
 	}
 	return id, nil
 }
 
-// convertLabel maps a gitlab.Label to a provider.Label. GitLab colors carry
+// convertLabel maps a gitlab.Label to a model.Label. GitLab colors carry
 // a leading '#', which is stripped for the SDK's canonical form.
-func convertLabel(l *gitlab.Label) *provider.Label {
+func convertLabel(l *gitlab.Label) *model.Label {
 	if l == nil {
 		return nil
 	}
-	return &provider.Label{
+	return &model.Label{
 		ID:          l.ID,
 		Name:        l.Name,
 		Color:       strings.TrimPrefix(l.Color, "#"),

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -27,7 +28,7 @@ func TestMergeCR_MergedIsIdempotentSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("merged MR retry must be an idempotent success, got %v", err)
 	}
-	if cr == nil || cr.State != provider.CRStateMerged {
+	if cr == nil || cr.State != model.CRStateMerged {
 		t.Fatalf("want the merged CR, got %+v", cr)
 	}
 }
@@ -73,7 +74,7 @@ func TestMergeCR_AcceptRaceRecovers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept-failed-but-merged must recover, got %v", err)
 	}
-	if cr == nil || cr.State != provider.CRStateMerged {
+	if cr == nil || cr.State != model.CRStateMerged {
 		t.Fatalf("want the merged CR, got %+v", cr)
 	}
 }

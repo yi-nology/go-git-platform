@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -54,7 +55,7 @@ func testBranchProtectionsSuite(t *testing.T, h Harness) {
 // BranchProtectionsHarness bundles inputs for the branch-protection suite.
 type BranchProtectionsHarness struct {
 	Name            string
-	Platform        provider.Platform
+	Platform        model.Platform
 	NewProvider     func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse    string
 	MutateResponse  string

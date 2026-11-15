@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
@@ -21,7 +22,7 @@ import (
 // workflow, commit-level comments/diff, repository tree/blob and branch
 // protection). Obtain it via type assertion:
 //
-//	p, _ := provider.NewProvider(provider.Config{Platform: provider.PlatformTencentCode, Token: t})
+//	p, _ := provider.NewProvider(provider.Config{Platform: model.PlatformTencentCode, Token: t})
 //	if tc, ok := p.(provider.TencentCodeExtras); ok {
 //	    tc.SubmitCodeReview(ctx, owner, repo, reviewID, opts)
 //	}
@@ -35,7 +36,7 @@ type TencentCodeExtras interface {
 	RemoveCodeReviewer(ctx context.Context, owner, repo string, reviewID int, reviewerID string) error
 	SubmitCodeReview(ctx context.Context, owner, repo string, reviewID int, opts SubmitReviewOptions) error
 	ReopenCodeReview(ctx context.Context, owner, repo string, reviewID int) error
-	GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*provider.ChangedFile, error)
+	GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*model.ChangedFile, error)
 
 	// --- MR review workflow (/merge_request/{iid}/review*) ---
 	GetMRReview(ctx context.Context, owner, repo string, mrNumber int) (*MRReview, error)
@@ -46,7 +47,7 @@ type TencentCodeExtras interface {
 	ReopenMRReview(ctx context.Context, owner, repo string, mrNumber int) error
 
 	// --- Commit-level ops (/repository/commits/{sha}) ---
-	GetCommitDiff(ctx context.Context, owner, repo, sha string, opts CommitDiffOptions) ([]*provider.ChangedFile, error)
+	GetCommitDiff(ctx context.Context, owner, repo, sha string, opts CommitDiffOptions) ([]*model.ChangedFile, error)
 	ListCommitComments(ctx context.Context, owner, repo, sha string, page, perPage int) ([]*CommitComment, error)
 	CreateCommitComment(ctx context.Context, owner, repo, sha string, opts CreateCommitCommentOptions) (*CommitComment, error)
 	GetCommitRefs(ctx context.Context, owner, repo, sha string, refType CommitRefType) (*CommitRefs, error)
@@ -94,10 +95,10 @@ type TencentCodeExtras interface {
 	// ListUserIssues lists issues across all projects visible to the
 	// authenticated user (工蜂's global /issues endpoint) — the project-
 	// scoped provider.IssueManager.ListIssues has no cross-project mode.
-	ListUserIssues(ctx context.Context, opts ListUserIssuesOptions) ([]*provider.Issue, error)
+	ListUserIssues(ctx context.Context, opts ListUserIssuesOptions) ([]*model.Issue, error)
 	// ListMilestoneIssues lists the issues of one milestone (caller-driven
 	// single page; page 0 = first page).
-	ListMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int, page, perPage int) ([]*provider.Issue, error)
+	ListMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int, page, perPage int) ([]*model.Issue, error)
 
 	// --- Archive downloads (MR / native code review variants of
 	// DownloadCompareChangedFiles) ---
@@ -159,21 +160,21 @@ type InviteReviewerOptions struct {
 
 // CodeReview represents a Tencent 工蜂 native code review.
 type CodeReview struct {
-	ID           int              `json:"id"`
-	IID          int              `json:"iid"`
-	ProjectID    int              `json:"project_id"`
-	Title        string           `json:"title"`
-	Description  string           `json:"description"`
-	State        string           `json:"state"`
-	SourceBranch string           `json:"source_branch"`
-	TargetBranch string           `json:"target_branch"`
-	SourceCommit string           `json:"source_commit"`
-	TargetCommit string           `json:"target_commit"`
-	Author       *provider.CRUser `json:"author"`
-	Reviewers    []string         `json:"reviewers"`
-	WebURL       string           `json:"web_url"`
-	CreatedAt    string           `json:"created_at"`
-	UpdatedAt    string           `json:"updated_at"`
+	ID           int           `json:"id"`
+	IID          int           `json:"iid"`
+	ProjectID    int           `json:"project_id"`
+	Title        string        `json:"title"`
+	Description  string        `json:"description"`
+	State        string        `json:"state"`
+	SourceBranch string        `json:"source_branch"`
+	TargetBranch string        `json:"target_branch"`
+	SourceCommit string        `json:"source_commit"`
+	TargetCommit string        `json:"target_commit"`
+	Author       *model.CRUser `json:"author"`
+	Reviewers    []string      `json:"reviewers"`
+	WebURL       string        `json:"web_url"`
+	CreatedAt    string        `json:"created_at"`
+	UpdatedAt    string        `json:"updated_at"`
 }
 
 // CreateCodeReviewOptions creates a native code review.
@@ -208,18 +209,18 @@ type UpdateCodeReviewOptions struct {
 
 // MRReview represents the review state of a merge request.
 type MRReview struct {
-	ID           int              `json:"id"`
-	IID          int              `json:"iid"`
-	ProjectID    int              `json:"project_id"`
-	State        string           `json:"state"`
-	Title        string           `json:"title"`
-	Description  string           `json:"description"`
-	Author       *provider.CRUser `json:"author"`
-	SourceBranch string           `json:"source_branch"`
-	TargetBranch string           `json:"target_branch"`
-	WebURL       string           `json:"web_url"`
-	CreatedAt    string           `json:"created_at"`
-	UpdatedAt    string           `json:"updated_at"`
+	ID           int           `json:"id"`
+	IID          int           `json:"iid"`
+	ProjectID    int           `json:"project_id"`
+	State        string        `json:"state"`
+	Title        string        `json:"title"`
+	Description  string        `json:"description"`
+	Author       *model.CRUser `json:"author"`
+	SourceBranch string        `json:"source_branch"`
+	TargetBranch string        `json:"target_branch"`
+	WebURL       string        `json:"web_url"`
+	CreatedAt    string        `json:"created_at"`
+	UpdatedAt    string        `json:"updated_at"`
 }
 
 // CommitDiffOptions controls a single-commit diff.
@@ -230,13 +231,13 @@ type CommitDiffOptions struct {
 
 // CommitComment represents a comment on a commit.
 type CommitComment struct {
-	ID        int              `json:"id"`
-	Body      string           `json:"body"`
-	Author    *provider.CRUser `json:"author"`
-	Path      string           `json:"path"`
-	Line      int              `json:"line"`
-	LineType  string           `json:"line_type"`
-	CreatedAt string           `json:"created_at"`
+	ID        int           `json:"id"`
+	Body      string        `json:"body"`
+	Author    *model.CRUser `json:"author"`
+	Path      string        `json:"path"`
+	Line      int           `json:"line"`
+	LineType  string        `json:"line_type"`
+	CreatedAt string        `json:"created_at"`
 }
 
 // CreateCommitCommentOptions creates a comment on a commit.
@@ -324,7 +325,7 @@ func (t *Provider) CreateCodeReview(ctx context.Context, owner, repo string, opt
 	}
 	review, _, err := t.client.Reviews.CreateCommitReview(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCodeReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -348,7 +349,7 @@ func (t *Provider) ListCodeReviews(ctx context.Context, owner, repo string, opts
 	}
 	reviews, _, err := t.client.Reviews.ListCommitReviews(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCodeReviews", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCodeReviews", err)
 	}
 	result := make([]*CodeReview, 0, len(reviews))
 	for _, r := range reviews {
@@ -360,7 +361,7 @@ func (t *Provider) ListCodeReviews(ctx context.Context, owner, repo string, opts
 func (t *Provider) GetCodeReview(ctx context.Context, owner, repo string, reviewID int) (*CodeReview, error) {
 	review, _, err := t.client.Reviews.GetCommitReview(ctx, pid(owner, repo), reviewID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCodeReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -372,7 +373,7 @@ func (t *Provider) UpdateCodeReview(ctx context.Context, owner, repo string, rev
 	}
 	review, _, err := t.client.Reviews.UpdateCommitReview(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateCodeReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateCodeReview", err)
 	}
 	return reviewToCodeReview(review), nil
 }
@@ -391,7 +392,7 @@ func (t *Provider) InviteCodeReviewer(ctx context.Context, owner, repo string, r
 	}
 	_, err := t.client.Reviews.InviteCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "InviteCodeReviewer", err)
+		return provider.Wrap(model.PlatformTencentCode, "InviteCodeReviewer", err)
 	}
 	return nil
 }
@@ -403,7 +404,7 @@ func (t *Provider) RemoveCodeReviewer(ctx context.Context, owner, repo string, r
 	}
 	_, err := t.client.Reviews.RemoveCommitReviewer(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveCodeReviewer", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveCodeReviewer", err)
 	}
 	return nil
 }
@@ -415,7 +416,7 @@ func (t *Provider) SubmitCodeReview(ctx context.Context, owner, repo string, rev
 	}
 	_, _, err := t.client.Reviews.SubmitCommitReviewSummary(ctx, pid(owner, repo), reviewID, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "SubmitCodeReview", err)
+		return provider.Wrap(model.PlatformTencentCode, "SubmitCodeReview", err)
 	}
 	return nil
 }
@@ -423,15 +424,15 @@ func (t *Provider) SubmitCodeReview(ctx context.Context, owner, repo string, rev
 func (t *Provider) ReopenCodeReview(ctx context.Context, owner, repo string, reviewID int) error {
 	_, _, err := t.client.Reviews.ReopenCommitReview(ctx, pid(owner, repo), reviewID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "ReopenCodeReview", err)
+		return provider.Wrap(model.PlatformTencentCode, "ReopenCodeReview", err)
 	}
 	return nil
 }
 
-func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*provider.ChangedFile, error) {
+func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo string, reviewID int) ([]*model.ChangedFile, error) {
 	// The SDK provides DownloadCommitReviewChangedFiles which writes to an io.Writer.
 	// For JSON parsing, use a raw API call via the SDK client.
-	var files []*provider.ChangedFile
+	var files []*model.ChangedFile
 	err := t.doRequest(ctx, "GetCodeReviewChangedFiles", "GET",
 		fmt.Sprintf("projects/%s/review/%d/changed_files", backendutil.Esc(pid(owner, repo)), reviewID), nil, &files)
 	if err != nil {
@@ -447,7 +448,7 @@ func (t *Provider) GetCodeReviewChangedFiles(ctx context.Context, owner, repo st
 func (t *Provider) GetMRReview(ctx context.Context, owner, repo string, mrNumber int) (*MRReview, error) {
 	review, _, err := t.client.Reviews.GetMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetMRReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetMRReview", err)
 	}
 	return reviewToMRReview(review), nil
 }
@@ -466,7 +467,7 @@ func (t *Provider) InviteMRReviewer(ctx context.Context, owner, repo string, mrN
 	}
 	_, err := t.client.Reviews.InviteMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "InviteMRReviewer", err)
+		return provider.Wrap(model.PlatformTencentCode, "InviteMRReviewer", err)
 	}
 	return nil
 }
@@ -477,7 +478,7 @@ func (t *Provider) RemoveMRReviewer(ctx context.Context, owner, repo string, mrN
 	}
 	_, err := t.client.Reviews.RemoveMRReviewer(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveMRReviewer", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveMRReviewer", err)
 	}
 	return nil
 }
@@ -485,7 +486,7 @@ func (t *Provider) RemoveMRReviewer(ctx context.Context, owner, repo string, mrN
 func (t *Provider) CancelMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
 	_, err := t.client.Reviews.CancelMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "CancelMRReview", err)
+		return provider.Wrap(model.PlatformTencentCode, "CancelMRReview", err)
 	}
 	return nil
 }
@@ -497,7 +498,7 @@ func (t *Provider) SubmitMRReview(ctx context.Context, owner, repo string, mrNum
 	}
 	_, _, err := t.client.Reviews.SubmitMRReviewSummary(ctx, pid(owner, repo), mrNumber, sdkOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "SubmitMRReview", err)
+		return provider.Wrap(model.PlatformTencentCode, "SubmitMRReview", err)
 	}
 	return nil
 }
@@ -505,7 +506,7 @@ func (t *Provider) SubmitMRReview(ctx context.Context, owner, repo string, mrNum
 func (t *Provider) ReopenMRReview(ctx context.Context, owner, repo string, mrNumber int) error {
 	_, _, err := t.client.Reviews.ReopenMRReview(ctx, pid(owner, repo), mrNumber)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "ReopenMRReview", err)
+		return provider.Wrap(model.PlatformTencentCode, "ReopenMRReview", err)
 	}
 	return nil
 }
@@ -514,7 +515,7 @@ func (t *Provider) ReopenMRReview(ctx context.Context, owner, repo string, mrNum
 // Commit-level operations (/repository/commits/{sha})
 // ===========================================================================
 
-func (t *Provider) GetCommitDiff(ctx context.Context, owner, repo, sha string, opts CommitDiffOptions) ([]*provider.ChangedFile, error) {
+func (t *Provider) GetCommitDiff(ctx context.Context, owner, repo, sha string, opts CommitDiffOptions) ([]*model.ChangedFile, error) {
 	sdkOpts := &gongfeng.GetCommitDiffOptions{}
 	if opts.Path != "" {
 		sdkOpts.Path = gongfeng.Ptr(opts.Path)
@@ -524,9 +525,9 @@ func (t *Provider) GetCommitDiff(ctx context.Context, owner, repo, sha string, o
 	}
 	diffs, _, err := t.client.Commits.GetCommitDiff(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitDiff", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCommitDiff", err)
 	}
-	result := make([]*provider.ChangedFile, 0, len(diffs))
+	result := make([]*model.ChangedFile, 0, len(diffs))
 	for _, d := range diffs {
 		result = append(result, convertDiff(d))
 	}
@@ -540,7 +541,7 @@ func (t *Provider) ListCommitComments(ctx context.Context, owner, repo, sha stri
 	}
 	comments, _, err := t.client.Commits.ListCommitComments(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommitComments", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCommitComments", err)
 	}
 	result := make([]*CommitComment, 0, len(comments))
 	for _, c := range comments {
@@ -573,7 +574,7 @@ func (t *Provider) CreateCommitComment(ctx context.Context, owner, repo, sha str
 	}
 	comment, _, err := t.client.Commits.CreateCommitComment(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCommitComment", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateCommitComment", err)
 	}
 	cc := &CommitComment{
 		Body:     comment.Note,
@@ -594,7 +595,7 @@ func (t *Provider) GetCommitRefs(ctx context.Context, owner, repo, sha string, r
 	}
 	refs, _, err := t.client.Commits.ListCommitRefs(ctx, pid(owner, repo), sha, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitRefs", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCommitRefs", err)
 	}
 	result := &CommitRefs{}
 	for _, ref := range refs {
@@ -624,7 +625,7 @@ func (t *Provider) GetRepoTree(ctx context.Context, owner, repo, path, ref strin
 	}
 	nodes, _, err := t.client.Repositories.ListTree(ctx, pid(owner, repo), sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRepoTree", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetRepoTree", err)
 	}
 	result := make([]*TreeEntryNode, 0, len(nodes))
 	for _, n := range nodes {
@@ -662,7 +663,7 @@ func (t *Provider) GetBlob(ctx context.Context, owner, repo, sha string) ([]byte
 func (t *Provider) GetBranch(ctx context.Context, owner, repo, branch string) (*BranchInfo, error) {
 	b, _, err := t.client.Branches.GetBranch(ctx, pid(owner, repo), branch)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetBranch", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetBranch", err)
 	}
 	info := &BranchInfo{Name: b.Name, Protected: b.Protected}
 	if b.Commit != nil {
@@ -676,7 +677,7 @@ func (t *Provider) GetRawFile(ctx context.Context, owner, repo, ref, path string
 	_, err := t.client.Repositories.GetRawFile(ctx, pid(owner, repo), ref, &buf,
 		&gongfeng.GetRawFileOptions{FilePath: gongfeng.Ptr(path)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRawFile", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetRawFile", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -686,7 +687,7 @@ func (t *Provider) GetCommitRawFile(ctx context.Context, owner, repo, sha, path 
 	_, err := t.client.Repositories.GetCommitRawFile(ctx, pid(owner, repo), sha, &buf,
 		&gongfeng.GetRawFileOptions{FilePath: gongfeng.Ptr(path)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommitRawFile", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCommitRawFile", err)
 	}
 	return buf.Bytes(), nil
 }
@@ -695,7 +696,7 @@ func (t *Provider) DownloadCompareChangedFiles(ctx context.Context, owner, repo,
 	_, err := t.client.Repositories.DownloadCompareChangedFiles(ctx, pid(owner, repo), w,
 		&gongfeng.CompareOptions{From: gongfeng.Ptr(from), To: gongfeng.Ptr(to)})
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DownloadCompareChangedFiles", err)
+		return provider.Wrap(model.PlatformTencentCode, "DownloadCompareChangedFiles", err)
 	}
 	return nil
 }

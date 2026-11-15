@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -35,7 +36,7 @@ type BranchHarnessConfig struct {
 
 type BranchHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider newProviderFn
 	BranchHarnessConfig
 }
@@ -123,7 +124,7 @@ type CommitHarnessConfig struct {
 
 type CommitHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider newProviderFn
 	CommitHarnessConfig
 }
@@ -266,7 +267,7 @@ type DiffHarnessConfig struct {
 
 type DiffHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider newProviderFn
 	DiffHarnessConfig
 }
@@ -343,7 +344,7 @@ type FileHarnessConfig struct {
 
 type FileHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider newProviderFn
 	FileHarnessConfig
 }

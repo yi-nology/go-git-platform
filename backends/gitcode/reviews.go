@@ -7,21 +7,22 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListReviews implements provider.ReviewManager via
 // ListPullRequestReviews (GET .../pulls/{n}/reviews).
-func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "ListReviews", number)
+func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
 	reviews, err := p.client.ListPullRequestReviews(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListReviews", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListReviews", err)
 	}
-	result := make([]provider.Review, 0, len(reviews))
+	result := make([]model.Review, 0, len(reviews))
 	for _, r := range reviews {
 		result = append(result, convertReview(r))
 	}
@@ -30,14 +31,14 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 
 // GetReview implements provider.ReviewManager via
 // GetPullRequestReview (GET .../pulls/{n}/reviews/{id}).
-func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "GetReview", number)
+func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
 	review, err := p.client.GetPullRequestReview(ctx, owner, repo, n, reviewID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetReview", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetReview", err)
 	}
 	r := convertReview(review)
 	return &r, nil
@@ -52,8 +53,8 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // failed inline comment is logged but does not fail the review. If the
 // review endpoint itself fails, the pre-P3 fallback path posts the inline
 // comments and a plain note instead of giving up.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "CreateReview", number)
+func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -61,14 +62,14 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	if err != nil {
 		return p.createReviewFallback(ctx, owner, repo, number, opts)
 	}
-	result := &provider.ReviewResult{ID: strconv.FormatInt(review.ID, 10)}
+	result := &model.ReviewResult{ID: strconv.FormatInt(review.ID, 10)}
 	user := review.User
 	if user == nil {
 		user = review.Author
 	}
 	if user != nil {
 		authorID, _ := parseGitCodeID(user.ID)
-		result.User = &provider.CRUser{
+		result.User = &model.CRUser{
 			ID: authorID, Username: user.Login, AvatarURL: user.AvatarURL,
 		}
 	}
@@ -82,8 +83,8 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 
 // createReviewFallback posts the review as individual inline comments plus a
 // top-level note when the dedicated review endpoint rejects the request.
-func (p *Provider) createReviewFallback(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "CreateReview", number)
+func (p *Provider) createReviewFallback(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +100,13 @@ func (p *Provider) createReviewFallback(ctx context.Context, owner, repo, number
 		}
 	}
 	if lastErr != nil && len(opts.Comments) == 0 {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateReview", lastErr)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateReview", lastErr)
 	}
-	return &provider.ReviewResult{}, nil
+	return &model.ReviewResult{}, nil
 }
 
 // createInlineComment posts one inline (file/line-anchored) review comment.
-func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, number int, comment provider.ReviewComment, commitID string) error {
+func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, number int, comment model.ReviewComment, commitID string) error {
 	side := comment.Side
 	if side == "" {
 		side = "RIGHT"
@@ -114,7 +115,7 @@ func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, 
 		Body: comment.Body, Path: comment.Path, Line: comment.Line, Side: side, CommitID: commitID,
 	})
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "createInlineComment", err)
+		return provider.Wrap(model.PlatformGitCode, "createInlineComment", err)
 	}
 	return nil
 }
@@ -123,14 +124,14 @@ func (p *Provider) createInlineComment(ctx context.Context, owner, repo string, 
 // RequestPullRequestReviewers (POST .../pulls/{n}/requested_reviewers with
 // the reviewer logins under the same "reviewers" wire key as GitHub).
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "RequestReviewers", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "RequestReviewers", number)
 	if err != nil {
 		return err
 	}
 	if err := p.client.RequestPullRequestReviewers(ctx, owner, repo, n, gitcode.PullRequestReviewRequest{
 		Reviewers: reviewers,
 	}); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "RequestReviewers", err)
+		return provider.Wrap(model.PlatformGitCode, "RequestReviewers", err)
 	}
 	return nil
 }
@@ -139,12 +140,12 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // DismissPullRequestReview (PUT .../pulls/{n}/reviews/{id}/dismissals with
 // the dismissal message).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitCode, "DismissReview", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitCode, "DismissReview", number)
 	if err != nil {
 		return err
 	}
 	if err := p.client.DismissPullRequestReview(ctx, owner, repo, n, reviewID, message); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DismissReview", err)
+		return provider.Wrap(model.PlatformGitCode, "DismissReview", err)
 	}
 	return nil
 }

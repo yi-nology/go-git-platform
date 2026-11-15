@@ -11,7 +11,7 @@ import (
 
 // CILogsHarnessConfig mounts the CI failure-diagnostics suite. The suite
 // drives ListFailedJobLogs against a recording server and asserts the
-// response converts to []provider.JobLog with populated Name/Stage fields.
+// response converts to []model.JobLog with populated Name/Stage fields.
 //
 // GreenResponse is the JSON body the mock returns for a commit with no
 // failed CI jobs (the platform's "no runs" or "all green" shape). The

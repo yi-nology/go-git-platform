@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // fakeIssueMgr 嵌入 nil Provider + IssueManager：只有 EnsureIssue* 会碰的
@@ -17,19 +19,19 @@ type fakeIssueMgr struct {
 
 	getCalls        int
 	getErr          error
-	cur             *Issue
+	cur             *model.Issue
 	writeErr        error // 非 nil 时写方法返回它
 	closeCalls      int
 	reopenCalls     int
-	closed          *Issue // CloseIssue 返回体
-	reopened        *Issue // ReopenIssue 返回体
+	closed          *model.Issue // CloseIssue 返回体
+	reopened        *model.Issue // ReopenIssue 返回体
 	addCalls        [][]string
 	removed         []string
 	bulkRemoved     []string
 	bulkRemoveCalls int
 }
 
-func (f *fakeIssueMgr) GetIssue(context.Context, string, string, string) (*Issue, error) {
+func (f *fakeIssueMgr) GetIssue(context.Context, string, string, string) (*model.Issue, error) {
 	f.getCalls++
 	if f.getErr != nil {
 		return nil, f.getErr
@@ -37,7 +39,7 @@ func (f *fakeIssueMgr) GetIssue(context.Context, string, string, string) (*Issue
 	return f.cur, nil
 }
 
-func (f *fakeIssueMgr) CloseIssue(context.Context, string, string, string) (*Issue, error) {
+func (f *fakeIssueMgr) CloseIssue(context.Context, string, string, string) (*model.Issue, error) {
 	f.closeCalls++
 	if f.writeErr != nil {
 		return nil, f.writeErr
@@ -45,7 +47,7 @@ func (f *fakeIssueMgr) CloseIssue(context.Context, string, string, string) (*Iss
 	return f.closed, nil
 }
 
-func (f *fakeIssueMgr) ReopenIssue(context.Context, string, string, string) (*Issue, error) {
+func (f *fakeIssueMgr) ReopenIssue(context.Context, string, string, string) (*model.Issue, error) {
 	f.reopenCalls++
 	if f.writeErr != nil {
 		return nil, f.writeErr
@@ -80,8 +82,8 @@ var (
 // 2 不符恰一写 / 3 非法 want 零 HTTP / 4 缺能力零 HTTP，另附 409 冲突、
 // 非冲突写错与 GET 失败三条 outcome 契约钉子。
 func TestEnsureIssueState(t *testing.T) {
-	curOpen := &Issue{Number: "7", State: IssueStateOpen}
-	outClosed := &Issue{Number: "7", State: IssueStateClosed}
+	curOpen := &model.Issue{Number: "7", State: model.IssueStateOpen}
+	outClosed := &model.Issue{Number: "7", State: model.IssueStateClosed}
 	getBoom := errors.New("get boom")
 	writeBoom := errors.New("write boom")
 
@@ -89,10 +91,10 @@ func TestEnsureIssueState(t *testing.T) {
 		name        string
 		p           Provider      // 非 nil 时替代 fake（缺能力桩）
 		fake        *fakeIssueMgr // p 为 nil 时使用
-		want        IssueState
+		want        model.IssueState
 		wantOutcome MutationOutcome
-		wantIssue   *Issue // 指针身份比对
-		wantErr     error  // nil = 期望成功；非 nil 走 errors.Is
+		wantIssue   *model.Issue // 指针身份比对
+		wantErr     error        // nil = 期望成功；非 nil 走 errors.Is
 		getCalls    int
 		closeCalls  int
 		reopenCalls int
@@ -100,7 +102,7 @@ func TestEnsureIssueState(t *testing.T) {
 		{
 			name:        "1_已达want_Unchanged零写",
 			fake:        &fakeIssueMgr{cur: curOpen},
-			want:        IssueStateOpen,
+			want:        model.IssueStateOpen,
 			wantOutcome: OutcomeUnchanged,
 			wantIssue:   curOpen,
 			getCalls:    1,
@@ -108,7 +110,7 @@ func TestEnsureIssueState(t *testing.T) {
 		{
 			name:        "2_不符_Close恰一调用_Updated返返回体",
 			fake:        &fakeIssueMgr{cur: curOpen, closed: outClosed},
-			want:        IssueStateClosed,
+			want:        model.IssueStateClosed,
 			wantOutcome: OutcomeUpdated,
 			wantIssue:   outClosed,
 			getCalls:    1,
@@ -117,19 +119,19 @@ func TestEnsureIssueState(t *testing.T) {
 		{
 			name:    "3_want非openclosed_InvalidInput零HTTP",
 			fake:    &fakeIssueMgr{cur: curOpen},
-			want:    IssueState("merged"),
+			want:    model.IssueState("merged"),
 			wantErr: ErrInvalidInput,
 		},
 		{
 			name:    "4_缺IssueManager能力_NotImplemented零HTTP",
 			p:       struct{ Provider }{},
-			want:    IssueStateClosed,
+			want:    model.IssueStateClosed,
 			wantErr: ErrNotImplemented,
 		},
 		{
 			name:        "写409_Conflict带写前快照",
 			fake:        &fakeIssueMgr{cur: curOpen, writeErr: fmt.Errorf("close: %w", ErrConflict)},
-			want:        IssueStateClosed,
+			want:        model.IssueStateClosed,
 			wantOutcome: OutcomeConflict,
 			wantIssue:   curOpen,
 			wantErr:     ErrConflict,
@@ -139,7 +141,7 @@ func TestEnsureIssueState(t *testing.T) {
 		{
 			name:       "非409写错_零outcome",
 			fake:       &fakeIssueMgr{cur: curOpen, writeErr: writeBoom},
-			want:       IssueStateClosed,
+			want:       model.IssueStateClosed,
 			wantErr:    writeBoom,
 			getCalls:   1,
 			closeCalls: 1,
@@ -147,7 +149,7 @@ func TestEnsureIssueState(t *testing.T) {
 		{
 			name:     "GET失败_错误透传零outcome",
 			fake:     &fakeIssueMgr{getErr: getBoom},
-			want:     IssueStateClosed,
+			want:     model.IssueStateClosed,
 			wantErr:  getBoom,
 			getCalls: 1,
 		},
@@ -211,7 +213,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 	}{
 		{
 			name:        "5_集合相等顺序无关_Unchanged零写返现状原样",
-			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"b", "a"}}},
+			fake:        &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"b", "a"}}},
 			want:        []string{"a", "b"},
 			wantOutcome: OutcomeUnchanged,
 			wantLabels:  []string{"b", "a"},
@@ -219,7 +221,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		},
 		{
 			name:        "6_want超集_批量Add恰一次差集_Updated",
-			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"a"}}},
+			fake:        &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"a"}}},
 			want:        []string{"b", "a", "c"},
 			wantOutcome: OutcomeUpdated,
 			wantLabels:  []string{"b", "a", "c"},
@@ -228,7 +230,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		},
 		{
 			name:        "7_want子集_批量Remove差集恰一次_Updated",
-			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"a", "b", "c"}}},
+			fake:        &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"a", "b", "c"}}},
 			want:        []string{"a"},
 			wantOutcome: OutcomeUpdated,
 			wantLabels:  []string{"a"},
@@ -237,7 +239,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		},
 		{
 			name:        "8_want空_current非空_批量Remove恰一次_Updated返空",
-			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"x", "y"}}},
+			fake:        &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"x", "y"}}},
 			want:        []string{},
 			wantOutcome: OutcomeUpdated,
 			wantLabels:  []string{},
@@ -247,7 +249,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		{
 			name: "Remove写409_Conflict带写前快照（批量形）",
 			fake: &fakeIssueMgr{
-				cur:      &Issue{Number: "7", Labels: []string{"a", "b"}},
+				cur:      &model.Issue{Number: "7", Labels: []string{"a", "b"}},
 				writeErr: fmt.Errorf("remove: %w", ErrConflict),
 			},
 			want:        []string{"a"},
@@ -267,7 +269,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		{
 			name: "Add写409_Conflict带写前快照",
 			fake: &fakeIssueMgr{
-				cur:      &Issue{Number: "7", Labels: []string{"a"}},
+				cur:      &model.Issue{Number: "7", Labels: []string{"a"}},
 				writeErr: fmt.Errorf("add: %w", ErrConflict),
 			},
 			want:        []string{"b"},
@@ -279,7 +281,7 @@ func TestEnsureIssueLabels(t *testing.T) {
 		},
 		{
 			name:        "want含重复_toAdd与目标去重保序",
-			fake:        &fakeIssueMgr{cur: &Issue{Number: "7", Labels: []string{"a"}}},
+			fake:        &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"a"}}},
 			want:        []string{"b", "b", "a", "c"},
 			wantOutcome: OutcomeUpdated,
 			wantLabels:  []string{"b", "a", "c"},

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -42,7 +43,7 @@ func TestSmoke_RealEnvironment(t *testing.T) {
 
 	platform := os.Getenv("GIT_PLATFORM_SMOKE_PLATFORM")
 	if platform == "" {
-		platform = string(provider.PlatformGitHub)
+		platform = string(model.PlatformGitHub)
 	}
 	owner := os.Getenv("GIT_PLATFORM_SMOKE_OWNER")
 	repo := os.Getenv("GIT_PLATFORM_SMOKE_REPO")
@@ -51,7 +52,7 @@ func TestSmoke_RealEnvironment(t *testing.T) {
 	}
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.Platform(platform),
+		Platform: model.Platform(platform),
 		BaseURL:  os.Getenv("GIT_PLATFORM_SMOKE_URL"),
 		Token:    token,
 	})

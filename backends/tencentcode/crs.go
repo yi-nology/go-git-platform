@@ -6,16 +6,17 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
-func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	// #160：gongfeng 创建面无 work_in_progress 参数——Draft=true 显式
 	// 拒绝（台账 Field:"opts.Draft" 登记），绝不静默产出非 draft MR。
 	if opts.Draft {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCR", provider.ErrDraftNotSupported)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateCR", provider.ErrDraftNotSupported)
 	}
 	pid := opts.Owner + "/" + opts.Repo
 	createOpts := &gongfeng.CreateMergeRequestOptions{
@@ -28,21 +29,21 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	mr, _, err := p.client.MergeRequests.CreateMergeRequest(ctx, pid, createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "GetCR", number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pid := owner + "/" + repo
 	mr, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -52,7 +53,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	pid := opts.Owner + "/" + opts.Repo
 	buildOpts := func(page, perPage int) *gongfeng.ListMergeRequestsOptions {
 		listOpts := &gongfeng.ListMergeRequestsOptions{
@@ -77,7 +78,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		}
 		list, r, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(opts.Page, perPage))
 		if err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+			return nil, nil, provider.Wrap(model.PlatformTencentCode, "ListCRs", err)
 		}
 		mrs, resp = list, r
 	} else {
@@ -87,10 +88,10 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 			list, _, err := p.client.MergeRequests.ListMergeRequests(ctx, pid, buildOpts(page, provider.MaxPerPage))
 			return list, err
 		}); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformTencentCode, "ListCRs", err)
+			return nil, nil, provider.Wrap(model.PlatformTencentCode, "ListCRs", err)
 		}
 	}
-	crs := make([]*provider.ChangeRequest, 0, len(mrs))
+	crs := make([]*model.ChangeRequest, 0, len(mrs))
 	for _, mr := range mrs {
 		crs = append(crs, convertMR(mr))
 	}
@@ -116,8 +117,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 // ——两个意图静默丢弃（平台默认：普通合并、保留源分支）按 DivergenceIgnore
 // 登记进台账。幂等面与家族对齐（giteafamily crs.go 的 405-merged 恢复）：
 // 已合并 MR 重试 MergeCR 返回当前 CR 而非硬失败——重试/幂等场景跨后端一致。
-func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "MergeCR", number)
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +129,11 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	existingMR, _, err := p.client.MergeRequests.GetMergeRequest(ctx, pid, n)
 	if err == nil {
 		state := mapState(existingMR.State)
-		if state == provider.CRStateMerged {
+		if state == model.CRStateMerged {
 			return convertMR(existingMR), nil
 		}
-		if state != provider.CRStateOpened {
-			return nil, provider.Wrapf(provider.PlatformTencentCode, "MergeCR",
+		if state != model.CRStateOpened {
+			return nil, provider.Wrapf(model.PlatformTencentCode, "MergeCR",
 				"MR is not in 'opened' state (current: %s)", existingMR.State)
 		}
 	}
@@ -145,17 +146,17 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 		// Race recovery: the MR can complete between the pre-flight and the
 		// accept — a re-read showing merged is still an idempotent success.
 		if latest, _, getErr := p.client.MergeRequests.GetMergeRequest(ctx, pid, n); getErr == nil &&
-			mapState(latest.State) == provider.CRStateMerged {
+			mapState(latest.State) == model.CRStateMerged {
 			return convertMR(latest), nil
 		}
-		return nil, provider.Wrap(provider.PlatformTencentCode, "MergeCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "MergeCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CloseCR", number)
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -165,14 +166,14 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CloseCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CloseCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ReopenCR", number)
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +183,7 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ReopenCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ReopenCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -192,8 +193,8 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 // 三态收编（2A）：Resolve* 非 specified 不动，specified 空值即清空。
 // 描述 ⇒ "description":""（*string+omitempty：非 nil 指针穿过 omitempty，
 // 空串照上 wire）；指派单值面 ⇒ "assignee_id":0（Phase 3 验服务端）。
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "UpdateCR", number)
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +227,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(ctx, pid, n, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateCR", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateCR", err)
 	}
 	return convertMR(mr), nil
 }
@@ -235,14 +236,14 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 //
 // Tencent Code's API no longer supports setting labels via UpdateMergeRequest.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	return provider.Wrap(provider.PlatformTencentCode, "UpdateCRLabels", provider.ErrNotImplemented)
+	return provider.Wrap(model.PlatformTencentCode, "UpdateCRLabels", provider.ErrNotImplemented)
 }
 
 // ListCRComments implements provider.ChangeRequestManager. The endpoint has
 // no caller-facing pagination knobs, so every page is fetched via AllPages
 // (工蜂's page-size ceiling is 100).
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRComments", number)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*model.CRComment, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -253,11 +254,11 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRComments", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(notes))
+	result := make([]*model.CRComment, 0, len(notes))
 	for _, n := range notes {
-		comment := &provider.CRComment{
+		comment := &model.CRComment{
 			ID:        int64(n.ID),
 			Body:      n.Body,
 			CreatedAt: n.CreatedAt.Time,
@@ -274,8 +275,8 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 // ListCRCommits implements provider.ChangeRequestManager. The endpoint has
 // no caller-facing pagination knobs, so every page is fetched via AllPages
 // (工蜂's page-size ceiling is 100).
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListCRCommits", number)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*model.CRCommit, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
@@ -286,14 +287,14 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCRCommits", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
-		result = append(result, &provider.CRCommit{
+		result = append(result, &model.CRCommit{
 			SHA:     c.ID,
 			Message: c.Message,
-			Author:  &provider.CRUser{Name: c.AuthorName},
+			Author:  &model.CRUser{Name: c.AuthorName},
 		})
 	}
 	return result, nil

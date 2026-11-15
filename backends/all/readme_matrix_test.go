@@ -24,21 +24,22 @@ import (
 
 	// 注册全部七平台后端(空导入触发各 init 的注册面)。
 	_ "github.com/yi-nology/go-git-platform/backends/all"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-// matrixPlatformCols 是 README 矩阵的列顺序（列头→provider.Platform）。
+// matrixPlatformCols 是 README 矩阵的列顺序（列头→model.Platform）。
 var matrixPlatformCols = []struct {
 	header string
-	plat   provider.Platform
+	plat   model.Platform
 }{
-	{"GH", provider.PlatformGitHub},
-	{"GitLab", provider.PlatformGitLab},
-	{"Gitea", provider.PlatformGitea},
-	{"Forgejo", provider.PlatformForgejo},
-	{"Gitee", provider.PlatformGitee},
-	{"GitCode", provider.PlatformGitCode},
-	{"Tencent", provider.PlatformTencentCode},
+	{"GH", model.PlatformGitHub},
+	{"GitLab", model.PlatformGitLab},
+	{"Gitea", model.PlatformGitea},
+	{"Forgejo", model.PlatformForgejo},
+	{"Gitee", model.PlatformGitee},
+	{"GitCode", model.PlatformGitCode},
+	{"Tencent", model.PlatformTencentCode},
 }
 
 // TestReadmeMatrixMatchesCapabilities parses the README capability matrix
@@ -101,7 +102,7 @@ var matrixStubSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWrit
 
 // capBool builds the platform's provider against the stub server and reads
 // the CapabilitySet field via reflection.
-func capBool(t *testing.T, field string, plat provider.Platform) bool {
+func capBool(t *testing.T, field string, plat model.Platform) bool {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{Platform: plat, BaseURL: matrixStubSrv.URL, Token: "matrix-check"})
 	if err != nil {

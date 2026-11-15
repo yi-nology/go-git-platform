@@ -6,6 +6,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -131,7 +132,7 @@ func (p *Provider) ListGroups(ctx context.Context, opts ListGroupsOptions) ([]*G
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListGroups", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListGroups", err)
 	}
 	result := make([]*GroupInfo, 0, len(groups))
 	for _, g := range groups {
@@ -144,7 +145,7 @@ func (p *Provider) ListGroups(ctx context.Context, opts ListGroupsOptions) ([]*G
 func (p *Provider) GetGroup(ctx context.Context, groupID int) (*GroupInfo, error) {
 	g, _, err := p.client.Groups.GetGroup(ctx, groupID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetGroup", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetGroup", err)
 	}
 	return convertGroup(g), nil
 }
@@ -157,7 +158,7 @@ func (p *Provider) CreateGroup(ctx context.Context, opts CreateGroupOptions) (*G
 		Description: gongfeng.Ptr(opts.Description),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateGroup", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateGroup", err)
 	}
 	return convertGroup(g), nil
 }
@@ -174,7 +175,7 @@ func (p *Provider) EditGroup(ctx context.Context, groupID int, opts EditGroupOpt
 	}
 	g, _, err := p.client.Groups.EditGroup(ctx, editOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "EditGroup", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "EditGroup", err)
 	}
 	return convertGroup(g), nil
 }
@@ -182,7 +183,7 @@ func (p *Provider) EditGroup(ctx context.Context, groupID int, opts EditGroupOpt
 // DeleteGroup implements TencentCodeOrgExtras.
 func (p *Provider) DeleteGroup(ctx context.Context, groupID int) error {
 	if _, err := p.client.Groups.DeleteGroup(ctx, groupID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteGroup", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteGroup", err)
 	}
 	return nil
 }
@@ -196,7 +197,7 @@ func (p *Provider) ListGroupMembers(ctx context.Context, groupID int, opts ListG
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListGroupMembers", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListGroupMembers", err)
 	}
 	result := make([]*MemberInfo, 0, len(members))
 	for _, m := range members {
@@ -213,7 +214,7 @@ func (p *Provider) AddGroupMember(ctx context.Context, groupID int, opts AddGrou
 	}
 	m, _, err := p.client.Groups.AddGroupMember(ctx, groupID, addOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "AddGroupMember", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "AddGroupMember", err)
 	}
 	return convertMemberInfo(m), nil
 }
@@ -223,7 +224,7 @@ func (p *Provider) EditGroupMember(ctx context.Context, groupID, userID int, opt
 	m, _, err := p.client.Groups.EditGroupMember(ctx, groupID, userID,
 		&gongfeng.EditGroupMemberOptions{AccessLevel: gongfeng.Ptr(opts.AccessLevel)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "EditGroupMember", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "EditGroupMember", err)
 	}
 	return convertMemberInfo(m), nil
 }
@@ -231,7 +232,7 @@ func (p *Provider) EditGroupMember(ctx context.Context, groupID, userID int, opt
 // DeleteGroupMember implements TencentCodeOrgExtras.
 func (p *Provider) DeleteGroupMember(ctx context.Context, groupID, userID int) error {
 	if _, err := p.client.Groups.DeleteGroupMember(ctx, groupID, userID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteGroupMember", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteGroupMember", err)
 	}
 	return nil
 }
@@ -246,7 +247,7 @@ func (p *Provider) ListNamespaces(ctx context.Context, opts ListNamespacesOption
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListNamespaces", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListNamespaces", err)
 	}
 	result := make([]*NamespaceInfo, 0, len(namespaces))
 	for _, n := range namespaces {

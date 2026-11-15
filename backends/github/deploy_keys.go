@@ -6,13 +6,14 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListDeployKeys implements provider.DeploymentKeyManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
+func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*model.DeployKey, error) {
 	keys, err := backendutil.AllPages(func(page int) ([]*github.Key, error) {
 		list, _, err := p.client.Repositories.ListKeys(ctx, owner, repo, &github.ListOptions{
 			Page: page, PerPage: 100,
@@ -20,9 +21,9 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListDeployKeys", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListDeployKeys", err)
 	}
-	result := make([]*provider.DeployKey, 0, len(keys))
+	result := make([]*model.DeployKey, 0, len(keys))
 	for _, k := range keys {
 		result = append(result, convertDeployKey(k))
 	}
@@ -30,7 +31,7 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 }
 
 // AddDeployKey implements provider.DeploymentKeyManager.
-func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
+func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*model.DeployKey, error) {
 	key := &github.CreateDeployKeyRequest{
 		Title:    new(opts.Title),
 		Key:      opts.Key,
@@ -38,7 +39,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 	}
 	created, _, err := p.client.Repositories.CreateKey(ctx, owner, repo, *key)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "AddDeployKey", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "AddDeployKey", err)
 	}
 	return convertDeployKey(created), nil
 }
@@ -46,17 +47,17 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
 	if _, err := p.client.Repositories.DeleteKey(ctx, owner, repo, keyID); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteDeployKey", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteDeployKey", err)
 	}
 	return nil
 }
 
-// convertDeployKey maps a github.Key to a provider.DeployKey.
-func convertDeployKey(k *github.Key) *provider.DeployKey {
+// convertDeployKey maps a github.Key to a model.DeployKey.
+func convertDeployKey(k *github.Key) *model.DeployKey {
 	if k == nil {
 		return nil
 	}
-	return &provider.DeployKey{
+	return &model.DeployKey{
 		ID:       k.GetID(),
 		Title:    k.GetTitle(),
 		Key:      k.GetKey(),

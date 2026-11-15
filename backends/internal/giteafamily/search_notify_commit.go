@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -76,7 +77,7 @@ func buildListNotificationOptions(opts provider.ListNotificationsOptions) (ListN
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	listOpts, err := buildListNotificationOptions(opts)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListNotifications", err)
@@ -89,7 +90,7 @@ func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts p
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(threads))
+	result := make([]*model.Notification, 0, len(threads))
 	for _, t := range threads {
 		result = append(result, convertNotification(t))
 	}
@@ -98,7 +99,7 @@ func ListNotifications(ctx context.Context, f Family, c NotificationPort, opts p
 
 // ListRepoNotifications lists one repository's notifications (dual-mode
 // pagination as in ListNotifications).
-func ListRepoNotifications(ctx context.Context, f Family, c NotificationPort, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func ListRepoNotifications(ctx context.Context, f Family, c NotificationPort, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	listOpts, err := buildListNotificationOptions(opts)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListRepoNotifications", err)
@@ -111,7 +112,7 @@ func ListRepoNotifications(ctx context.Context, f Family, c NotificationPort, ow
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListRepoNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(threads))
+	result := make([]*model.Notification, 0, len(threads))
 	for _, t := range threads {
 		result = append(result, convertNotification(t))
 	}
@@ -167,17 +168,17 @@ func buildMarkOptions(op string, f Family, opts provider.MarkNotificationsOption
 
 // convertNotification maps a family notification thread to the provider
 // shape.
-func convertNotification(t *NotificationThread) *provider.Notification {
-	n := &provider.Notification{
+func convertNotification(t *NotificationThread) *model.Notification {
+	n := &model.Notification{
 		ID:     strconv.FormatInt(t.ID, 10),
 		Unread: t.Unread,
 	}
-	n.Subject = provider.NotificationSubject{
+	n.Subject = model.NotificationSubject{
 		Title: t.SubjectTitle,
 		Type:  t.SubjectType,
 		URL:   t.SubjectURL,
 	}
-	n.Repo = &provider.EventRepo{ID: t.RepoID, FullName: t.RepoFullName}
+	n.Repo = &model.EventRepo{ID: t.RepoID, FullName: t.RepoFullName}
 	n.Repo.Owner, n.Repo.Name = provider.SplitFullName(t.RepoFullName)
 	n.UpdatedAt = t.UpdatedAt
 	return n
@@ -240,7 +241,7 @@ type CommitPort interface {
 }
 
 // GetCommit fetches one commit.
-func GetCommit(ctx context.Context, f Family, c CommitPort, owner, repo, sha string) (*provider.CommitInfo, error) {
+func GetCommit(ctx context.Context, f Family, c CommitPort, owner, repo, sha string) (*model.CommitInfo, error) {
 	cc, err := c.GetSingleCommit(ctx, owner, repo, sha)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "GetCommit", err)
@@ -255,7 +256,7 @@ func GetCommit(ctx context.Context, f Family, c CommitPort, owner, repo, sha str
 // 与其他后端同判；校验通过的值本家族无法下传（family SDK 的 commit-list
 // 选项与平台 wire 都不带时间过滤），按 divergence 台账登记为 ignore，
 // 增量同步需自行客户端过滤。
-func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCommits", err)
 	}
@@ -271,7 +272,7 @@ func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCommits", err)
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertCommit(c))
 	}
@@ -279,12 +280,12 @@ func ListCommits(ctx context.Context, f Family, c CommitPort, owner, repo string
 }
 
 // CompareCommits compares base..head.
-func CompareCommits(ctx context.Context, f Family, c CommitPort, owner, repo, base, head string) (*provider.CompareResult, error) {
+func CompareCommits(ctx context.Context, f Family, c CommitPort, owner, repo, base, head string) (*model.CompareResult, error) {
 	cmp, err := c.CompareCommits(ctx, owner, repo, base, head)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "CompareCommits", err)
 	}
-	result := &provider.CompareResult{TotalCommits: cmp.TotalCommits}
+	result := &model.CompareResult{TotalCommits: cmp.TotalCommits}
 	for _, c := range cmp.Commits {
 		result.Commits = append(result.Commits, convertCommit(c))
 	}
@@ -319,7 +320,7 @@ func CreateCommitStatus(ctx context.Context, f Family, c CommitPort, owner, repo
 
 // ListCommitStatuses lists every status reported on a commit (the provider
 // surface carries no pagination, so the walk exhausts the endpoint).
-func ListCommitStatuses(ctx context.Context, f Family, c CommitPort, owner, repo, sha string) ([]provider.CommitStatus, error) {
+func ListCommitStatuses(ctx context.Context, f Family, c CommitPort, owner, repo, sha string) ([]model.CommitStatus, error) {
 	statuses, err := backendutil.AllPages(func(page int) ([]*Status, error) {
 		return c.ListStatuses(ctx, owner, repo, sha, ListStatusesOption{
 			ListOptions: ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
@@ -328,13 +329,13 @@ func ListCommitStatuses(ctx context.Context, f Family, c CommitPort, owner, repo
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCommitStatuses", err)
 	}
-	result := make([]provider.CommitStatus, 0, len(statuses))
+	result := make([]model.CommitStatus, 0, len(statuses))
 	for _, s := range statuses {
 		if s == nil {
 			continue
 		}
-		result = append(result, provider.CommitStatus{
-			State:       provider.NormalizeCommitStatusState(s.State),
+		result = append(result, model.CommitStatus{
+			State:       model.NormalizeCommitStatusState(s.State),
 			Context:     s.Context,
 			Description: s.Description,
 			TargetURL:   s.TargetURL,
@@ -344,16 +345,16 @@ func ListCommitStatuses(ctx context.Context, f Family, c CommitPort, owner, repo
 }
 
 // convertCommit maps a family Commit to the provider shape.
-func convertCommit(c *Commit) *provider.CommitInfo {
+func convertCommit(c *Commit) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{SHA: c.SHA, CreatedAt: c.Created}
+	ci := &model.CommitInfo{SHA: c.SHA, CreatedAt: c.Created}
 	if c.Message != "" {
 		ci.Message = c.Message
 	}
 	if c.AuthorName != "" {
-		ci.Author = &provider.CRUser{Name: c.AuthorName}
+		ci.Author = &model.CRUser{Name: c.AuthorName}
 	}
 	return ci
 }
@@ -416,7 +417,7 @@ type SearchUserOptions struct {
 // (registered pass-through).
 //
 // Dual-mode pagination via backendutil.PageList.
-func SearchRepos(ctx context.Context, f Family, c SearchPort, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func SearchRepos(ctx context.Context, f Family, c SearchPort, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	baseOpts := SearchRepoOptions{
 		Keyword: opts.Query,
 		Sort:    opts.Sort,
@@ -430,9 +431,9 @@ func SearchRepos(ctx context.Context, f Family, c SearchPort, opts provider.Sear
 	if err != nil {
 		return nil, nil, provider.Wrap(f.Platform, "SearchRepos", err)
 	}
-	out := make([]*provider.SearchRepoResult, 0, len(repos))
+	out := make([]*model.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, &provider.SearchRepoResult{
+		out = append(out, &model.SearchRepoResult{
 			FullName:      r.FullName,
 			Description:   r.Description,
 			WebURL:        r.HTMLURL,
@@ -452,7 +453,7 @@ func SearchRepos(ctx context.Context, f Family, c SearchPort, opts provider.Sear
 // keyword/type/state/pagination parameters); without it the global keyword
 // issue search runs restricted to real issues via the "issues" type filter.
 // Dual-mode pagination via backendutil.PageList.
-func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	listOpts := FamilyIssueListOption{
 		KeyWord: opts.Query,
 		State:   opts.State,
@@ -476,17 +477,17 @@ func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.Sea
 	if err != nil {
 		return nil, nil, provider.Wrap(f.Platform, "SearchIssues", err)
 	}
-	out := make([]*provider.SearchIssueResult, 0, len(issues))
+	out := make([]*model.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
 		labels := make([]string, 0, len(i.Labels))
 		for _, l := range i.Labels {
 			labels = append(labels, l.Name)
 		}
-		out = append(out, &provider.SearchIssueResult{
+		out = append(out, &model.SearchIssueResult{
 			Number:    strconv.FormatInt(i.Index, 10),
 			Title:     i.Title,
 			Body:      i.Body,
-			State:     provider.IssueState(i.State),
+			State:     model.IssueState(i.State),
 			WebURL:    i.HTMLURL,
 			Labels:    labels,
 			Comments:  i.Comments,
@@ -498,7 +499,7 @@ func SearchIssues(ctx context.Context, f Family, c SearchPort, opts provider.Sea
 
 // SearchUsers rides the family's /users/search endpoint (dual-mode
 // pagination via backendutil.PageList).
-func SearchUsers(ctx context.Context, f Family, c SearchPort, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func SearchUsers(ctx context.Context, f Family, c SearchPort, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	baseOpts := SearchUserOptions{Keyword: opts.Query}
 	users, err := backendutil.PageList(opts.Page, opts.PerPage, f.PageSize,
 		func(page, perPage int) ([]*User, error) {
@@ -508,9 +509,9 @@ func SearchUsers(ctx context.Context, f Family, c SearchPort, opts provider.Sear
 	if err != nil {
 		return nil, nil, provider.Wrap(f.Platform, "SearchUsers", err)
 	}
-	out := make([]*provider.SearchUserResult, 0, len(users))
+	out := make([]*model.SearchUserResult, 0, len(users))
 	for _, u := range users {
-		out = append(out, &provider.SearchUserResult{
+		out = append(out, &model.SearchUserResult{
 			Login:     u.UserName,
 			Name:      u.FullName,
 			AvatarURL: u.AvatarURL,

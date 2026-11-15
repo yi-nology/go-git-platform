@@ -6,19 +6,20 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListDeployKeys implements provider.DeploymentKeyManager.
-func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
+func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*model.DeployKey, error) {
 	keys, err := backendutil.AllPages(func(page int) ([]*gitlab.ProjectDeployKey, error) {
 		list, _, err := p.client.DeployKeys.ListProjectDeployKeys(pidOf(owner, repo), &gitlab.ListProjectDeployKeysOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}}, gitlab.WithContext(ctx))
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListDeployKeys", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListDeployKeys", err)
 	}
-	result := make([]*provider.DeployKey, 0, len(keys))
+	result := make([]*model.DeployKey, 0, len(keys))
 	for _, k := range keys {
 		result = append(result, convertDeployKey(k))
 	}
@@ -26,7 +27,7 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 }
 
 // AddDeployKey implements provider.DeploymentKeyManager.
-func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
+func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*model.DeployKey, error) {
 	// GitLab uses CanPush (true = read-write); provider uses ReadOnly (true =
 	// read-only), so the mapping is ReadOnly = !CanPush.
 	canPush := !opts.ReadOnly
@@ -37,7 +38,7 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 	}
 	key, _, err := p.client.DeployKeys.AddDeployKey(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "AddDeployKey", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "AddDeployKey", err)
 	}
 	return convertDeployKey(key), nil
 }
@@ -45,18 +46,18 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
 	if _, err := p.client.DeployKeys.DeleteDeployKey(pidOf(owner, repo), keyID, gitlab.WithContext(ctx)); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteDeployKey", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteDeployKey", err)
 	}
 	return nil
 }
 
-// convertDeployKey maps a gitlab.ProjectDeployKey to a provider.DeployKey.
+// convertDeployKey maps a gitlab.ProjectDeployKey to a model.DeployKey.
 // GitLab's CanPush is the inverse of provider's ReadOnly.
-func convertDeployKey(k *gitlab.ProjectDeployKey) *provider.DeployKey {
+func convertDeployKey(k *gitlab.ProjectDeployKey) *model.DeployKey {
 	if k == nil {
 		return nil
 	}
-	return &provider.DeployKey{
+	return &model.DeployKey{
 		ID:       k.ID,
 		Title:    k.Title,
 		Key:      k.Key,

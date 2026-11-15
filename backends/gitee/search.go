@@ -5,11 +5,12 @@ import (
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := &gitee.SearchRepoOptions{
 		Q:       gitee.String(opts.Query),
@@ -24,11 +25,11 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 	}
 	repos, _, err := p.client.Search.Repositories(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchRepos", err)
+		return nil, nil, provider.Wrap(model.PlatformGitee, "SearchRepos", err)
 	}
-	out := make([]*provider.SearchRepoResult, 0, len(repos))
+	out := make([]*model.SearchRepoResult, 0, len(repos))
 	for _, r := range repos {
-		out = append(out, &provider.SearchRepoResult{
+		out = append(out, &model.SearchRepoResult{
 			FullName:      deref(r.FullName),
 			Description:   deref(r.Description),
 			WebURL:        deref(r.HTMLURL),
@@ -42,7 +43,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 }
 
 // SearchIssues implements provider.SearchManager.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := &gitee.SearchIssueOptions{
 		Q:       gitee.String(opts.Query),
@@ -63,9 +64,9 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 	}
 	issues, _, err := p.client.Search.Issues(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchIssues", err)
+		return nil, nil, provider.Wrap(model.PlatformGitee, "SearchIssues", err)
 	}
-	out := make([]*provider.SearchIssueResult, 0, len(issues))
+	out := make([]*model.SearchIssueResult, 0, len(issues))
 	for _, issue := range issues {
 		var labels []string
 		if issue.Labels != nil {
@@ -73,11 +74,11 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 				labels = append(labels, deref(l.Name))
 			}
 		}
-		out = append(out, &provider.SearchIssueResult{
+		out = append(out, &model.SearchIssueResult{
 			Number:    deref(issue.Number),
 			Title:     deref(issue.Title),
 			Body:      deref(issue.Body),
-			State:     provider.IssueState(deref(issue.State)),
+			State:     model.IssueState(deref(issue.State)),
 			WebURL:    deref(issue.HTMLURL),
 			Labels:    labels,
 			Comments:  deref(issue.Comments),
@@ -88,7 +89,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := &gitee.SearchUserOptions{
 		Q:       gitee.String(opts.Query),
@@ -103,11 +104,11 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 	}
 	users, _, err := p.client.Search.Users(ctx, searchOpts)
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitee, "SearchUsers", err)
+		return nil, nil, provider.Wrap(model.PlatformGitee, "SearchUsers", err)
 	}
-	out := make([]*provider.SearchUserResult, 0, len(users))
+	out := make([]*model.SearchUserResult, 0, len(users))
 	for _, u := range users {
-		out = append(out, &provider.SearchUserResult{
+		out = append(out, &model.SearchUserResult{
 			Login:     deref(u.Login),
 			Name:      deref(u.Name),
 			AvatarURL: deref(u.AvatarURL),

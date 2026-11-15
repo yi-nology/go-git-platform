@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // manyItemFakeProvider does no I/O: the benchmark measures batch
@@ -11,7 +13,7 @@ import (
 // platform latency.
 type manyItemFakeProvider struct{ Provider }
 
-func (manyItemFakeProvider) Platform() Platform { return PlatformGitHub }
+func (manyItemFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (manyItemFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	return "c:" + path, nil
 }

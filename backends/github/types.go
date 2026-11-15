@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -23,12 +24,12 @@ type (
 )
 
 // convertRepo maps a go-github Repository to the provider-neutral type.
-func convertRepo(r *ghRepo) *provider.PlatformRepo {
+func convertRepo(r *ghRepo) *model.PlatformRepo {
 	if r == nil {
 		return nil
 	}
 	owner, _ := provider.SplitFullName(r.GetFullName())
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.GetID(),
 		FullName:      r.GetFullName(),
 		Name:          r.GetName(),
@@ -38,7 +39,7 @@ func convertRepo(r *ghRepo) *provider.PlatformRepo {
 		SSHURL:        r.GetSSHURL(),
 		DefaultBranch: r.GetDefaultBranch(),
 		Private:       r.GetPrivate(),
-		Platform:      provider.PlatformGitHub,
+		Platform:      model.PlatformGitHub,
 		Archived:      r.GetArchived(),
 		Fork:          r.GetFork(),
 		Stars:         r.GetStargazersCount(),
@@ -47,16 +48,16 @@ func convertRepo(r *ghRepo) *provider.PlatformRepo {
 }
 
 // convertPR maps a go-github PullRequest to the provider-neutral type.
-func convertPR(pr *ghPR) *provider.ChangeRequest {
+func convertPR(pr *ghPR) *model.ChangeRequest {
 	if pr == nil {
 		return nil
 	}
-	state := provider.CRStateOpened
+	state := model.CRStateOpened
 	if pr.GetState() == "closed" {
 		if pr.GetMerged() {
-			state = provider.CRStateMerged
+			state = model.CRStateMerged
 		} else {
-			state = provider.CRStateClosed
+			state = model.CRStateClosed
 		}
 	}
 	mergeStatus := "unknown"
@@ -67,25 +68,25 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 			mergeStatus = "conflicting"
 		}
 	}
-	author := &provider.CRUser{}
+	author := &model.CRUser{}
 	if pr.GetUser() != nil {
-		author = &provider.CRUser{
+		author = &model.CRUser{
 			ID:        pr.GetUser().GetID(),
 			Username:  pr.GetUser().GetLogin(),
 			AvatarURL: pr.GetUser().GetAvatarURL(),
 		}
 	}
-	var reviewers []*provider.CRUser
+	var reviewers []*model.CRUser
 	for _, r := range pr.RequestedReviewers {
-		reviewers = append(reviewers, &provider.CRUser{
+		reviewers = append(reviewers, &model.CRUser{
 			ID:        r.GetID(),
 			Username:  r.GetLogin(),
 			AvatarURL: r.GetAvatarURL(),
 		})
 	}
-	var assignees []*provider.CRUser
+	var assignees []*model.CRUser
 	for _, a := range pr.Assignees {
-		assignees = append(assignees, &provider.CRUser{
+		assignees = append(assignees, &model.CRUser{
 			ID:        a.GetID(),
 			Username:  a.GetLogin(),
 			AvatarURL: a.GetAvatarURL(),
@@ -100,7 +101,7 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 	// GitHub exposes no distinct merge-base in webhook payloads; base.sha is the
 	// target-branch tip, which serves as both BaseSHA and StartSHA.
 	baseSHA := pr.GetBase().GetSHA()
-	return &provider.ChangeRequest{
+	return &model.ChangeRequest{
 		ID:           int64(pr.GetNumber()),
 		Number:       strconv.Itoa(pr.GetNumber()),
 		Title:        pr.GetTitle(),
@@ -124,19 +125,19 @@ func convertPR(pr *ghPR) *provider.ChangeRequest {
 }
 
 // convertBranch maps a go-github Branch.
-func convertBranch(b *ghBranch) *provider.PlatformBranch {
+func convertBranch(b *ghBranch) *model.PlatformBranch {
 	if b == nil {
 		return nil
 	}
-	return &provider.PlatformBranch{Name: b.GetName()}
+	return &model.PlatformBranch{Name: b.GetName()}
 }
 
 // convertHook maps a go-github Hook.
-func convertHook(h *ghHook) *provider.PlatformWebhook {
+func convertHook(h *ghHook) *model.PlatformWebhook {
 	if h == nil {
 		return nil
 	}
-	return &provider.PlatformWebhook{
+	return &model.PlatformWebhook{
 		ID:     h.GetID(),
 		URL:    h.GetURL(),
 		Events: h.Events,
@@ -144,11 +145,11 @@ func convertHook(h *ghHook) *provider.PlatformWebhook {
 }
 
 // convertCommit maps a go-github RepositoryCommit.
-func convertCommit(c *ghCommit) *provider.CommitInfo {
+func convertCommit(c *ghCommit) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{
+	ci := &model.CommitInfo{
 		SHA:     c.GetSHA(),
 		Message: c.GetCommit().GetMessage(),
 	}
@@ -156,20 +157,20 @@ func convertCommit(c *ghCommit) *provider.CommitInfo {
 		ci.CreatedAt = c.GetCommit().GetAuthor().GetDate().Time
 	}
 	if c.GetAuthor() != nil {
-		ci.Author = &provider.CRUser{ID: c.GetAuthor().GetID(), Username: c.GetAuthor().GetLogin(), AvatarURL: c.GetAuthor().GetAvatarURL()}
+		ci.Author = &model.CRUser{ID: c.GetAuthor().GetID(), Username: c.GetAuthor().GetLogin(), AvatarURL: c.GetAuthor().GetAvatarURL()}
 	}
 	if c.GetCommitter() != nil {
-		ci.Committer = &provider.CRUser{ID: c.GetCommitter().GetID(), Username: c.GetCommitter().GetLogin()}
+		ci.Committer = &model.CRUser{ID: c.GetCommitter().GetID(), Username: c.GetCommitter().GetLogin()}
 	}
 	return ci
 }
 
 // convertRelease maps a go-github RepositoryRelease.
-func convertRelease(r *ghRelease) *provider.ReleaseInfo {
+func convertRelease(r *ghRelease) *model.ReleaseInfo {
 	if r == nil {
 		return nil
 	}
-	return &provider.ReleaseInfo{
+	return &model.ReleaseInfo{
 		ID:          r.GetID(),
 		TagName:     r.GetTagName(),
 		Title:       r.GetName(),
@@ -185,16 +186,16 @@ func convertRelease(r *ghRelease) *provider.ReleaseInfo {
 
 // convertReleaseAssets maps go-github release assets. SDK 的 Size 是 *int
 // (GitHub 附件体积在 int 范围内),provider 侧统一放大为 int64。
-func convertReleaseAssets(assets []*github.ReleaseAsset) []*provider.ReleaseAsset {
+func convertReleaseAssets(assets []*github.ReleaseAsset) []*model.ReleaseAsset {
 	if len(assets) == 0 {
 		return nil
 	}
-	out := make([]*provider.ReleaseAsset, 0, len(assets))
+	out := make([]*model.ReleaseAsset, 0, len(assets))
 	for _, a := range assets {
 		if a == nil {
 			continue
 		}
-		out = append(out, &provider.ReleaseAsset{
+		out = append(out, &model.ReleaseAsset{
 			ID:                 a.GetID(),
 			Name:               a.GetName(),
 			Size:               int64(a.GetSize()),
@@ -207,11 +208,11 @@ func convertReleaseAssets(assets []*github.ReleaseAsset) []*provider.ReleaseAsse
 }
 
 // convertUser maps a go-github User.
-func convertUser(u *ghUser) *provider.CRUser {
+func convertUser(u *ghUser) *model.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{
+	return &model.CRUser{
 		ID:        u.GetID(),
 		Username:  u.GetLogin(),
 		Name:      u.GetName(),
@@ -229,17 +230,17 @@ func tsOrZero(ts github.Timestamp) time.Time {
 	return ts.Time
 }
 
-// mapCRState maps a provider.CRState to the GitHub API string used in list
+// mapCRState maps a model.CRState to the GitHub API string used in list
 // filters ("open"/"closed"/"all"). Mapping CRStateMerged to "closed" is
 // intentional: GitHub treats merged PRs as closed; consumers can inspect the
 // merged boolean on returned PRs to disambiguate.
-func mapCRState(state provider.CRState) string {
+func mapCRState(state model.CRState) string {
 	switch state {
-	case provider.CRStateOpened:
+	case model.CRStateOpened:
 		return "open"
-	case provider.CRStateClosed:
+	case model.CRStateClosed:
 		return "closed"
-	case provider.CRStateMerged:
+	case model.CRStateMerged:
 		return "closed"
 	default:
 		return "all"

@@ -37,7 +37,7 @@ const DefaultRefreshMargin = time.Minute
 //
 //	src := githubapp.NewInstallationTokenSource("", appID, installationID, pem)
 //	p, err := provider.NewProvider(provider.Config{
-//	    Platform:    provider.PlatformGitHub,
+//	    Platform:    model.PlatformGitHub,
 //	    TokenSource: src, // satisfies provider.TokenSource structurally
 //	})
 //

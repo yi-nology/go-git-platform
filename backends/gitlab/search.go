@@ -4,8 +4,10 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/yi-nology/go-git-platform/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
+
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // This file implements the provider.SearchManager surface over the GitLab
@@ -22,17 +24,17 @@ import (
 //   - Wire states "opened"/"reopened" normalize to open (as elsewhere).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	projects, _, err := p.client.Search.Projects(opts.Query, &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchRepos", err)
+		return nil, nil, provider.Wrap(model.PlatformGitLab, "SearchRepos", err)
 	}
-	out := make([]*provider.SearchRepoResult, 0, len(projects))
+	out := make([]*model.SearchRepoResult, 0, len(projects))
 	for _, pr := range projects {
-		out = append(out, &provider.SearchRepoResult{
+		out = append(out, &model.SearchRepoResult{
 			FullName:      pr.PathWithNamespace,
 			Description:   pr.Description,
 			WebURL:        pr.WebURL,
@@ -46,7 +48,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 }
 
 // SearchIssues implements provider.SearchManager.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	searchOpts := &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
@@ -59,15 +61,15 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		issues, _, err = p.client.Search.Issues(opts.Query, searchOpts, gitlab.WithContext(ctx))
 	}
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchIssues", err)
+		return nil, nil, provider.Wrap(model.PlatformGitLab, "SearchIssues", err)
 	}
-	out := make([]*provider.SearchIssueResult, 0, len(issues))
+	out := make([]*model.SearchIssueResult, 0, len(issues))
 	for _, i := range issues {
-		state := provider.IssueStateOpen
+		state := model.IssueStateOpen
 		if i.State == "closed" {
-			state = provider.IssueStateClosed
+			state = model.IssueStateClosed
 		}
-		out = append(out, &provider.SearchIssueResult{
+		out = append(out, &model.SearchIssueResult{
 			Number:    strconv.FormatInt(i.IID, 10),
 			Title:     i.Title,
 			Body:      i.Description,
@@ -82,17 +84,17 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	users, _, err := p.client.Search.Users(opts.Query, &gitlab.SearchOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitLab, "SearchUsers", err)
+		return nil, nil, provider.Wrap(model.PlatformGitLab, "SearchUsers", err)
 	}
-	out := make([]*provider.SearchUserResult, 0, len(users))
+	out := make([]*model.SearchUserResult, 0, len(users))
 	for _, u := range users {
-		out = append(out, &provider.SearchUserResult{
+		out = append(out, &model.SearchUserResult{
 			Login:     u.Username,
 			Name:      u.Name,
 			AvatarURL: u.AvatarURL,

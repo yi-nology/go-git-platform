@@ -8,11 +8,12 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
-func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	createOpts := &gitee.CreatePullRequestOptions{
 		Title:             gitee.String(opts.Title),
 		Head:              gitee.String(opts.SourceBranch),
@@ -27,26 +28,26 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	pr, _, err := p.client.PullRequests.Create(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateCR", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "GetCR", number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetCR", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetCR", err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitee.PullRequestListOptions{
 		State:   gitee.String(mapCRStateForGitee(opts.State)),
@@ -61,9 +62,9 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	prs, resp, err := p.client.PullRequests.List(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), listOpts)
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitee, "ListCRs", err)
+		return nil, nil, provider.Wrap(model.PlatformGitee, "ListCRs", err)
 	}
-	result := make([]*provider.ChangeRequest, 0, len(prs))
+	result := make([]*model.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		result = append(result, convertPullRequest(pr))
 	}
@@ -77,8 +78,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "MergeCR", number)
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -91,28 +92,28 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	_, err = p.client.PullRequests.Merge(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, mergeOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "MergeCR", err)
+		return nil, provider.Wrap(model.PlatformGitee, "MergeCR", err)
 	}
 	return p.GetCR(ctx, owner, repo, number)
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
 	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
 		State: gitee.String("closed"),
 	}, "CloseCR")
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
 	return p.patchCR(ctx, owner, repo, number, &gitee.UpdatePullRequestOptions{
 		State: gitee.String("open"),
 	}, "ReopenCR")
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "UpdateCR", number)
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +134,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if desc, ok := opts.ResolveDescription(); ok {
 		patchOpts.Body = gitee.String(desc) // 清空 ⇒ "body":""
 	}
-	var rmw *provider.ChangeRequest
+	var rmw *model.ChangeRequest
 	if as, ok := opts.ResolveAssignees(); ok {
 		if rmw, err = p.setCRAssignees(ctx, owner, repo, n, as); err != nil {
 			return nil, err
@@ -157,7 +158,7 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 // assigneeDiff yields the full toRemove set. Returns the CR as of the last
 // write (or the read snapshot when the diff is empty) so callers that skip a
 // trailing no-op PATCH can still return a value.
-func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int, target []string) (*provider.ChangeRequest, error) {
+func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int, target []string) (*model.ChangeRequest, error) {
 	cr, err := p.GetCR(ctx, owner, repo, strconv.Itoa(n))
 	if err != nil {
 		return nil, err
@@ -166,14 +167,14 @@ func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int
 	if len(toAdd) > 0 {
 		pr, _, err := p.client.PullRequests.AddAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toAdd)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+			return nil, provider.Wrap(model.PlatformGitee, "UpdateCR", err)
 		}
 		cr = convertPullRequest(pr)
 	}
 	if len(toRemove) > 0 {
 		pr, _, err := p.client.PullRequests.RemoveAssignees(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, toRemove)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "UpdateCR", err)
+			return nil, provider.Wrap(model.PlatformGitee, "UpdateCR", err)
 		}
 		cr = convertPullRequest(pr)
 	}
@@ -182,7 +183,7 @@ func (p *Provider) setCRAssignees(ctx context.Context, owner, repo string, n int
 
 // assigneeDiff computes the add/remove batches that converge the current
 // assignee list to target (login matching is case-insensitive).
-func assigneeDiff(current []*provider.CRUser, target []string) (toAdd, toRemove []string) {
+func assigneeDiff(current []*model.CRUser, target []string) (toAdd, toRemove []string) {
 	currentSet := make(map[string]struct{}, len(current))
 	for _, a := range current {
 		if a != nil && a.Username != "" {
@@ -209,27 +210,27 @@ func assigneeDiff(current []*provider.CRUser, target []string) (toAdd, toRemove 
 }
 
 // patchCR applies a PATCH /pulls/{number} update via the SDK.
-func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, opts *gitee.UpdatePullRequestOptions, op string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, op, number)
+func (p *Provider) patchCR(ctx context.Context, owner, repo, number string, opts *gitee.UpdatePullRequestOptions, op string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, op, number)
 	if err != nil {
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, op, err)
+		return nil, provider.Wrap(model.PlatformGitee, op, err)
 	}
 	return convertPullRequest(pr), nil
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
 	_, _, err = p.client.PullRequests.ReplaceLabels(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, labels)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "UpdateCRLabels", err)
+		return provider.Wrap(model.PlatformGitee, "UpdateCRLabels", err)
 	}
 	return nil
 }
@@ -238,8 +239,8 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
 // page).
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRComments", number)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*model.CRComment, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -251,9 +252,9 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCRComments", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(comments))
+	result := make([]*model.CRComment, 0, len(comments))
 	for _, c := range comments {
 		result = append(result, convertPRComment(c))
 	}
@@ -264,16 +265,16 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 // SDK's PullRequests.ListCommits takes no options at all, so there is no
 // pagination parameter to exhaust — the platform returns what it returns
 // in a single response.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "ListCRCommits", number)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*model.CRCommit, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
 	commits, _, err := p.client.PullRequests.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCRCommits", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertPRCommit(c))
 	}
@@ -286,13 +287,13 @@ var _ provider.ChangeRequestManager = (*Provider)(nil)
 //
 // **未指定状态(零值)⇒ 不过滤**(平台上不加 state = 全部)。
 // 以前落到 "open" ⇒ closed/merged 的 CR **静默丢失**。
-func mapCRStateForGitee(s provider.CRState) string {
+func mapCRStateForGitee(s model.CRState) string {
 	switch s {
-	case provider.CRStateClosed:
+	case model.CRStateClosed:
 		return "closed"
-	case provider.CRStateMerged:
+	case model.CRStateMerged:
 		return "merged"
-	case provider.CRStateOpened:
+	case model.CRStateOpened:
 		return "open"
 	default:
 		return ""

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -62,8 +63,8 @@ func testLabelsSuite(t *testing.T, h Harness) {
 type LabelsHarness struct {
 	// Name is the human-readable platform identifier (e.g. "GitHub").
 	Name string
-	// Platform is the provider.Platform constant for this backend.
-	Platform provider.Platform
+	// Platform is the model.Platform constant for this backend.
+	Platform model.Platform
 	// NewProvider builds a provider.Provider; the harness fills in BaseURL.
 	// It must construct the provider the same way the platform's main
 	// harness does (including any VersionProxy wrapping for Gitea/Forgejo).

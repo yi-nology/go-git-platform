@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -55,7 +56,7 @@ func TestMarkNotificationsRead_LastReadAtValidated(t *testing.T) {
 	for _, tc := range cases {
 		for _, scope := range []string{"all", "repo"} {
 			t.Run(tc.name+"/"+scope, func(t *testing.T) {
-				fam := Family{Platform: provider.PlatformGitea}
+				fam := Family{Platform: model.PlatformGitea}
 				port := &fakeNotifyPort{}
 				opts := provider.MarkNotificationsOptions{LastReadAt: tc.lastReadAt}
 

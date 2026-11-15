@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -57,7 +58,7 @@ func testDeploymentsSuite(t *testing.T, h Harness) {
 // DeploymentsHarness bundles inputs for the deployment suite.
 type DeploymentsHarness struct {
 	Name           string
-	Platform       provider.Platform
+	Platform       model.Platform
 	NewProvider    func(t *testing.T, cfg provider.Config) provider.Provider
 	CreateResponse string
 	ListResponse   string
@@ -233,7 +234,7 @@ func runListDeploymentsCase(t *testing.T, h DeploymentsHarness) {
 	}
 	want := decodeDeploymentListFixture(t, h.ListResponse, "ListResponse")
 	if len(deps) != len(want) {
-		t.Errorf("parsed %d deployments, fixture carries %d — wire keys must map onto provider.Deployment tags", len(deps), len(want))
+		t.Errorf("parsed %d deployments, fixture carries %d — wire keys must map onto model.Deployment tags", len(deps), len(want))
 	}
 	if total != len(deps) {
 		t.Errorf("total = %d, want %d (page item count, never a page index — issue #89)", total, len(deps))
@@ -337,7 +338,7 @@ func assertPreWireInvalidInput(t *testing.T, err error, requests int, label stri
 }
 
 // deploymentWire mirrors the GitHub deployments response shape for a
-// canonical stdlib decode of the fixture. provider.Deployment carries the
+// canonical stdlib decode of the fixture. model.Deployment carries the
 // creator LOGIN as a string while the wire sends the user object, so the
 // fixture cannot be decoded straight into the provider type the way
 // MigrationInfo can — hence this wire-side mirror plus a field-by-field
@@ -383,10 +384,10 @@ func decodeDeploymentListFixture(t *testing.T, fixture, field string) []deployme
 	return ws
 }
 
-// assertDeployment pins the response parse: every provider.Deployment field
+// assertDeployment pins the response parse: every model.Deployment field
 // must equal the canonical stdlib decode of the fixture — the same wire keys
 // the implementation maps — so a swapped or dropped field breaks it.
-func assertDeployment(t *testing.T, got *provider.Deployment, want deploymentWire, label string) {
+func assertDeployment(t *testing.T, got *model.Deployment, want deploymentWire, label string) {
 	t.Helper()
 	if got == nil {
 		t.Fatalf("%s: Deployment is nil", label)
@@ -394,7 +395,7 @@ func assertDeployment(t *testing.T, got *provider.Deployment, want deploymentWir
 	if got.ID != want.ID || got.SHA != want.SHA || got.Ref != want.Ref ||
 		got.Environment != want.Environment || got.Description != want.Description ||
 		got.Creator != want.Creator.Login || got.URL != want.URL {
-		t.Errorf("%s: parsed %+v, want id=%d sha=%s ref=%s env=%s desc=%s creator=%s url=%s — wire keys must map onto provider.Deployment fields",
+		t.Errorf("%s: parsed %+v, want id=%d sha=%s ref=%s env=%s desc=%s creator=%s url=%s — wire keys must map onto model.Deployment fields",
 			label, *got, want.ID, want.SHA, want.Ref, want.Environment, want.Description, want.Creator.Login, want.URL)
 	}
 	if !got.CreatedAt.Equal(want.CreatedAt) {

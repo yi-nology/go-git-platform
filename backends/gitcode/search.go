@@ -3,9 +3,11 @@ package gitcode
 import (
 	"context"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
+
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // searchPerPage normalizes a caller-supplied per-page value for GitCode's
@@ -22,7 +24,7 @@ func searchPerPage(perPage int) int {
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchRepositoriesOptions {
 		return gitcode.SearchRepositoriesOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -36,19 +38,19 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		// Caller-driven pagination: serve the requested page only.
 		var err error
 		if results, err = p.client.SearchRepositories(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchRepos", err)
 		}
 	} else {
 		var err error
 		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchRepositoryResult, error) {
 			return p.client.SearchRepositories(ctx, buildOpts(page, provider.MaxPerPage))
 		}); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchRepos", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchRepos", err)
 		}
 	}
-	out := make([]*provider.SearchRepoResult, 0, len(results))
+	out := make([]*model.SearchRepoResult, 0, len(results))
 	for _, r := range results {
-		out = append(out, &provider.SearchRepoResult{
+		out = append(out, &model.SearchRepoResult{
 			FullName:      r.FullName,
 			Description:   r.Description,
 			WebURL:        r.WebURL,
@@ -66,7 +68,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchIssuesOptions {
 		return gitcode.SearchIssuesOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -82,27 +84,27 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		// Caller-driven pagination: serve the requested page only.
 		var err error
 		if results, err = p.client.SearchIssues(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchIssues", err)
 		}
 	} else {
 		var err error
 		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchIssueResult, error) {
 			return p.client.SearchIssues(ctx, buildOpts(page, provider.MaxPerPage))
 		}); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchIssues", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchIssues", err)
 		}
 	}
-	out := make([]*provider.SearchIssueResult, 0, len(results))
+	out := make([]*model.SearchIssueResult, 0, len(results))
 	for _, r := range results {
 		labels := make([]string, 0, len(r.Labels))
 		for _, l := range r.Labels {
 			labels = append(labels, l.Name)
 		}
-		out = append(out, &provider.SearchIssueResult{
+		out = append(out, &model.SearchIssueResult{
 			Number:    r.Number,
 			Title:     r.Title,
 			Body:      r.Body,
-			State:     provider.IssueState(r.State),
+			State:     model.IssueState(r.State),
 			WebURL:    r.HTMLURL,
 			Labels:    labels,
 			Comments:  r.Comments,
@@ -117,7 +119,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	buildOpts := func(page, perPage int) gitcode.SearchUsersOptions {
 		return gitcode.SearchUsersOptions{
 			ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -131,19 +133,19 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 		// Caller-driven pagination: serve the requested page only.
 		var err error
 		if results, err = p.client.SearchUsers(ctx, buildOpts(opts.Page, searchPerPage(opts.PerPage))); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchUsers", err)
 		}
 	} else {
 		var err error
 		if results, err = backendutil.AllPages(func(page int) ([]*gitcode.SearchUserResult, error) {
 			return p.client.SearchUsers(ctx, buildOpts(page, provider.MaxPerPage))
 		}); err != nil {
-			return nil, nil, provider.Wrap(provider.PlatformGitCode, "SearchUsers", err)
+			return nil, nil, provider.Wrap(model.PlatformGitCode, "SearchUsers", err)
 		}
 	}
-	out := make([]*provider.SearchUserResult, 0, len(results))
+	out := make([]*model.SearchUserResult, 0, len(results))
 	for _, r := range results {
-		out = append(out, &provider.SearchUserResult{
+		out = append(out, &model.SearchUserResult{
 			Login:     r.Login,
 			Name:      r.Name,
 			AvatarURL: r.AvatarURL,

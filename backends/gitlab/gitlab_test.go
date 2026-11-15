@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/backends/gitlab"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -35,7 +36,7 @@ func writeListPage(w http.ResponseWriter, r *http.Request, v any) {
 func newTestProvider(t *testing.T, srv *httptest.Server) *gitlab.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitLab,
+		Platform: model.PlatformGitLab,
 		BaseURL:  srv.URL,
 		Token:    "test-token",
 	})
@@ -51,7 +52,7 @@ func newTestProvider(t *testing.T, srv *httptest.Server) *gitlab.Provider {
 
 func TestNewProvider_Success(t *testing.T) {
 	_, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitLab,
+		Platform: model.PlatformGitLab,
 		BaseURL:  "https://gitlab.example.com/api/v4",
 		Token:    "test",
 	})
@@ -86,7 +87,7 @@ func TestListRepos(t *testing.T) {
 	if repos[0].Owner != "owner" || repos[0].Name != "r1" {
 		t.Errorf("unexpected repo: %+v", repos[0])
 	}
-	if repos[0].Platform != provider.PlatformGitLab {
+	if repos[0].Platform != model.PlatformGitLab {
 		t.Errorf("expected GitLab, got %s", repos[0].Platform)
 	}
 }
@@ -131,7 +132,7 @@ func TestCreateCR(t *testing.T) {
 	if cr.Number != "7" {
 		t.Errorf("expected 7, got %q", cr.Number)
 	}
-	if cr.State != provider.CRStateOpened {
+	if cr.State != model.CRStateOpened {
 		t.Errorf("expected opened, got %s", cr.State)
 	}
 }
@@ -157,7 +158,7 @@ func TestListCRs(t *testing.T) {
 	if totalVal != 2 {
 		t.Errorf("expected total 2, got %d", totalVal)
 	}
-	if crs[1].State != provider.CRStateMerged {
+	if crs[1].State != model.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)
 	}
 }
@@ -341,7 +342,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, err := provider.NewProvider(provider.Config{
-		Platform:    provider.PlatformGitLab,
+		Platform:    model.PlatformGitLab,
 		BaseURL:     srv.URL,
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},

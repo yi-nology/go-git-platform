@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -51,11 +52,11 @@ type rawNotificationList struct {
 // — a zero-value call sent none at all and silently returned just the
 // platform's default page, violating the interface's "exhausting the
 // platform's pagination" contract.
-func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
 	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListNotifications", err)
 	}
 	u := fmt.Sprintf("%s/notifications", p.baseURL)
 	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
@@ -65,7 +66,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*provider.Notification, 0, len(nots))
+	result := make([]*model.Notification, 0, len(nots))
 	for i := range nots {
 		result = append(result, convertRawNotification(&nots[i]))
 	}
@@ -74,9 +75,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 
 // ListRepoNotifications implements provider.NotificationManager.
 // Same dual-mode pagination as ListNotifications (issue #60).
-func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListRepoNotifications", err)
 	}
 	u := fmt.Sprintf("%s/repos/%s/%s/notifications", p.baseURL, backendutil.Esc(owner), backendutil.Esc(repo))
 	nots, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
@@ -86,7 +87,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*provider.Notification, 0, len(nots))
+	result := make([]*model.Notification, 0, len(nots))
 	for i := range nots {
 		result = append(result, convertRawNotification(&nots[i]))
 	}
@@ -107,11 +108,11 @@ func (p *Provider) fetchNotificationPage(ctx context.Context, u, since string, p
 	q.Set("per_page", strconv.Itoa(perPage))
 	req, err := p.client.NewRequest(ctx, "GET", u+"?"+q.Encode(), nil)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListNotifications", err)
 	}
 	var nl rawNotificationList
 	if _, err := p.client.Do(req, &nl); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListNotifications", err)
 	}
 	return nl.List, nil
 }
@@ -119,7 +120,7 @@ func (p *Provider) fetchNotificationPage(ctx context.Context, u, since string, p
 // MarkNotificationRead implements provider.NotificationManager.
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
 	_, err := p.client.Activity.MarkNotificationAsRead(ctx, threadID)
-	return provider.Wrap(provider.PlatformGitee, "MarkNotificationRead", err)
+	return provider.Wrap(model.PlatformGitee, "MarkNotificationRead", err)
 }
 
 // MarkNotificationsRead implements provider.NotificationManager.
@@ -130,39 +131,39 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // 全量副作用，格式笔误静默退化成「全部标已读」正是该族要消灭的失败模式。
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
 	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
-		return provider.Wrap(provider.PlatformGitee, "MarkNotificationsRead", err)
+		return provider.Wrap(model.PlatformGitee, "MarkNotificationsRead", err)
 	}
 	_, err := p.client.Activity.MarkNotificationsAsRead(ctx, nil)
-	return provider.Wrap(provider.PlatformGitee, "MarkNotificationsRead", err)
+	return provider.Wrap(model.PlatformGitee, "MarkNotificationsRead", err)
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
 // LastReadAt 校验语义同 MarkNotificationsRead（issue #129）。
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
 	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
-		return provider.Wrap(provider.PlatformGitee, "MarkRepoNotificationsRead", err)
+		return provider.Wrap(model.PlatformGitee, "MarkRepoNotificationsRead", err)
 	}
 	_, err := p.client.Activity.MarkRepoNotificationsAsRead(ctx, backendutil.Esc(owner), backendutil.Esc(repo), nil)
-	return provider.Wrap(provider.PlatformGitee, "MarkRepoNotificationsRead", err)
+	return provider.Wrap(model.PlatformGitee, "MarkRepoNotificationsRead", err)
 }
 
-func convertRawNotification(n *rawNotification) *provider.Notification {
+func convertRawNotification(n *rawNotification) *model.Notification {
 	if n == nil {
 		return nil
 	}
-	out := &provider.Notification{
+	out := &model.Notification{
 		ID:     strconv.Itoa(n.ID),
 		Unread: n.Unread == "true",
 	}
 	if n.Subject != nil {
-		out.Subject = provider.NotificationSubject{
+		out.Subject = model.NotificationSubject{
 			Title: n.Subject.Title,
 			Type:  n.Subject.Type,
 			URL:   n.Subject.URL,
 		}
 	}
 	if n.Repository != nil {
-		out.Repo = &provider.EventRepo{
+		out.Repo = &model.EventRepo{
 			ID:       int64(n.Repository.ID),
 			FullName: n.Repository.FullName,
 		}

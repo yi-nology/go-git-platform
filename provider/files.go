@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // DecodeFileContent 按平台返回的 Encoding 解码文件内容。
@@ -14,7 +16,7 @@ import (
 // (解析 YAML/JSON 直接失败),而调用方无从察觉。
 //
 // 只认 `base64`(大小写不敏感);其它 encoding 原样返回。
-func DecodeFileContent(platform Platform, encoding, content string) (string, error) {
+func DecodeFileContent(platform model.Platform, encoding, content string) (string, error) {
 	if !strings.EqualFold(strings.TrimSpace(encoding), "base64") {
 		return content, nil
 	}

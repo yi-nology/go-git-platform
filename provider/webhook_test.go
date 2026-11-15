@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 func TestHMACSHA256Validator(t *testing.T) {
@@ -83,15 +85,15 @@ func TestStaticTokenValidator(t *testing.T) {
 
 func TestDefaultWebhookRegistry(t *testing.T) {
 	// All known platforms should have a default validator registered.
-	for _, p := range []Platform{
-		PlatformGitHub, PlatformGitea, PlatformForgejo, PlatformGitee,
-		PlatformGitCode, PlatformTencentCode, PlatformGitLab,
+	for _, p := range []model.Platform{
+		model.PlatformGitHub, model.PlatformGitea, model.PlatformForgejo, model.PlatformGitee,
+		model.PlatformGitCode, model.PlatformTencentCode, model.PlatformGitLab,
 	} {
 		if v := DefaultWebhookRegistry().Get(p); v == nil {
 			t.Errorf("expected default validator for %s", p)
 		}
 	}
-	if v := DefaultWebhookRegistry().Get(Platform("unknown")); v != nil {
+	if v := DefaultWebhookRegistry().Get(model.Platform("unknown")); v != nil {
 		t.Error("expected no validator for unknown platform")
 	}
 }
@@ -120,8 +122,8 @@ func TestValidatorFunc_Adaptation(t *testing.T) {
 func TestWebhookValidatorRegistry_RegisterAndGet(t *testing.T) {
 	r := NewWebhookValidatorRegistry()
 	v := HMACSHA256Validator{Header: "X-Foo"}
-	r.Register(Platform("custom"), v)
-	got := r.Get(Platform("custom"))
+	r.Register(model.Platform("custom"), v)
+	got := r.Get(model.Platform("custom"))
 	if got == nil {
 		t.Fatal("expected validator after Register")
 	}
@@ -129,8 +131,8 @@ func TestWebhookValidatorRegistry_RegisterAndGet(t *testing.T) {
 		t.Errorf("expected hmac-sha256, got %q", got.Name())
 	}
 	// Register with nil should be a no-op
-	r.Register(Platform("custom"), nil)
-	if r.Get(Platform("custom")) == nil {
+	r.Register(model.Platform("custom"), nil)
+	if r.Get(model.Platform("custom")) == nil {
 		t.Error("nil register should not unregister")
 	}
 }

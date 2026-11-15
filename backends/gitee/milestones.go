@@ -6,6 +6,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -17,7 +18,7 @@ import (
 // honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every milestone is returned.
-func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
+func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]model.Milestone, error) {
 	// State contract (issue #61): empty State sends the explicit "all" —
 	// relying on the platform default silently dropped closed milestones.
 	state := opts.State
@@ -32,7 +33,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 		baseOpts.PerPage = gitee.Int(perPage)
 		list, _, err := p.client.Milestones.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &baseOpts)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListMilestones", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListMilestones", err)
 		}
 		milestones = list
 	} else {
@@ -45,10 +46,10 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListMilestones", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListMilestones", err)
 		}
 	}
-	result := make([]provider.Milestone, 0, len(milestones))
+	result := make([]model.Milestone, 0, len(milestones))
 	for _, m := range milestones {
 		result = append(result, convertMilestone(m))
 	}
@@ -56,21 +57,21 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 }
 
 // GetMilestone implements provider.MilestoneManager via the SDK.
-func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	n64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitee, "GetMilestone", number)
+func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*model.Milestone, error) {
+	n64, err := backendutil.ParseMilestoneNumber(model.PlatformGitee, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
 	m, _, err := p.client.Milestones.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
 }
 
 // CreateMilestone implements provider.MilestoneManager.
-func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
+func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*model.Milestone, error) {
 	createOpts := &gitee.CreateMilestoneOptions{
 		Title: gitee.String(opts.Title),
 	}
@@ -82,15 +83,15 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	}
 	m, _, err := p.client.Milestones.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
 }
 
 // UpdateMilestone implements provider.MilestoneManager.
-func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	n64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitee, "UpdateMilestone", number)
+func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*model.Milestone, error) {
+	n64, err := backendutil.ParseMilestoneNumber(model.PlatformGitee, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +110,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	}
 	m, _, err := p.client.Milestones.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
@@ -117,13 +118,13 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	n64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitee, "DeleteMilestone", number)
+	n64, err := backendutil.ParseMilestoneNumber(model.PlatformGitee, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
 	_, err = p.client.Milestones.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int(n64))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteMilestone", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteMilestone", err)
 	}
 	return nil
 }

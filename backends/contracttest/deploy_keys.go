@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -38,7 +39,7 @@ func testDeployKeysSuite(t *testing.T, h Harness) {
 // DeployKeysHarness bundles inputs for the deploy-key suite.
 type DeployKeysHarness struct {
 	Name           string
-	Platform       provider.Platform
+	Platform       model.Platform
 	NewProvider    func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse   string
 	CreateResponse string

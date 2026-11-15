@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -50,7 +51,7 @@ func testMigrationsSuite(t *testing.T, h Harness) {
 // MigrationsHarness bundles inputs for the migration suite.
 type MigrationsHarness struct {
 	Name           string
-	Platform       provider.Platform
+	Platform       model.Platform
 	NewProvider    func(t *testing.T, cfg provider.Config) provider.Provider
 	CreateResponse string
 	GetResponse    string
@@ -87,7 +88,7 @@ func (w *migrationsWire) last() (method, path, accept string, body map[string]an
 // RunMigrationsSuite tests the migration-manager wire contract: org
 // emptiness picks the Create route (user vs org), the org Get route carries
 // the id, both calls send the GA Accept header, both Create routes share the
-// lock/exclude request body, and responses parse into provider.MigrationInfo.
+// lock/exclude request body, and responses parse into model.MigrationInfo.
 func RunMigrationsSuite(t *testing.T, h MigrationsHarness) {
 	t.Run("CreateMigration_UserRoute", func(t *testing.T) {
 		runCreateMigrationCase(t, h, "", "/user/migrations")
@@ -200,15 +201,15 @@ func assertCreateMigrationBody(t *testing.T, body map[string]any) {
 // assertMigrationInfo pins the response parse: the provider's MigrationInfo
 // must equal a canonical stdlib decode of the fixture — the same struct the
 // implementation decodes into, so equality proves the wire keys land on the
-// provider.MigrationInfo tags (a swapped or dropped field breaks it). The
+// model.MigrationInfo tags (a swapped or dropped field breaks it). The
 // fixture must itself carry a non-zero id, or the check could pass vacuously
 // against an empty or typo'd fixture.
-func assertMigrationInfo(t *testing.T, got *provider.MigrationInfo, fixture, label string) {
+func assertMigrationInfo(t *testing.T, got *model.MigrationInfo, fixture, label string) {
 	t.Helper()
 	if got == nil {
 		t.Fatalf("%s: MigrationInfo is nil", label)
 	}
-	var want provider.MigrationInfo
+	var want model.MigrationInfo
 	if err := json.Unmarshal([]byte(fixture), &want); err != nil {
 		t.Fatalf("%s: fixture does not decode: %v", label, err)
 	}
@@ -216,6 +217,6 @@ func assertMigrationInfo(t *testing.T, got *provider.MigrationInfo, fixture, lab
 		t.Fatalf("%s: fixture must carry a non-zero id (vacuous parse check)", label)
 	}
 	if *got != want {
-		t.Errorf("%s: parsed %+v, want %+v — wire keys must map onto provider.MigrationInfo tags", label, *got, want)
+		t.Errorf("%s: parsed %+v, want %+v — wire keys must map onto model.MigrationInfo tags", label, *got, want)
 	}
 }

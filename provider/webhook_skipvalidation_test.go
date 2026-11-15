@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // newWebhookReq 构造一个带 body 的 POST 请求，用于 envelope 解析测试。
@@ -22,7 +24,7 @@ func newWebhookReq(body string, headers map[string]string) *http.Request {
 // SkipValidationSecret 时 Read 跳过签名校验，只做 body 还原与 header 读取。
 func TestEnvelopeRead_SkipValidationSecret(t *testing.T) {
 	env := WebhookEnvelope{
-		Platform:     PlatformGitLab,
+		Platform:     model.PlatformGitLab,
 		EventHeaders: []string{"X-Gitlab-Event"},
 	}
 	body := `{"object_kind":"merge_request"}`
@@ -49,7 +51,7 @@ func TestEnvelopeRead_SkipValidationSecret(t *testing.T) {
 // TestEnvelopeRead_EmptySecretStillRejected 回归护栏：哨兵是唯一豁免路径，
 // 普通空 secret 仍必须被校验器拒绝（防止有人图省事把空 secret 改成放行）。
 func TestEnvelopeRead_EmptySecretStillRejected(t *testing.T) {
-	env := WebhookEnvelope{Platform: PlatformGitLab}
+	env := WebhookEnvelope{Platform: model.PlatformGitLab}
 	req := newWebhookReq(`{"a":1}`, map[string]string{"X-Gitlab-Token": "some-token"})
 
 	if _, _, err := env.Read(req, ""); err == nil {
@@ -63,7 +65,7 @@ func TestEnvelopeRead_EmptySecretStillRejected(t *testing.T) {
 func TestValidateWebhookWithRegistry_SentinelDoesNotBypass(t *testing.T) {
 	req := newWebhookReq(`{"a":1}`, map[string]string{"X-Gitlab-Token": "some-token"})
 
-	if err := ValidateWebhookWithRegistry(PlatformGitLab, req, SkipValidationSecret); err == nil {
+	if err := ValidateWebhookWithRegistry(model.PlatformGitLab, req, SkipValidationSecret); err == nil {
 		t.Fatal("sentinel must not bypass ValidateWebhookWithRegistry")
 	}
 }

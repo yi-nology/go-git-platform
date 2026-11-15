@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -20,7 +21,7 @@ import (
 //     direct type assertion must fail.
 
 func TestGitCode_GetArchive_NotImplemented(t *testing.T) {
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestGitCode_GetArchive_NotImplemented(t *testing.T) {
 }
 
 func TestGitCode_CommitStatusCapability_NotAdvertised(t *testing.T) {
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -49,7 +50,7 @@ func TestGitCode_CommitStatusCapability_NotAdvertised(t *testing.T) {
 }
 
 func TestGitCode_ReactionAndDeployKeyCapabilities_NotAdvertised(t *testing.T) {
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -57,7 +58,7 @@ func TestGitCode_ReactionAndDeployKeyCapabilities_NotAdvertised(t *testing.T) {
 		t.Error("gitcode still implements ReactionManager; the reactions routes 404 live")
 	}
 	if _, ok := p.(interface {
-		ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error)
+		ListDeployKeys(ctx context.Context, owner, repo string) ([]*model.DeployKey, error)
 	}); ok {
 		t.Error("gitcode still implements deploy keys; the /keys route 404s live")
 	}

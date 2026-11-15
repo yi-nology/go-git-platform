@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -45,7 +46,7 @@ func testWebhookConfigSuite(t *testing.T, h Harness) {
 // WebhookConfigHarness bundles inputs for the webhook-config suite.
 type WebhookConfigHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	GetResponse string
 }

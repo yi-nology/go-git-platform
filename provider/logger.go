@@ -34,7 +34,7 @@ var _ Logger = logx.Delegating("")
 // identify themselves via the component attribute).
 //
 //	p, err := provider.NewProvider(provider.Config{
-//	    Platform: provider.PlatformGitHub,
+//	    Platform: model.PlatformGitHub,
 //	    Token:    token,
 //	    Logger:   provider.NewLogxLogger("git-platform"),
 //	})

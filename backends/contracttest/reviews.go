@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -18,7 +19,7 @@ import (
 type ReviewsHarnessConfig struct {
 	// ListResponse is the JSON array for review-list GETs. First item: id 1,
 	// user login "dev", state "APPROVED" (the suite asserts normalization to
-	// provider.ReviewStateApproved).
+	// model.ReviewStateApproved).
 	ListResponse string
 	// GetResponse is the JSON object for single-review GETs (id 1, user
 	// "dev", state "APPROVED").
@@ -59,7 +60,7 @@ type ReviewsHarnessConfig struct {
 // builds it from the enclosing Harness plus ReviewsHarnessConfig.
 type ReviewsHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	ReviewsHarnessConfig
 	// IgnoresRequestReviewers declares that the backend's RequestReviewers is
@@ -82,7 +83,7 @@ type ReviewsHarness struct {
 	// verdict state: the SDK model behind ListReviews/GetReview has no state
 	// field (Tencent 工蜂 review notes — the verdict travels only on the
 	// create/update writes as reviewer_state and never comes back), so every
-	// read review normalizes to provider.ReviewStateCommented, a registered
+	// read review normalizes to model.ReviewStateCommented, a registered
 	// limitation. The List subtest then asserts that commented normalization
 	// instead of the default approved one.
 	ListStateIsCommented bool
@@ -169,7 +170,7 @@ func RunReviewsSuite(t *testing.T, h ReviewsHarness) {
 
 // assertReviewListNormalized checks that ListReviews returns parsed,
 // normalized reviews: id 1, user "dev", and the UPPERCASE wire state
-// "APPROVED" normalized to provider.ReviewStateApproved. Platforms whose
+// "APPROVED" normalized to model.ReviewStateApproved. Platforms whose
 // review reads carry no verdict state (commentedList; a registered
 // limitation — see ReviewsHarness.ListStateIsCommented) assert the
 // commented normalization instead.
@@ -188,9 +189,9 @@ func assertReviewListNormalized(t *testing.T, rm provider.ReviewManager, comment
 	if reviews[0].User != "dev" {
 		t.Errorf("expected review user %q, got %q", "dev", reviews[0].User)
 	}
-	wantState := provider.ReviewStateApproved
+	wantState := model.ReviewStateApproved
 	if commentedList {
-		wantState = provider.ReviewStateCommented
+		wantState = model.ReviewStateCommented
 	}
 	if reviews[0].State != wantState {
 		t.Errorf("expected normalized state %q, got %q", wantState, reviews[0].State)

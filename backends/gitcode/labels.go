@@ -4,9 +4,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
+
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListLabels implements provider.LabelManager.
@@ -16,16 +18,16 @@ import (
 // opts.Page > 0 returns exactly that single caller-driven page. The
 // label-list endpoint takes the documented page/per_page query (server
 // default 100 per page) since go-gitcode v0.8.0.
-func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	var labels []*gitcode.Label
 	labels, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitcode.Label, error) {
 			return p.client.ListIssueLabelsWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: perPage})
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListLabels", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListLabels", err)
 	}
-	result := make([]*provider.Label, 0, len(labels))
+	result := make([]*model.Label, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, convertLabel(l))
 	}
@@ -34,10 +36,10 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 
 // CreateLabel implements provider.LabelManager. GitCode's label API has no
 // description field; opts.Description is ignored.
-func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	label, err := p.client.CreateIssueLabel(ctx, owner, repo, opts.Name, opts.Color)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -45,7 +47,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. GitCode addresses labels by
 // name natively. Its label API has no description field; opts.Description
 // is ignored.
-func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	updateOpts := gitcode.UpdateLabelOptions{}
 	if opts.NewName != nil {
 		updateOpts.Name = *opts.NewName
@@ -60,7 +62,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, err := p.client.UpdateIssueLabel(ctx, owner, repo, name, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -68,7 +70,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 // DeleteLabel implements provider.LabelManager.
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
 	if err := p.client.DeleteIssueLabel(ctx, owner, repo, name); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteLabel", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteLabel", err)
 	}
 	return nil
 }

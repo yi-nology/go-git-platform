@@ -6,15 +6,16 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCommit implements provider.CommitManager.
-func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
+func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error) {
 	pid := owner + "/" + repo
 	c, _, err := p.client.Commits.GetCommit(ctx, pid, sha)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCommit", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCommit", err)
 	}
 	return convertCommit(c), nil
 }
@@ -24,14 +25,14 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的接受/
 	// 拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCommits", err)
 	}
 	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCommits", err)
 	}
 	pid := owner + "/" + repo
 	buildOpts := func(page, perPage int) *gongfeng.ListCommitsOptions {
@@ -56,9 +57,9 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCommits", err)
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertCommit(c))
 	}
@@ -66,7 +67,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 }
 
 // CompareCommits implements provider.CommitManager.
-func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
+func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error) {
 	pid := owner + "/" + repo
 	opts := &gongfeng.CompareOptions{
 		From: gongfeng.Ptr(base),
@@ -74,9 +75,9 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 	}
 	cmp, _, err := p.client.Repositories.Compare(ctx, pid, opts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CompareCommits", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CompareCommits", err)
 	}
-	result := &provider.CompareResult{TotalCommits: len(cmp.Commits)}
+	result := &model.CompareResult{TotalCommits: len(cmp.Commits)}
 	for _, c := range cmp.Commits {
 		result.Commits = append(result.Commits, convertCommit(c))
 	}
@@ -99,13 +100,13 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	}
 	_, _, err := p.client.CommitStatuses.CreateCommitStatus(ctx, pid, sha, statusOpts)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "CreateCommitStatus", err)
+		return provider.Wrap(model.PlatformTencentCode, "CreateCommitStatus", err)
 	}
 	return nil
 }
 
 // ListCommitStatuses implements provider.CommitStatusManager.
-func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	pid := owner + "/" + repo
 	statuses, err := backendutil.AllPages(func(page int) ([]*gongfeng.CommitStatus, error) {
 		list, _, err := p.client.CommitStatuses.ListCommitStatuses(ctx, pid, sha,
@@ -113,7 +114,7 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCommitStatuses", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCommitStatuses", err)
 	}
 	return convertCommitStatuses(statuses), nil
 }
@@ -121,14 +122,14 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 // convertCommitStatuses maps gongfeng CommitStatus entries onto the unified
 // vocabulary. 工蜂 is GitLab-shaped: the wire "status" key carries the state
 // verb and "name" the per-check context.
-func convertCommitStatuses(statuses []*gongfeng.CommitStatus) []provider.CommitStatus {
-	result := make([]provider.CommitStatus, 0, len(statuses))
+func convertCommitStatuses(statuses []*gongfeng.CommitStatus) []model.CommitStatus {
+	result := make([]model.CommitStatus, 0, len(statuses))
 	for _, s := range statuses {
 		if s == nil {
 			continue
 		}
-		result = append(result, provider.CommitStatus{
-			State:       provider.NormalizeCommitStatusState(s.Status),
+		result = append(result, model.CommitStatus{
+			State:       model.NormalizeCommitStatusState(s.Status),
 			Context:     s.Name,
 			Description: s.Description,
 			TargetURL:   s.TargetURL,

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -14,17 +15,17 @@ import (
 // update/delete resolve the ID through the per-provider TTL cache.
 
 // ListLabels implements provider.LabelManager.
-func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	return giteafamily.ListLabels(ctx, p.family, p.ports, owner, repo, opts)
 }
 
 // CreateLabel implements provider.LabelManager.
-func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	return giteafamily.CreateLabel(ctx, p.family, p.ports, owner, repo, opts)
 }
 
 // UpdateLabel implements provider.LabelManager.
-func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	return giteafamily.UpdateLabel(ctx, p.family, p.ports, p.labelIDs, owner, repo, name, opts)
 }
 

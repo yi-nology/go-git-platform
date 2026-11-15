@@ -7,6 +7,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -14,16 +15,16 @@ import (
 // PullRequests.ListFiles takes no options at all, so there is no
 // pagination parameter to exhaust — the platform returns what it returns
 // in a single response.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "GetCRDiff", number)
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*model.MergeDiff, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
 	}
 	files, _, err := p.client.PullRequests.ListFiles(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetCRDiff", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetCRDiff", err)
 	}
-	diff := &provider.MergeDiff{}
+	diff := &model.MergeDiff{}
 	for _, f := range files {
 		diff.Files = append(diff.Files, convertPRFile(f))
 	}
@@ -33,7 +34,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*model.ChangedFile, error) {
 	diff, err := p.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
@@ -43,7 +44,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "CreateNote", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "CreateNote", number)
 	if err != nil {
 		return "", err
 	}
@@ -52,23 +53,23 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 	}
 	comment, _, err := p.client.PullRequests.CreateComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, opts)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitee, "CreateNote", err)
+		return "", provider.Wrap(model.PlatformGitee, "CreateNote", err)
 	}
 	return strconv.FormatInt(int64(deref(comment.ID)), 10), nil
 }
 
 // DeleteNote implements provider.DiffManager.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
-	if _, err := backendutil.ParsePRNumber(provider.PlatformGitee, "DeleteNote", number); err != nil {
+	if _, err := backendutil.ParsePRNumber(model.PlatformGitee, "DeleteNote", number); err != nil {
 		return err
 	}
 	id, err := strconv.Atoi(noteID)
 	if err != nil {
-		return provider.Wrapf(provider.PlatformGitee, "DeleteNote", "invalid note id %q", noteID)
+		return provider.Wrapf(model.PlatformGitee, "DeleteNote", "invalid note id %q", noteID)
 	}
 	_, err = p.client.PullRequests.DeleteComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), id)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteNote", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteNote", err)
 	}
 	return nil
 }
@@ -83,7 +84,7 @@ func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID s
 // NewLine wins when both line anchors are set; the base/start SHA pair and
 // multi-line ranges have no wire (registered divergence).
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitee, "CreateDiscussion", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitee, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}
@@ -104,7 +105,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	}
 	comment, _, err := p.client.PullRequests.CreateComment(ctx, backendutil.Esc(owner), backendutil.Esc(repo), n, commentOpts)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitee, "CreateDiscussion", err)
+		return "", provider.Wrap(model.PlatformGitee, "CreateDiscussion", err)
 	}
 	return strconv.FormatInt(int64(deref(comment.ID)), 10), nil
 }

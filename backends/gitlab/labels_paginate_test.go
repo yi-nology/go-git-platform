@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -41,7 +42,7 @@ func TestGitLab_ResolveLabelID_Paginates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -91,7 +92,7 @@ func TestGitLab_ResolveLabelID_NotFoundStopsOnShortPage(t *testing.T) {
 		_, _ = w.Write([]byte(page1))
 	}))
 	defer srv.Close()
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}

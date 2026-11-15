@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // DeploymentManager reports and drives a platform-native deployment
 // pipeline. Optional capability interface: check
@@ -10,12 +14,12 @@ import "context"
 // records are CI-produced and carry no manual status wire).
 type DeploymentManager interface {
 	// CreateDeployment requests a deployment of ref to environment.
-	CreateDeployment(ctx context.Context, owner, repo, ref, environment string, opts CreateDeploymentOptions) (*Deployment, error)
+	CreateDeployment(ctx context.Context, owner, repo, ref, environment string, opts CreateDeploymentOptions) (*model.Deployment, error)
 	// ListDeployments lists a repository's deployment records, newest first,
 	// optionally filtered by environment. The int return is the number of
 	// items on the returned page (the IssueManager total convention); the
 	// platform serves no repository-wide total on this endpoint.
-	ListDeployments(ctx context.Context, owner, repo string, environment string, page, perPage int) ([]*Deployment, int, error)
+	ListDeployments(ctx context.Context, owner, repo string, environment string, page, perPage int) ([]*model.Deployment, int, error)
 	// CreateDeploymentStatus reports state on a deployment.
 	CreateDeploymentStatus(ctx context.Context, owner, repo string, deploymentID int64, opts DeploymentStatusOptions) error
 }
@@ -59,7 +63,7 @@ type TemplateRepoManager interface {
 	// CreateRepoFromTemplate generates a new repository owned by
 	// opts.Owner (empty = the authenticated user) from the template
 	// templateOwner/templateRepo.
-	CreateRepoFromTemplate(ctx context.Context, templateOwner, templateRepo string, opts CreateRepoFromTemplateOptions) (*PlatformRepo, error)
+	CreateRepoFromTemplate(ctx context.Context, templateOwner, templateRepo string, opts CreateRepoFromTemplateOptions) (*model.PlatformRepo, error)
 }
 
 // CreateRepoFromTemplateOptions carries the new repository's fields.

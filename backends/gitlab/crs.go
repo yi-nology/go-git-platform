@@ -8,16 +8,17 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
-func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	// #160：GitLab 创建面无 draft 参数（draft=标题 Draft: 前缀语义）——
 	// Draft=true 显式拒绝（台账 Field:"opts.Draft" 登记）。
 	if opts.Draft {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateCR", provider.ErrDraftNotSupported)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateCR", provider.ErrDraftNotSupported)
 	}
 	createOpts := &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       new(opts.SourceBranch),
@@ -32,26 +33,26 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	mr, _, err := p.client.MergeRequests.CreateMergeRequest(pidOf(opts.Owner, opts.Repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateCR", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "GetCR", number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	mr, _, err := p.client.MergeRequests.GetMergeRequest(pidOf(owner, repo), n, nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetCR", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // ListCRs implements provider.ChangeRequestManager.
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListProjectMergeRequestsOptions{
 		ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: int64(perPage)},
@@ -67,7 +68,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	mrs, resp, err := p.client.MergeRequests.ListProjectMergeRequests(pidOf(opts.Owner, opts.Repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitLab, "ListCRs", err)
+		return nil, nil, provider.Wrap(model.PlatformGitLab, "ListCRs", err)
 	}
 	// X-Total is authoritative when present; otherwise the count is unknown
 	// (nil), never the page length.
@@ -76,7 +77,7 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 		t := int(resp.TotalItems)
 		total = &t
 	}
-	crs := make([]*provider.ChangeRequest, 0, len(mrs))
+	crs := make([]*model.ChangeRequest, 0, len(mrs))
 	for _, mr := range mrs {
 		crs = append(crs, convertBasicMR(mr))
 	}
@@ -84,8 +85,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "MergeCR", number)
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -95,11 +96,11 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	existing, _, err := p.client.MergeRequests.GetMergeRequest(pid, n, nil, gitlab.WithContext(ctx))
 	if err == nil && existing != nil {
 		if existing.DetailedMergeStatus != "" && existing.DetailedMergeStatus != "mergeable" && existing.DetailedMergeStatus != "checking" {
-			return nil, provider.Wrapf(provider.PlatformGitLab, "MergeCR",
+			return nil, provider.Wrapf(model.PlatformGitLab, "MergeCR",
 				"MR cannot be merged (status: %s). It may have conflicts or an active pipeline", existing.DetailedMergeStatus)
 		}
 		if existing.State != "opened" {
-			return nil, provider.Wrapf(provider.PlatformGitLab, "MergeCR",
+			return nil, provider.Wrapf(model.PlatformGitLab, "MergeCR",
 				"MR is not in 'opened' state (current: %s)", existing.State)
 		}
 	}
@@ -115,42 +116,42 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	mr, _, err := p.client.MergeRequests.AcceptMergeRequest(pid, n, acceptOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "MergeCR", oekiterrors.Wrap(err, "merge failed"))
+		return nil, provider.Wrap(model.PlatformGitLab, "MergeCR", oekiterrors.Wrap(err, "merge failed"))
 	}
 	return convertMR(mr), nil
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CloseCR", number)
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{StateEvent: new("close")}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CloseCR", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CloseCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ReopenCR", number)
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{StateEvent: new("reopen")}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ReopenCR", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ReopenCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "UpdateCR", number)
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -181,14 +182,14 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	}
 	mr, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateCR", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateCR", err)
 	}
 	return convertMR(mr), nil
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
@@ -196,14 +197,14 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 	_, _, err = p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), n,
 		&gitlab.UpdateMergeRequestOptions{Labels: &l}, gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "UpdateCRLabels", err)
+		return provider.Wrap(model.PlatformGitLab, "UpdateCRLabels", err)
 	}
 	return nil
 }
 
 // ListCRComments implements provider.ChangeRequestManager.
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListCRComments", number)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*model.CRComment, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -212,14 +213,14 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRComments", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(notes))
+	result := make([]*model.CRComment, 0, len(notes))
 	for _, n := range notes {
-		c := &provider.CRComment{
+		c := &model.CRComment{
 			ID:   n.ID,
 			Body: n.Body,
-			Author: &provider.CRUser{
+			Author: &model.CRUser{
 				ID: n.Author.ID, Username: n.Author.Username,
 				Name: n.Author.Name, AvatarURL: n.Author.AvatarURL,
 			},
@@ -232,8 +233,8 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 }
 
 // ListCRCommits implements provider.ChangeRequestManager.
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListCRCommits", number)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*model.CRCommit, error) {
+	n, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
@@ -242,16 +243,16 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCRCommits", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
 		// Full SHA (c.ID), matching every other backend and this backend's
 		// own convertCommit — ShortID (7 hex) broke joins/dedup keys
 		// against CRCommit.SHA produced elsewhere (issue #82).
-		cc := &provider.CRCommit{SHA: c.ID, Message: c.Title, CreatedAt: timeOrZero(c.CreatedAt)}
+		cc := &model.CRCommit{SHA: c.ID, Message: c.Title, CreatedAt: timeOrZero(c.CreatedAt)}
 		if c.AuthorName != "" {
-			cc.Author = &provider.CRUser{Name: c.AuthorName}
+			cc.Author = &model.CRUser{Name: c.AuthorName}
 		}
 		result = append(result, cc)
 	}

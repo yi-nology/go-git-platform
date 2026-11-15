@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // giteeSign computes Gitee's webhook signature for a timestamp:
@@ -108,7 +110,7 @@ func TestGiteeWebhookValidator_PasswordMode(t *testing.T) {
 func TestGiteeWebhookValidator_DefaultRegistry(t *testing.T) {
 	// The default registry must mount the Gitee-aware validator, not the
 	// body-HMAC one that could never verify either Gitee mode.
-	v := defaultWebhookRegistry.Get(PlatformGitee)
+	v := defaultWebhookRegistry.Get(model.PlatformGitee)
 	if v == nil {
 		t.Fatal("no validator registered for Gitee")
 	}
@@ -120,7 +122,7 @@ func TestGiteeWebhookValidator_DefaultRegistry(t *testing.T) {
 	const secret = "registry-secret"
 	now := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	r := giteeRequest(giteeSign(secret, now), now)
-	if err := defaultWebhookRegistry.Validate(PlatformGitee, r, nil, secret); err != nil {
+	if err := defaultWebhookRegistry.Validate(model.PlatformGitee, r, nil, secret); err != nil {
 		t.Fatalf("registry.Validate sign mode: %v", err)
 	}
 }

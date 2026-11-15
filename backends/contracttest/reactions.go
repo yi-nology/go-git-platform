@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -49,7 +50,7 @@ func testReactionsSuite(t *testing.T, h Harness) {
 // suite against a backend that implements provider.ReactionManager.
 type ReactionsHarness struct {
 	Name           string
-	Platform       provider.Platform
+	Platform       model.Platform
 	NewProvider    func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse   string
 	CreateResponse string
@@ -84,15 +85,15 @@ func RunReactionsSuite(t *testing.T, h ReactionsHarness) {
 
 	t.Run("AddIssueReaction_ReturnsReaction", func(t *testing.T) {
 		rm := newRM(t)
-		r, err := rm.AddIssueReaction(context.Background(), "owner", "repo", "1", provider.ReactionHeart)
+		r, err := rm.AddIssueReaction(context.Background(), "owner", "repo", "1", model.ReactionHeart)
 		if err != nil {
 			t.Fatalf("AddIssueReaction: %v", err)
 		}
 		if r == nil {
 			t.Fatal("expected a reaction, got nil")
 		}
-		if r.Emoji != provider.ReactionHeart {
-			t.Errorf("expected emoji %q, got %q", provider.ReactionHeart, r.Emoji)
+		if r.Emoji != model.ReactionHeart {
+			t.Errorf("expected emoji %q, got %q", model.ReactionHeart, r.Emoji)
 		}
 	})
 
@@ -140,7 +141,7 @@ func assertReactionFamilyShapes(t *testing.T, h ReactionsHarness, p provider.Pro
 	ctx := context.Background()
 	rl, err := rm.ListIssueCommentReactions(ctx, "owner", "repo", 1)
 	checkReactionRead(t, stubs, "ListIssueCommentReactions", rl, err)
-	r, err := rm.AddIssueCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+	r, err := rm.AddIssueCommentReaction(ctx, "owner", "repo", 1, model.ReactionHeart)
 	if err == nil && r == nil {
 		t.Error("AddIssueCommentReaction returned (nil, nil)")
 	}
@@ -150,7 +151,7 @@ func assertReactionFamilyShapes(t *testing.T, h ReactionsHarness, p provider.Pro
 	checkReactionRead(t, stubs, "ListCRReactions", crl, err)
 	ccl, err := rm.ListCRCommentReactions(ctx, "owner", "repo", 1)
 	checkReactionRead(t, stubs, "ListCRCommentReactions", ccl, err)
-	r2, err := rm.AddCRCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+	r2, err := rm.AddCRCommentReaction(ctx, "owner", "repo", 1, model.ReactionHeart)
 	if err == nil && r2 == nil {
 		t.Error("AddCRCommentReaction returned (nil, nil)")
 	}
@@ -162,7 +163,7 @@ func assertReactionFamilyShapes(t *testing.T, h ReactionsHarness, p provider.Pro
 // (non-nil results) or a registered ErrNotImplemented stub — the (nil, nil)
 // silent-empty and sentinel-less text-error forms of issue #57 are pinned
 // out, and the stub verdict must be paired with a DivergenceStub entry.
-func checkReactionRead(t *testing.T, stubs map[string]bool, name string, results []*provider.Reaction, err error) {
+func checkReactionRead(t *testing.T, stubs map[string]bool, name string, results []*model.Reaction, err error) {
 	t.Helper()
 	switch {
 	case err == nil:

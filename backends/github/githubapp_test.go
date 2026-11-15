@@ -14,6 +14,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/github"
 	"github.com/yi-nology/go-git-platform/githubapp"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -51,7 +52,7 @@ func TestGitHub_AppTokenSourceEndToEnd(t *testing.T) {
 
 	src := githubapp.NewInstallationTokenSource(tokenSrv.URL, 42, 7, keyPEM)
 	p, err := github.New(provider.Config{
-		Platform:    provider.PlatformGitHub,
+		Platform:    model.PlatformGitHub,
 		BaseURL:     apiSrv.URL,
 		TokenSource: src,
 	})

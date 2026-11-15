@@ -14,6 +14,8 @@ import (
 	"github.com/oekit/pkg/container"
 	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/webhook"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // WebhookValidator verifies the authenticity of an incoming webhook request.
@@ -76,16 +78,16 @@ func (v ValidatorFunc) Validate(r *http.Request, body []byte, secret string) err
 // package init and reads happen on the request path. Storage delegates to
 // oekit container.SafeMap.
 type WebhookValidatorRegistry struct {
-	validators *container.SafeMap[Platform, WebhookValidator]
+	validators *container.SafeMap[model.Platform, WebhookValidator]
 }
 
 // NewWebhookValidatorRegistry builds an empty registry.
 func NewWebhookValidatorRegistry() *WebhookValidatorRegistry {
-	return &WebhookValidatorRegistry{validators: container.NewSafeMap[Platform, WebhookValidator]()}
+	return &WebhookValidatorRegistry{validators: container.NewSafeMap[model.Platform, WebhookValidator]()}
 }
 
 // Register associates a validator with a platform.
-func (r *WebhookValidatorRegistry) Register(p Platform, v WebhookValidator) {
+func (r *WebhookValidatorRegistry) Register(p model.Platform, v WebhookValidator) {
 	if v == nil {
 		return
 	}
@@ -94,14 +96,14 @@ func (r *WebhookValidatorRegistry) Register(p Platform, v WebhookValidator) {
 
 // Get returns the validator for the given platform, or nil if none is
 // registered.
-func (r *WebhookValidatorRegistry) Get(p Platform) WebhookValidator {
+func (r *WebhookValidatorRegistry) Get(p model.Platform) WebhookValidator {
 	v, _ := r.validators.Get(p)
 	return v
 }
 
 // Validate looks up the validator for the given platform and runs it. A nil
 // validator or missing platform produces ErrNotImplemented.
-func (r *WebhookValidatorRegistry) Validate(p Platform, req *http.Request, body []byte, secret string) error {
+func (r *WebhookValidatorRegistry) Validate(p model.Platform, req *http.Request, body []byte, secret string) error {
 	v := r.Get(p)
 	if v == nil {
 		return oekiterrors.Wrap(ErrNotImplemented, "no webhook validator", "platform", p)
@@ -392,7 +394,7 @@ func ReadAndRestoreBody(r *http.Request) ([]byte, error) {
 // Backend WebhookManager implementations delegate here instead of keeping an
 // inline copy of their platform's crypto, which had already drifted from the
 // registry (empty-secret semantics) before v0.77.0.
-func ValidateWebhookWithRegistry(p Platform, r *http.Request, secret string) error {
+func ValidateWebhookWithRegistry(p model.Platform, r *http.Request, secret string) error {
 	body, err := ReadAndRestoreBody(r)
 	if err != nil {
 		return oekiterrors.Wrap(ErrWebhookValidation, "read request body", "err", err)
@@ -407,7 +409,7 @@ func ValidateWebhookWithRegistry(p Platform, r *http.Request, secret string) err
 // dialect, not the envelope.
 type WebhookEnvelope struct {
 	// Platform selects the registered signature validator.
-	Platform Platform
+	Platform model.Platform
 	// EventHeaders are checked in order for the event-type header; the first
 	// non-empty value wins (multi-header dialects list fallbacks). Leave
 	// empty when the platform dispatches on a payload field (e.g. GitLab's
@@ -466,8 +468,8 @@ func (e WebhookEnvelope) Read(r *http.Request, secret string) (string, []byte, e
 // commonly key their dedup table and their unique index on it, and an empty
 // key makes every later event collide with the first one (silently dropping
 // all events after the first).
-func (e WebhookEnvelope) NewEvent(idKey int64, body []byte) *NormalizedEvent {
-	ev := &NormalizedEvent{
+func (e WebhookEnvelope) NewEvent(idKey int64, body []byte) *model.NormalizedEvent {
+	ev := &model.NormalizedEvent{
 		Source:     e.Platform,
 		Timestamp:  time.Now(),
 		RawPayload: json.RawMessage(body),
@@ -483,7 +485,7 @@ func (e WebhookEnvelope) NewEvent(idKey int64, body []byte) *NormalizedEvent {
 // redelivers the same event, so a caller keying dedup on the event ID can
 // actually suppress the duplicate. Falls back to NewEvent's synthesized ID
 // when the platform sends no such header.
-func (e WebhookEnvelope) NewEventWithID(r *http.Request, idKey int64, body []byte) *NormalizedEvent {
+func (e WebhookEnvelope) NewEventWithID(r *http.Request, idKey int64, body []byte) *model.NormalizedEvent {
 	ev := e.NewEvent(idKey, body)
 	if r == nil {
 		return ev
@@ -509,18 +511,18 @@ func (e WebhookEnvelope) idPrefix() string {
 // Pre-registered validators for the platforms the SDK ships with. These are
 // registered in init() below.
 func init() {
-	defaultWebhookRegistry.Register(PlatformGitHub, HMACSHA256Validator{Header: "X-Hub-Signature-256"})
-	defaultWebhookRegistry.Register(PlatformGitea, HMACSHA256Validator{Header: "X-Gitea-Signature"})
-	defaultWebhookRegistry.Register(PlatformForgejo, ForgejoWebhookValidator{})
-	defaultWebhookRegistry.Register(PlatformGitee, GiteeWebhookValidator{})
+	defaultWebhookRegistry.Register(model.PlatformGitHub, HMACSHA256Validator{Header: "X-Hub-Signature-256"})
+	defaultWebhookRegistry.Register(model.PlatformGitea, HMACSHA256Validator{Header: "X-Gitea-Signature"})
+	defaultWebhookRegistry.Register(model.PlatformForgejo, ForgejoWebhookValidator{})
+	defaultWebhookRegistry.Register(model.PlatformGitee, GiteeWebhookValidator{})
 	// GitCode documents its webhook password in X-GitCode-Token
 	// (docs.gitcode.com "配置 WebHook"); the X-Token body-HMAC scheme
 	// registered previously matched no documented mode. An HMAC sign mode
 	// exists but its exact message format is not yet verified against the
 	// docs — the documented password scheme is registered until then.
-	defaultWebhookRegistry.Register(PlatformGitCode, GitCodeWebhookValidator{})
-	defaultWebhookRegistry.Register(PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
-	defaultWebhookRegistry.Register(PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
+	defaultWebhookRegistry.Register(model.PlatformGitCode, GitCodeWebhookValidator{})
+	defaultWebhookRegistry.Register(model.PlatformTencentCode, StaticTokenValidator{Header: "X-Token"})
+	defaultWebhookRegistry.Register(model.PlatformGitLab, StaticTokenValidator{Header: "X-Gitlab-Token"})
 }
 
 // --- Canonical webhook event types ---

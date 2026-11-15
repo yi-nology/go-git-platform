@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/oekit/concurrency/async"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 func TestBatchResultOrderAndAttribution(t *testing.T) {
@@ -80,7 +82,7 @@ type gatingFakeProvider struct {
 	release chan struct{} // closed to let in-flight calls finish
 }
 
-func (p gatingFakeProvider) Platform() Platform { return PlatformGitHub }
+func (p gatingFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 
 func (p gatingFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	select {
@@ -141,7 +143,7 @@ func TestBatchCancellationInterruptsSemaphoreAcquisition(t *testing.T) {
 // the panic into that item's Err and leave the sibling items unaffected.
 type panickingFakeProvider struct{ Provider }
 
-func (panickingFakeProvider) Platform() Platform { return PlatformGitHub }
+func (panickingFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (panickingFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	if len(path)%2 == 1 {
 		panic("boom: " + path)
@@ -175,7 +177,7 @@ func TestBatchPanicBecomesItemError(t *testing.T) {
 // CommitStatusManager (an optional capability, not part of Provider).
 type notImplementedProvider struct{ Provider }
 
-func (notImplementedProvider) Platform() Platform { return PlatformGitHub }
+func (notImplementedProvider) Platform() model.Platform { return model.PlatformGitHub }
 
 func TestBatchNotImplementedCapability(t *testing.T) {
 	p := notImplementedProvider{}
@@ -205,15 +207,15 @@ func TestBatchSetCommitStatusesKeys(t *testing.T) {
 
 type batchFakeProvider struct{ Provider }
 
-func (batchFakeProvider) Platform() Platform { return PlatformGitHub }
+func (batchFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (batchFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	if len(path)%2 == 1 {
-		return "", New(PlatformGitHub, "GetFileContent", http.StatusNotFound, "no such file")
+		return "", New(model.PlatformGitHub, "GetFileContent", http.StatusNotFound, "no such file")
 	}
 	return "content:" + path, nil
 }
-func (batchFakeProvider) GetCR(ctx context.Context, owner, repo, number string) (*ChangeRequest, error) {
-	return &ChangeRequest{Number: number}, nil
+func (batchFakeProvider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	return &model.ChangeRequest{Number: number}, nil
 }
 
 type countingFakeProvider struct {
@@ -221,7 +223,7 @@ type countingFakeProvider struct {
 	hook func()
 }
 
-func (p countingFakeProvider) Platform() Platform { return PlatformGitHub }
+func (p countingFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (p countingFakeProvider) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
 	p.hook()
 	return "", nil
@@ -229,10 +231,10 @@ func (p countingFakeProvider) GetFileContent(ctx context.Context, owner, repo, p
 
 type statusFakeProvider struct{ Provider }
 
-func (statusFakeProvider) Platform() Platform { return PlatformGitHub }
+func (statusFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
 func (statusFakeProvider) CreateCommitStatus(ctx context.Context, owner, repo, sha string, opts CommitStatusOptions) error {
 	return nil
 }
-func (statusFakeProvider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]CommitStatus, error) {
+func (statusFakeProvider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	return nil, nil
 }

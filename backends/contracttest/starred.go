@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -52,7 +53,7 @@ func testStarredSuite(t *testing.T, h Harness) {
 // StarredHarness bundles inputs for the starred-repo list suite.
 type StarredHarness struct {
 	Name            string
-	Platform        provider.Platform
+	Platform        model.Platform
 	NewProvider     func(t *testing.T, cfg provider.Config) provider.Provider
 	WrappedResponse string
 	BareResponse    string
@@ -89,7 +90,7 @@ func (w *starredWire) last() (path, page, perPage, accept string, n int) {
 // RunStarredSuite tests the starred-manager wire contract: GET user/starred
 // requests the star+json Accept header, carries normalized paging, and
 // decodes both the wrapped ({repo:…}) and bare repository shapes into
-// provider.PlatformRepo.
+// model.PlatformRepo.
 func RunStarredSuite(t *testing.T, h StarredHarness) {
 	newSM := func(t *testing.T, body string, rec *starredWire) provider.StarredManager {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -147,9 +148,9 @@ func RunStarredSuite(t *testing.T, h StarredHarness) {
 	})
 }
 
-// assertStarredRepo pins the parsed provider.PlatformRepo fields the starred
+// assertStarredRepo pins the parsed model.PlatformRepo fields the starred
 // fixtures guarantee: identity, description, star count, and platform.
-func assertStarredRepo(t *testing.T, repos []*provider.PlatformRepo, platform provider.Platform) {
+func assertStarredRepo(t *testing.T, repos []*model.PlatformRepo, platform model.Platform) {
 	t.Helper()
 	if len(repos) == 0 {
 		t.Fatal("expected at least 1 starred repo")

@@ -4,6 +4,8 @@ import (
 	"context"
 
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // EnsureIssueState 收敛 issue 状态（2B spec）：GET 现状，已达 want 零写入
@@ -13,8 +15,8 @@ import (
 // 形态与既有 Ensure* 不同（取 Provider 而非 IssueManager）：IssueManager
 // 不在 Provider 组成里，内部断言让调用方免二次断言，缺能力统一
 // ErrNotImplemented。
-func EnsureIssueState(ctx context.Context, p Provider, owner, repo, number string, want IssueState) (MutationOutcome, *Issue, error) {
-	if want != IssueStateOpen && want != IssueStateClosed {
+func EnsureIssueState(ctx context.Context, p Provider, owner, repo, number string, want model.IssueState) (MutationOutcome, *model.Issue, error) {
+	if want != model.IssueStateOpen && want != model.IssueStateClosed {
 		return "", nil, oekiterrors.Wrap(ErrInvalidInput, "EnsureIssueState: want must be open or closed", "want", string(want))
 	}
 	im, ok := p.(IssueManager)
@@ -28,8 +30,8 @@ func EnsureIssueState(ctx context.Context, p Provider, owner, repo, number strin
 	if cur.State == want {
 		return OutcomeUnchanged, cur, nil
 	}
-	var out *Issue
-	if want == IssueStateClosed {
+	var out *model.Issue
+	if want == model.IssueStateClosed {
 		out, err = im.CloseIssue(ctx, owner, repo, number)
 	} else {
 		out, err = im.ReopenIssue(ctx, owner, repo, number)

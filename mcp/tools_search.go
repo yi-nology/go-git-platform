@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -15,8 +17,8 @@ type searchReposIn struct {
 }
 
 type searchReposOut struct {
-	Total int                          `json:"total"`
-	Repos []*provider.SearchRepoResult `json:"repos"`
+	Total int                       `json:"total"`
+	Repos []*model.SearchRepoResult `json:"repos"`
 }
 
 type searchIssuesIn struct {
@@ -25,8 +27,8 @@ type searchIssuesIn struct {
 }
 
 type searchIssuesOut struct {
-	Total  int                           `json:"total"`
-	Issues []*provider.SearchIssueResult `json:"issues"`
+	Total  int                        `json:"total"`
+	Issues []*model.SearchIssueResult `json:"issues"`
 }
 
 type searchUsersIn struct {
@@ -35,8 +37,8 @@ type searchUsersIn struct {
 }
 
 type searchUsersOut struct {
-	Total int                          `json:"total"`
-	Users []*provider.SearchUserResult `json:"users"`
+	Total int                       `json:"total"`
+	Users []*model.SearchUserResult `json:"users"`
 }
 
 func registerSearch(s *mcp.Server, st *state) {

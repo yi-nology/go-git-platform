@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -25,7 +26,7 @@ func TestGitLab_ListCRCommits_FullSHA(t *testing.T) {
 		_, _ = w.Write([]byte(`[{"id":"` + fullSHA + `","short_id":"` + shortSHA + `","title":"fix","created_at":"2026-11-01T00:00:00Z","author_name":"dev"}]`))
 	}))
 	defer srv.Close()
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -54,7 +55,7 @@ func TestGitLab_MarkRepoNotificationsRead_NotImplemented(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitLab, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}

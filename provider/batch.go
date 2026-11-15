@@ -5,6 +5,8 @@ import (
 
 	"github.com/oekit/concurrency/syncx"
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // DefaultBatchConcurrency is the number of in-flight operations used by
@@ -103,14 +105,14 @@ func GetFileContents(ctx context.Context, p Provider, owner, repo, ref string, p
 // GetCRs fetches many change requests from one repository with bounded
 // concurrency, in input order. A lookup failure for one number fails
 // only that item.
-func GetCRs(ctx context.Context, p Provider, owner, repo string, numbers []string, batchOpts ...BatchOptions) []BatchResult[*ChangeRequest] {
+func GetCRs(ctx context.Context, p Provider, owner, repo string, numbers []string, batchOpts ...BatchOptions) []BatchResult[*model.ChangeRequest] {
 	var opts BatchOptions
 	if len(batchOpts) > 0 {
 		opts = batchOpts[0]
 	}
 	return batch(ctx, numbers, opts,
 		func(n string) string { return n },
-		func(ctx context.Context, number string) (*ChangeRequest, error) {
+		func(ctx context.Context, number string) (*model.ChangeRequest, error) {
 			return p.GetCR(ctx, owner, repo, number)
 		})
 }

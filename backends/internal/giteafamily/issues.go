@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -81,7 +82,7 @@ type IssueLabelCache = backendutil.IDCache
 // exactly one request, Page > 0 exactly that caller-driven page; the int
 // return is len(result), the served rows' count). The family mixes PRs into
 // the issue endpoint, so the engine filters to real issues (Type: "issues").
-func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
+func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIssuesOptions) ([]*model.Issue, int, error) {
 	listOpts := FamilyIssueListOption{Type: "issues"}
 	if opts.State != "" {
 		listOpts.State = string(opts.State)
@@ -98,7 +99,7 @@ func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIs
 	if err != nil {
 		return nil, 0, provider.Wrap(f.Platform, "ListIssues", err)
 	}
-	result := make([]*provider.Issue, 0, len(issues))
+	result := make([]*model.Issue, 0, len(issues))
 	for _, i := range issues {
 		result = append(result, convertIssue(i))
 	}
@@ -106,7 +107,7 @@ func ListIssues(ctx context.Context, f Family, c IssuePort, opts provider.ListIs
 }
 
 // GetIssue fetches one issue.
-func GetIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*provider.Issue, error) {
+func GetIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*model.Issue, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "GetIssue", number)
 	if err != nil {
 		return nil, err
@@ -120,7 +121,7 @@ func GetIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number st
 
 // CreateIssue creates an issue. The family's create endpoint takes label
 // IDs, so names are resolved first through the shared cached resolver.
-func CreateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, cache *IssueLabelCache, opts provider.CreateIssueOptions) (*provider.Issue, error) {
+func CreateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, cache *IssueLabelCache, opts provider.CreateIssueOptions) (*model.Issue, error) {
 	createOpts := FamilyCreateIssueOption{
 		Title:     opts.Title,
 		Body:      opts.Body,
@@ -159,7 +160,7 @@ func CreateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, c
 //
 // KNOWN COST: when opts.Title is empty this issues one extra GET to backfill
 // the current title.
-func UpdateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, cache *IssueLabelCache, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
+func UpdateIssue(ctx context.Context, f Family, c IssuePort, labels LabelPort, cache *IssueLabelCache, owner, repo, number string, opts provider.UpdateIssueOptions) (*model.Issue, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
@@ -282,7 +283,7 @@ func buildEditIssueOption(ctx context.Context, f Family, c IssuePort, op, owner,
 }
 
 // CloseIssue closes an issue.
-func CloseIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*provider.Issue, error) {
+func CloseIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*model.Issue, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "CloseIssue", number)
 	if err != nil {
 		return nil, err
@@ -291,7 +292,7 @@ func CloseIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number 
 }
 
 // ReopenIssue reopens an issue.
-func ReopenIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*provider.Issue, error) {
+func ReopenIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number string) (*model.Issue, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
@@ -303,7 +304,7 @@ func ReopenIssue(ctx context.Context, f Family, c IssuePort, owner, repo, number
 // serializes Title, so the current title is fetched first to avoid clearing
 // it (one extra GET per close/reopen; same constraint as
 // buildEditIssueOption).
-func setIssueState(ctx context.Context, f Family, c IssuePort, owner, repo string, n int64, state, op string) (*provider.Issue, error) {
+func setIssueState(ctx context.Context, f Family, c IssuePort, owner, repo string, n int64, state, op string) (*model.Issue, error) {
 	current, err := c.GetIssue(ctx, owner, repo, n)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, op, err)
@@ -317,7 +318,7 @@ func setIssueState(ctx context.Context, f Family, c IssuePort, owner, repo strin
 
 // ListIssueComments lists an issue's comments, walking the full endpoint
 // pagination.
-func ListIssueComments(ctx context.Context, f Family, c IssuePort, owner, repo, number string) ([]*provider.IssueComment, error) {
+func ListIssueComments(ctx context.Context, f Family, c IssuePort, owner, repo, number string) ([]*model.IssueComment, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
@@ -330,7 +331,7 @@ func ListIssueComments(ctx context.Context, f Family, c IssuePort, owner, repo, 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListIssueComments", err)
 	}
-	result := make([]*provider.IssueComment, 0, len(comments))
+	result := make([]*model.IssueComment, 0, len(comments))
 	for _, c := range comments {
 		result = append(result, convertIssueComment(c))
 	}
@@ -338,7 +339,7 @@ func ListIssueComments(ctx context.Context, f Family, c IssuePort, owner, repo, 
 }
 
 // CreateIssueComment adds a comment to an issue.
-func CreateIssueComment(ctx context.Context, f Family, c DiffPort, owner, repo, number, body string) (*provider.IssueComment, error) {
+func CreateIssueComment(ctx context.Context, f Family, c DiffPort, owner, repo, number, body string) (*model.IssueComment, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
@@ -353,7 +354,7 @@ func CreateIssueComment(ctx context.Context, f Family, c DiffPort, owner, repo, 
 // UpdateIssueComment edits a comment. The family's edit endpoint addresses
 // the comment directly (number is unused); the platform only lets the
 // comment's author perform the edit.
-func UpdateIssueComment(ctx context.Context, f Family, c IssuePort, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+func UpdateIssueComment(ctx context.Context, f Family, c IssuePort, owner, repo, number string, commentID int64, body string) (*model.IssueComment, error) {
 	comment, err := c.EditIssueComment(ctx, owner, repo, commentID, EditIssueCommentOption{Body: body})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "UpdateIssueComment", err)
@@ -373,7 +374,7 @@ func DeleteIssueComment(ctx context.Context, f Family, c DiffPort, owner, repo, 
 }
 
 // ListIssueLabels lists the repository-level labels, exhausting pagination.
-func ListIssueLabels(ctx context.Context, f Family, c LabelPort, owner, repo string) ([]*provider.IssueLabel, error) {
+func ListIssueLabels(ctx context.Context, f Family, c LabelPort, owner, repo string) ([]*model.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*Label, error) {
 		return c.ListRepoLabels(ctx, owner, repo, ListLabelsOptions{
 			ListOptions: ListOptions{Page: page, PageSize: backendutil.LabelPageSize},
@@ -382,9 +383,9 @@ func ListIssueLabels(ctx context.Context, f Family, c LabelPort, owner, repo str
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListIssueLabels", err)
 	}
-	result := make([]*provider.IssueLabel, 0, len(labels))
+	result := make([]*model.IssueLabel, 0, len(labels))
 	for _, l := range labels {
-		result = append(result, &provider.IssueLabel{ID: l.ID, Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+		result = append(result, &model.IssueLabel{ID: l.ID, Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
 	}
 	return result, nil
 }
@@ -422,16 +423,16 @@ func RemoveIssueLabel(ctx context.Context, f Family, c IssuePort, labels LabelPo
 }
 
 // convertIssue maps a family Issue to the provider shape.
-func convertIssue(i *Issue) *provider.Issue {
+func convertIssue(i *Issue) *model.Issue {
 	if i == nil {
 		return nil
 	}
-	issue := &provider.Issue{
+	issue := &model.Issue{
 		ID:     i.ID,
 		Number: strconv.FormatInt(i.Index, 10),
 		Title:  i.Title,
 		Body:   i.Body,
-		State:  provider.IssueState(i.State),
+		State:  model.IssueState(i.State),
 		Author: convertUser(i.Poster),
 		WebURL: i.HTMLURL,
 	}
@@ -446,7 +447,7 @@ func convertIssue(i *Issue) *provider.Issue {
 		}
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{Number: strconv.FormatInt(i.Milestone.ID, 10), Title: i.Milestone.Title}
+		issue.Milestone = &model.MilestoneRef{Number: strconv.FormatInt(i.Milestone.ID, 10), Title: i.Milestone.Title}
 	}
 	issue.CreatedAt, issue.UpdatedAt = i.Created, i.Updated
 	if i.Closed != nil {
@@ -456,11 +457,11 @@ func convertIssue(i *Issue) *provider.Issue {
 }
 
 // convertIssueComment maps a family comment to the provider shape.
-func convertIssueComment(c *FamilyComment) *provider.IssueComment {
+func convertIssueComment(c *FamilyComment) *model.IssueComment {
 	if c == nil {
 		return nil
 	}
-	return &provider.IssueComment{
+	return &model.IssueComment{
 		ID:        c.ID,
 		Body:      c.Body,
 		Author:    convertUser(c.Poster),

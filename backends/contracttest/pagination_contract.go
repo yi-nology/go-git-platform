@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -77,7 +78,7 @@ type newProviderFn func(t *testing.T, cfg provider.Config) provider.Provider
 // the backend still truncates at the platform's default page (the pre-fix
 // GitLab/Gitee shape); a grind to the 50-page budget cap means the empty
 // terminal page did not stop the walk.
-func assertPageZeroWalksAllPages(t *testing.T, h newProviderFn, platform provider.Platform, body, emptyBody string, pathFilter func(*http.Request) bool, list func(p provider.Provider) error) {
+func assertPageZeroWalksAllPages(t *testing.T, h newProviderFn, platform model.Platform, body, emptyBody string, pathFilter func(*http.Request) bool, list func(p provider.Provider) error) {
 	t.Helper()
 	srv, requests := paginatedListStub(body, emptyBody, pathFilter)
 	defer srv.Close()
@@ -92,7 +93,7 @@ func assertPageZeroWalksAllPages(t *testing.T, h newProviderFn, platform provide
 
 // assertPageOneSingleRequest pins the Page>0 half of the dual-mode
 // contract: a caller-driven page issues exactly one GET (issue #60).
-func assertPageOneSingleRequest(t *testing.T, h newProviderFn, platform provider.Platform, body string, pathFilter func(*http.Request) bool, list func(p provider.Provider) error) {
+func assertPageOneSingleRequest(t *testing.T, h newProviderFn, platform model.Platform, body string, pathFilter func(*http.Request) bool, list func(p provider.Provider) error) {
 	t.Helper()
 	srv, requests := paginatedListStub(body, body, pathFilter)
 	defer srv.Close()
@@ -108,8 +109,8 @@ func assertPageOneSingleRequest(t *testing.T, h newProviderFn, platform provider
 // PageZeroFixture carries the manager-specific pieces the exhaustive-family
 // suites hand to runPageZeroDualModeSuite.
 type PageZeroFixture struct {
-	// Platform is the provider.Platform constant the suite's Harness carries.
-	Platform provider.Platform
+	// Platform is the model.Platform constant the suite's Harness carries.
+	Platform model.Platform
 	// ListBody is the fixture served on the first list GET.
 	ListBody string
 	// EmptyBody is the terminal empty page in the same top-level JSON shape

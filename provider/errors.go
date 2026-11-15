@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/oekit/pkg/container"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // ErrWebhookFiltered 是 ParseWebhookEvent 的「噪声过滤」哨兵（issue #45）：
@@ -57,7 +59,7 @@ var (
 // logging, retry, and user-facing messages. It implements errors.Is so the
 // sentinel errors above are matched by Cause, and errors.As for typed access.
 type ProviderError struct {
-	Platform   Platform
+	Platform   model.Platform
 	Op         string // operation name, e.g., "ListRepos"
 	Resource   string // optional resource identifier, e.g., "owner/repo"
 	StatusCode int    // 0 when not applicable (e.g. configuration errors)
@@ -121,7 +123,7 @@ func (e *ProviderError) IsServerError() bool { return e.StatusCode >= 500 && e.S
 // chain, and the Error() message retains the platform's original detail.
 // Use this in platform implementations to convert transport errors into the
 // unified shape.
-func Wrap(platform Platform, op string, err error) error {
+func Wrap(platform model.Platform, op string, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -252,7 +254,7 @@ func copyRateLimitHints(pe *ProviderError, cur error) {
 // Wrapf is a convenience for creating a ProviderError with a formatted
 // message. The format is intentionally simple ("%s/%s") so platform code can
 // embed the resource identifier without re-implementing the prefix logic.
-func Wrapf(platform Platform, op, format string, args ...any) error {
+func Wrapf(platform model.Platform, op, format string, args ...any) error {
 	// oekiterrors.Errorf (issue #68): same shape as fmt.Errorf but keeps the
 	// cause chain for %w verbs and satisfies the "no bare fmt.Errorf" rule —
 	// this spot is outside the package's double-chain exemption quota.
@@ -261,7 +263,7 @@ func Wrapf(platform Platform, op, format string, args ...any) error {
 }
 
 // New builds a ProviderError directly from the given status code.
-func New(platform Platform, op string, status int, body string) error {
+func New(platform model.Platform, op string, status int, body string) error {
 	pe := &ProviderError{
 		Platform:   platform,
 		Op:         op,
@@ -323,7 +325,7 @@ type StatusExtractor func(err error) (int, bool)
 // statusExtractors maps each platform to its SDK error extractor, backed
 // by oekit container.SafeMap. Written from backend init() (single-goroutine
 // startup), read from Wrap on any goroutine.
-var statusExtractors = container.NewSafeMap[Platform, StatusExtractor]()
+var statusExtractors = container.NewSafeMap[model.Platform, StatusExtractor]()
 
 // RegisterStatusExtractor teaches Wrap how to read the HTTP status out of the
 // named platform's SDK error values — the explicit, type-safe replacement for
@@ -333,7 +335,7 @@ var statusExtractors = container.NewSafeMap[Platform, StatusExtractor]()
 // on the error value itself (use WrapStatusError / New at the call site, or
 // thread the *Response status through the port as the family backends do).
 // Panics on duplicate registration (same convention as Register).
-func RegisterStatusExtractor(p Platform, fn StatusExtractor) {
+func RegisterStatusExtractor(p model.Platform, fn StatusExtractor) {
 	if fn == nil {
 		panic("provider: RegisterStatusExtractor with nil extractor")
 	}
@@ -344,7 +346,7 @@ func RegisterStatusExtractor(p Platform, fn StatusExtractor) {
 
 // statusExtractorFor returns the platform's registered extractor's verdict
 // for err.
-func statusExtractorFor(p Platform, err error) (int, bool) {
+func statusExtractorFor(p model.Platform, err error) (int, bool) {
 	fn, _ := statusExtractors.Get(p)
 	if fn == nil {
 		return 0, false
@@ -365,7 +367,7 @@ type ThrottleClassifier func(err error) (retryAfter time.Duration, resetAt time.
 
 // throttleClassifiers maps each platform to its SDK throttle classifier,
 // backed by oekit container.SafeMap (same shape as statusExtractors).
-var throttleClassifiers = container.NewSafeMap[Platform, ThrottleClassifier]()
+var throttleClassifiers = container.NewSafeMap[model.Platform, ThrottleClassifier]()
 
 // RegisterThrottleClassifier teaches Wrap which of the named platform's SDK
 // error values are throttle verdicts. Consulted per link of the chain Wrap
@@ -373,7 +375,7 @@ var throttleClassifiers = container.NewSafeMap[Platform, ThrottleClassifier]()
 // produced a code. Backends register at init next to RegisterStatusExtractor;
 // a platform without a classifier keeps the status-only behavior. Panics on
 // duplicate registration (same convention as RegisterStatusExtractor).
-func RegisterThrottleClassifier(p Platform, fn ThrottleClassifier) {
+func RegisterThrottleClassifier(p model.Platform, fn ThrottleClassifier) {
 	if fn == nil {
 		panic("provider: RegisterThrottleClassifier with nil classifier")
 	}
@@ -384,7 +386,7 @@ func RegisterThrottleClassifier(p Platform, fn ThrottleClassifier) {
 
 // throttleClassifierFor returns the platform's registered classifier's
 // verdict for err.
-func throttleClassifierFor(p Platform, err error) (time.Duration, time.Time, bool) {
+func throttleClassifierFor(p model.Platform, err error) (time.Duration, time.Time, bool) {
 	fn, _ := throttleClassifiers.Get(p)
 	if fn == nil {
 		return 0, time.Time{}, false

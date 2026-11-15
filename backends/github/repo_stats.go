@@ -6,13 +6,14 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListForks implements provider.RepoStatsManager. The provider interface
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*model.PlatformRepo, error) {
 	forks, err := backendutil.AllPages(func(page int) ([]*github.Repository, error) {
 		list, _, err := p.client.Repositories.ListForks(ctx, owner, repo, &github.RepositoryListForksOptions{
 			ListOptions: github.ListOptions{Page: page, PerPage: 100},
@@ -20,9 +21,9 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListForks", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListForks", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(forks))
+	result := make([]*model.PlatformRepo, 0, len(forks))
 	for _, r := range forks {
 		result = append(result, convertRepo(r))
 	}
@@ -32,7 +33,7 @@ func (p *Provider) ListForks(ctx context.Context, owner, repo string) ([]*provid
 // ListStargazers implements provider.RepoStatsManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*provider.CRUser, error) {
+func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*model.CRUser, error) {
 	stargazers, err := backendutil.AllPages(func(page int) ([]*github.Stargazer, error) {
 		list, _, err := p.client.Activity.ListStargazers(ctx, owner, repo, &github.ListOptions{
 			Page: page, PerPage: 100,
@@ -40,9 +41,9 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListStargazers", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListStargazers", err)
 	}
-	result := make([]*provider.CRUser, 0, len(stargazers))
+	result := make([]*model.CRUser, 0, len(stargazers))
 	for _, s := range stargazers {
 		if s.User != nil {
 			result = append(result, convertUser(s.User))
@@ -54,7 +55,7 @@ func (p *Provider) ListStargazers(ctx context.Context, owner, repo string) ([]*p
 // ListContributors implements provider.RepoStatsManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*provider.Contributor, error) {
+func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]*model.Contributor, error) {
 	contributors, err := backendutil.AllPages(func(page int) ([]*github.Contributor, error) {
 		list, _, err := p.client.Repositories.ListContributors(ctx, owner, repo, &github.ListContributorsOptions{
 			ListOptions: github.ListOptions{Page: page, PerPage: 100},
@@ -62,9 +63,9 @@ func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListContributors", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListContributors", err)
 	}
-	result := make([]*provider.Contributor, 0, len(contributors))
+	result := make([]*model.Contributor, 0, len(contributors))
 	for _, c := range contributors {
 		username := ""
 		if c.Login != nil {
@@ -74,7 +75,7 @@ func (p *Provider) ListContributors(ctx context.Context, owner, repo string) ([]
 		if c.Contributions != nil {
 			contributions = *c.Contributions
 		}
-		result = append(result, &provider.Contributor{
+		result = append(result, &model.Contributor{
 			Username:      username,
 			Contributions: contributions,
 		})

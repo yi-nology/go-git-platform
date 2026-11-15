@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // MilestoneManager provides repository-level milestone CRUD. It is an
 // optional capability interface: consumers should gate on
@@ -31,14 +35,14 @@ type MilestoneManager interface {
 	//
 	// Page semantics: exhaustive family (issue #60, see NormalizePageOpts)
 	// — Page == 0 walks every page; Page > 0 returns exactly that page.
-	ListMilestones(ctx context.Context, owner, repo string, opts ListMilestonesOptions) ([]Milestone, error)
+	ListMilestones(ctx context.Context, owner, repo string, opts ListMilestonesOptions) ([]model.Milestone, error)
 	// GetMilestone fetches the milestone with the given number.
-	GetMilestone(ctx context.Context, owner, repo, number string) (*Milestone, error)
+	GetMilestone(ctx context.Context, owner, repo, number string) (*model.Milestone, error)
 	// CreateMilestone creates a repository milestone.
-	CreateMilestone(ctx context.Context, owner, repo string, opts CreateMilestoneOptions) (*Milestone, error)
+	CreateMilestone(ctx context.Context, owner, repo string, opts CreateMilestoneOptions) (*model.Milestone, error)
 	// UpdateMilestone updates the milestone with the given number. Nil
 	// fields in opts are left unchanged.
-	UpdateMilestone(ctx context.Context, owner, repo, number string, opts UpdateMilestoneOptions) (*Milestone, error)
+	UpdateMilestone(ctx context.Context, owner, repo, number string, opts UpdateMilestoneOptions) (*model.Milestone, error)
 	// DeleteMilestone deletes the milestone with the given number.
 	DeleteMilestone(ctx context.Context, owner, repo, number string) error
 }

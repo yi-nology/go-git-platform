@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -25,10 +26,10 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 		if err != nil {
 			// Wrap classifies a 404 lookup as NotFound, so an unknown
 			// username keeps the unified "user not found" shape.
-			return nil, provider.Wrap(provider.PlatformTencentCode, op, err)
+			return nil, provider.Wrap(model.PlatformTencentCode, op, err)
 		}
 		if u == nil || u.ID == 0 {
-			return nil, provider.New(provider.PlatformTencentCode, op, http.StatusNotFound,
+			return nil, provider.New(model.PlatformTencentCode, op, http.StatusNotFound,
 				"user "+strconv.Quote(name)+" not found")
 		}
 		p.userIDs.Put(name, int64(u.ID))
@@ -48,16 +49,16 @@ func assigneeIDsCSV(ids []int) string {
 }
 
 // GetUser implements provider.UserManager.
-func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUser, error) {
+func (p *Provider) GetUser(ctx context.Context, username string) (*model.CRUser, error) {
 	u, _, err := p.client.Users.GetUser(ctx, username)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetUser", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetUser", err)
 	}
 	if u == nil || u.ID == 0 {
-		return nil, provider.New(provider.PlatformTencentCode, "GetUser", http.StatusNotFound,
+		return nil, provider.New(model.PlatformTencentCode, "GetUser", http.StatusNotFound,
 			"user "+strconv.Quote(username)+" not found")
 	}
-	return &provider.CRUser{
+	return &model.CRUser{
 		ID:       int64(u.ID),
 		Username: u.Username,
 		Name:     u.Name,
@@ -65,14 +66,14 @@ func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUs
 }
 
 // ResolveUsernames implements provider.UserManager.
-func (p *Provider) ResolveUsernames(ctx context.Context, usernames []string) ([]*provider.CRUser, error) {
+func (p *Provider) ResolveUsernames(ctx context.Context, usernames []string) ([]*model.CRUser, error) {
 	ids, err := p.resolveUserIDs(ctx, "ResolveUsernames", usernames)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*provider.CRUser, len(usernames))
+	result := make([]*model.CRUser, len(usernames))
 	for i, name := range usernames {
-		result[i] = &provider.CRUser{ID: int64(ids[i]), Username: name}
+		result[i] = &model.CRUser{ID: int64(ids[i]), Username: name}
 	}
 	return result, nil
 }

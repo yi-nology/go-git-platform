@@ -4,22 +4,24 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yi-nology/go-git-platform/provider"
 	gongfeng "github.com/yi-nology/go-gongfeng"
+
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
-func mapState(state string) provider.CRState {
+func mapState(state string) model.CRState {
 	return provider.MapMRStateToCR(state)
 }
 
-// convertProject maps a gongfeng.Project to a provider.PlatformRepo.
-func convertProject(p *gongfeng.Project) *provider.PlatformRepo {
+// convertProject maps a gongfeng.Project to a model.PlatformRepo.
+func convertProject(p *gongfeng.Project) *model.PlatformRepo {
 	parts := strings.SplitN(p.PathWithNamespace, "/", 2)
 	owner := ""
 	if len(parts) == 2 {
 		owner = parts[0]
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            int64(p.ID),
 		FullName:      p.PathWithNamespace,
 		Name:          p.Name,
@@ -29,34 +31,34 @@ func convertProject(p *gongfeng.Project) *provider.PlatformRepo {
 		SSHURL:        p.SSHURLToRepo,
 		DefaultBranch: p.DefaultBranch,
 		Private:       p.VisibilityLevel == 0,
-		Platform:      provider.PlatformTencentCode,
+		Platform:      model.PlatformTencentCode,
 	}
 }
 
-// convertBranch maps a gongfeng.Branch to a provider.PlatformBranch.
-func convertBranch(b *gongfeng.Branch) *provider.PlatformBranch {
-	return &provider.PlatformBranch{Name: b.Name}
+// convertBranch maps a gongfeng.Branch to a model.PlatformBranch.
+func convertBranch(b *gongfeng.Branch) *model.PlatformBranch {
+	return &model.PlatformBranch{Name: b.Name}
 }
 
-// convertCommit maps a gongfeng.Commit to a provider.CommitInfo.
-func convertCommit(c *gongfeng.Commit) *provider.CommitInfo {
-	info := &provider.CommitInfo{
+// convertCommit maps a gongfeng.Commit to a model.CommitInfo.
+func convertCommit(c *gongfeng.Commit) *model.CommitInfo {
+	info := &model.CommitInfo{
 		SHA:     c.ID,
 		Message: c.Message,
-		Author: &provider.CRUser{
+		Author: &model.CRUser{
 			Name: c.AuthorName,
 		},
 		CreatedAt: c.AuthoredDate.Time,
 	}
 	if c.CommitterName != "" {
-		info.Committer = &provider.CRUser{Name: c.CommitterName}
+		info.Committer = &model.CRUser{Name: c.CommitterName}
 	}
 	return info
 }
 
-// convertMR maps a gongfeng.MergeRequest to a provider.ChangeRequest.
-func convertMR(mr *gongfeng.MergeRequest) *provider.ChangeRequest {
-	cr := &provider.ChangeRequest{
+// convertMR maps a gongfeng.MergeRequest to a model.ChangeRequest.
+func convertMR(mr *gongfeng.MergeRequest) *model.ChangeRequest {
+	cr := &model.ChangeRequest{
 		ID:           int64(mr.IID),
 		Number:       strconv.Itoa(mr.IID),
 		Title:        mr.Title,
@@ -75,9 +77,9 @@ func convertMR(mr *gongfeng.MergeRequest) *provider.ChangeRequest {
 	return cr
 }
 
-// convertDiff maps a gongfeng.Diff to a provider.ChangedFile.
-func convertDiff(d *gongfeng.Diff) *provider.ChangedFile {
-	return &provider.ChangedFile{
+// convertDiff maps a gongfeng.Diff to a model.ChangedFile.
+func convertDiff(d *gongfeng.Diff) *model.ChangedFile {
+	return &model.ChangedFile{
 		OldPath:   d.OldPath,
 		NewPath:   d.NewPath,
 		Diff:      d.Diff,
@@ -89,23 +91,23 @@ func convertDiff(d *gongfeng.Diff) *provider.ChangedFile {
 	}
 }
 
-// convertTag maps a gongfeng.Tag to a provider.TagInfo.
-func convertTag(t *gongfeng.Tag) *provider.TagInfo {
+// convertTag maps a gongfeng.Tag to a model.TagInfo.
+func convertTag(t *gongfeng.Tag) *model.TagInfo {
 	commitSHA := ""
 	if t.Commit != nil {
 		commitSHA = t.Commit.ID
 	}
-	return &provider.TagInfo{
+	return &model.TagInfo{
 		Name:   t.Name,
 		Commit: commitSHA,
 	}
 }
 
-// convertRelease maps a gongfeng.Release to a provider.ReleaseInfo. The
+// convertRelease maps a gongfeng.Release to a model.ReleaseInfo. The
 // gongfeng release object carries no draft/prerelease flags or web URL,
 // so those fields stay zero.
-func convertRelease(r *gongfeng.Release) *provider.ReleaseInfo {
-	return &provider.ReleaseInfo{
+func convertRelease(r *gongfeng.Release) *model.ReleaseInfo {
+	return &model.ReleaseInfo{
 		ID:        int64(r.ID),
 		TagName:   r.Tag,
 		Title:     r.Title,
@@ -114,8 +116,8 @@ func convertRelease(r *gongfeng.Release) *provider.ReleaseInfo {
 	}
 }
 
-// convertWebhook maps a gongfeng.Webhook to a provider.PlatformWebhook.
-func convertWebhook(w *gongfeng.Webhook) *provider.PlatformWebhook {
+// convertWebhook maps a gongfeng.Webhook to a model.PlatformWebhook.
+func convertWebhook(w *gongfeng.Webhook) *model.PlatformWebhook {
 	events := []string{}
 	if w.PushEvents {
 		events = append(events, "push")
@@ -132,19 +134,19 @@ func convertWebhook(w *gongfeng.Webhook) *provider.PlatformWebhook {
 	if w.NoteEvents {
 		events = append(events, "note")
 	}
-	return &provider.PlatformWebhook{
+	return &model.PlatformWebhook{
 		ID:     int64(w.ID),
 		URL:    w.URL,
 		Events: events,
 	}
 }
 
-// convertUser maps a gongfeng.User to a provider.CRUser.
-func convertUser(u *gongfeng.User) *provider.CRUser {
+// convertUser maps a gongfeng.User to a model.CRUser.
+func convertUser(u *gongfeng.User) *model.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{
+	return &model.CRUser{
 		ID:        int64(u.ID),
 		Username:  u.Username,
 		Name:      u.Name,

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -54,7 +55,7 @@ func testNotificationsSuite(t *testing.T, h Harness) {
 // contract suite against a backend that implements provider.NotificationManager.
 type NotificationsHarness struct {
 	Name              string
-	Platform          provider.Platform
+	Platform          model.Platform
 	NewProvider       func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse      string
 	GlobalUnsupported bool

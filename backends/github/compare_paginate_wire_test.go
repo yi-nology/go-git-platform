@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -70,7 +71,7 @@ func TestGitHub_CompareCommits_PaginatesCommitsAndFlagsFileTruncation(t *testing
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitHub, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitHub, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}
@@ -119,7 +120,7 @@ func TestGitHub_CompareCommits_SmallCompareStaysExact(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitHub, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitHub, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}

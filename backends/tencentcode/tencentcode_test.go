@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/backends/tencentcode"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -44,7 +45,7 @@ func stripAPIPrefix(path string) string {
 func newTestProvider(t *testing.T, srv *httptest.Server) *tencentcode.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformTencentCode,
+		Platform: model.PlatformTencentCode,
 		BaseURL:  srv.URL,
 		Token:    "test-token",
 	})
@@ -72,11 +73,11 @@ func tcMRResponse(iid int, state, title, source, target string) map[string]any {
 }
 
 func TestPlatform(t *testing.T) {
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformTencentCode, Token: "token"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformTencentCode, Token: "token"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != provider.PlatformTencentCode {
+	if p.Platform() != model.PlatformTencentCode {
 		t.Errorf("expected tencent_code, got %s", p.Platform())
 	}
 }
@@ -133,7 +134,7 @@ func TestCreateCR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cr.Number != "7" || cr.State != provider.CRStateOpened {
+	if cr.Number != "7" || cr.State != model.CRStateOpened {
 		t.Errorf("unexpected: %+v", cr)
 	}
 }
@@ -159,7 +160,7 @@ func TestListCRs(t *testing.T) {
 	if totalVal != 2 {
 		t.Errorf("expected total 2, got %d", totalVal)
 	}
-	if crs[1].State != provider.CRStateMerged {
+	if crs[1].State != model.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)
 	}
 }
@@ -303,7 +304,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, err := tencentcode.New(provider.Config{
-		Platform:    provider.PlatformTencentCode,
+		Platform:    model.PlatformTencentCode,
 		BaseURL:     srv.URL,
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},
@@ -404,7 +405,7 @@ func TestListIssues_FiltersCarryWireVocabulary(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 	if _, _, err := p.ListIssues(context.Background(), provider.ListIssuesOptions{
-		Owner: "owner", Repo: "repo", State: provider.IssueStateOpen, Labels: "a,b",
+		Owner: "owner", Repo: "repo", State: model.IssueStateOpen, Labels: "a,b",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +431,7 @@ func TestUpdateIssue_WireMappings(t *testing.T) {
 	defer srv.Close()
 	p := newTestProvider(t, srv)
 	if _, err := p.UpdateIssue(context.Background(), "owner", "repo", "3", provider.UpdateIssueOptions{
-		Title: "fixed", Body: "no more", State: provider.IssueStateOpen,
+		Title: "fixed", Body: "no more", State: model.IssueStateOpen,
 		Labels: []string{"a", "b"}, Milestone: "5",
 	}); err != nil {
 		t.Fatal(err)
@@ -598,7 +599,7 @@ func TestGetIssue_MapsModelToProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if issue.Number != "3" || issue.State != provider.IssueStateOpen {
+	if issue.Number != "3" || issue.State != model.IssueStateOpen {
 		t.Errorf("unexpected number/state: %+v", issue)
 	}
 	if issue.WebURL != "" {
@@ -775,7 +776,7 @@ func TestListReviews_FiltersSystemNotes(t *testing.T) {
 	if r.ID != 1 || r.User != "dev" || r.Body != "looks good" {
 		t.Errorf("unexpected review mapping %+v", r)
 	}
-	if r.State != provider.ReviewStateCommented {
+	if r.State != model.ReviewStateCommented {
 		t.Errorf("expected commented state (registered), got %q", r.State)
 	}
 	if r.SubmittedAt.IsZero() {

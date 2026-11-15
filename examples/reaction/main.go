@@ -12,6 +12,7 @@ import (
 	"os"
 
 	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -22,7 +23,7 @@ func main() {
 	}
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		Token:    token,
 	})
 	if err != nil {
@@ -54,7 +55,7 @@ func main() {
 	}
 
 	// Add a thumbs-up reaction.
-	r, err := rm.AddIssueReaction(ctx, owner, repo, number, provider.ReactionPlusOne)
+	r, err := rm.AddIssueReaction(ctx, owner, repo, number, model.ReactionPlusOne)
 	if err != nil {
 		log.Printf("add reaction: %v", err)
 	} else {

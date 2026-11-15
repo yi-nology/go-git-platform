@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -48,7 +49,7 @@ func testTeamReviewsSuite(t *testing.T, h Harness) {
 // TeamReviewsHarness bundles inputs for the team-review suite.
 type TeamReviewsHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	Teams       []string
 }

@@ -5,6 +5,7 @@ import (
 
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -12,21 +13,21 @@ import (
 // and is interpolated into the /users/{owner}/repos path, where the SDK
 // escapes it as a path segment (issue #116: the SDK's pathf covers this
 // call site, retiring the #84 pre-escaping).
-func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	repos, err := p.client.ListRepositories(ctx, gitcode.ListRepositoriesOptions{
 		ListOptions: gitcode.ListOptions{Page: opts.Page, PerPage: opts.PerPage},
 		Owner:       opts.Owner,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepos", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListRepos", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(repos))
+	result := make([]*model.PlatformRepo, 0, len(repos))
 	for _, r := range repos {
 		owner := ""
 		if r.Owner != nil {
 			owner = r.Owner.Login
 		}
-		result = append(result, &provider.PlatformRepo{
+		result = append(result, &model.PlatformRepo{
 			ID:            r.ID,
 			FullName:      r.FullName,
 			Name:          r.Name,
@@ -36,23 +37,23 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 			SSHURL:        r.SSHURL,
 			DefaultBranch: r.DefaultBranch,
 			Private:       r.Private,
-			Platform:      provider.PlatformGitCode,
+			Platform:      model.PlatformGitCode,
 		})
 	}
 	return result, nil
 }
 
 // GetRepo implements provider.RepoManager.
-func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
 	r, err := p.client.GetRepository(ctx, owner, repo)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetRepo", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetRepo", err)
 	}
 	ownerName := ""
 	if r.Owner != nil {
 		ownerName = r.Owner.Login
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -62,12 +63,12 @@ func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.P
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
+		Platform:      model.PlatformGitCode,
 	}, nil
 }
 
 // CreateRepo implements provider.RepoManager.
-func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	var r *gitcode.Repository
 	var err error
 	if owner != "" {
@@ -90,13 +91,13 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		})
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateRepo", err)
 	}
 	ownerName := ""
 	if r.Owner != nil {
 		ownerName = r.Owner.Login
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -106,7 +107,7 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
+		Platform:      model.PlatformGitCode,
 	}, nil
 }
 
@@ -114,20 +115,20 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 // body's name field (renaming the fork at creation, issue #87); the fork
 // endpoint takes no organization — forks always land under the
 // authenticated user's namespace (registered divergence).
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	var forkOpts *gitcode.CreateRepositoryOptions
 	if opts.Name != "" {
 		forkOpts = &gitcode.CreateRepositoryOptions{Name: opts.Name}
 	}
 	r, err := p.client.ForkRepository(ctx, owner, repo, forkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ForkRepo", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ForkRepo", err)
 	}
 	ownerName := ""
 	if r.Owner != nil {
 		ownerName = r.Owner.Login
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -137,7 +138,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
+		Platform:      model.PlatformGitCode,
 	}, nil
 }
 
@@ -145,13 +146,13 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	err := p.client.DeleteRepository(ctx, owner, repo)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteRepo", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteRepo", err)
 	}
 	return nil
 }
 
 // UpdateRepo implements provider.RepoManager.
-func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	r, err := p.client.UpdateRepository(ctx, owner, repo, gitcode.UpdateRepositoryOptions{
 		Name:          opts.Name,
 		Description:   opts.Description,
@@ -159,13 +160,13 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 		Private:       opts.Private,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateRepo", err)
 	}
 	ownerName := ""
 	if r.Owner != nil {
 		ownerName = r.Owner.Login
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -175,7 +176,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
+		Platform:      model.PlatformGitCode,
 	}, nil
 }
 

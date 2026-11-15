@@ -5,20 +5,21 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListBranchProtections implements provider.BranchProtectionManager. GitHub has
 // no list endpoint for branch protections; this returns nil.
-func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
-	return nil, provider.Wrap(provider.PlatformGitHub, "ListBranchProtections", provider.ErrNotImplemented)
+func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*model.BranchProtection, error) {
+	return nil, provider.Wrap(model.PlatformGitHub, "ListBranchProtections", provider.ErrNotImplemented)
 }
 
 // GetBranchProtection implements provider.BranchProtectionManager.
-func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
+func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*model.BranchProtection, error) {
 	protection, _, err := p.client.Repositories.GetBranchProtection(ctx, owner, repo, branch)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetBranchProtection", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetBranchProtection", err)
 	}
 	return convertProtection(branch, protection), nil
 }
@@ -31,7 +32,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 // 分支上必然 404 ⇒ create 路径死锁,EnsureBranchProtection 的
 // EnsureCreated 分支(provider/ensure.go)在 GitHub 上不可达。
 // 创建按调用方给定的四旋钮直出 wire,不做任何读回。
-func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	req := &github.ProtectionRequest{
 		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
 			RequiredApprovingReviewCount: opts.RequiredApprovingReviews,
@@ -44,7 +45,7 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 	}
 	protection, _, err := p.client.Repositories.UpdateBranchProtection(ctx, owner, repo, opts.BranchName, req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateBranchProtection", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateBranchProtection", err)
 	}
 	return convertProtection(opts.BranchName, protection), nil
 }
@@ -68,10 +69,10 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 // 对未保护分支的 Update 返回 GET 的 404(归 ErrNotFound):统一接口的
 // 语义是 create 走 CreateBranchProtection / EnsureBranchProtection,
 // Update 不隐式承担创建。
-func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	current, _, err := p.client.Repositories.GetBranchProtection(ctx, owner, repo, branch)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateBranchProtection", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateBranchProtection", err)
 	}
 	req := &github.ProtectionRequest{
 		RequiredStatusChecks: current.RequiredStatusChecks,
@@ -122,7 +123,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 	}
 	protection, _, err := p.client.Repositories.UpdateBranchProtection(ctx, owner, repo, branch, req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateBranchProtection", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateBranchProtection", err)
 	}
 	return convertProtection(branch, protection), nil
 }
@@ -130,7 +131,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 // DeleteBranchProtection implements provider.BranchProtectionManager.
 func (p *Provider) DeleteBranchProtection(ctx context.Context, owner, repo, branch string) error {
 	if _, err := p.client.Repositories.RemoveBranchProtection(ctx, owner, repo, branch); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteBranchProtection", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteBranchProtection", err)
 	}
 	return nil
 }
@@ -163,9 +164,9 @@ func appSlugsOf(apps []*github.App) []string {
 	return out
 }
 
-// convertProtection maps a github.Protection to a provider.BranchProtection.
-func convertProtection(branch string, p *github.Protection) *provider.BranchProtection {
-	bp := &provider.BranchProtection{BranchName: branch}
+// convertProtection maps a github.Protection to a model.BranchProtection.
+func convertProtection(branch string, p *github.Protection) *model.BranchProtection {
+	bp := &model.BranchProtection{BranchName: branch}
 	if p.RequiredStatusChecks != nil {
 		bp.RequiredStatusChecks = true
 	}

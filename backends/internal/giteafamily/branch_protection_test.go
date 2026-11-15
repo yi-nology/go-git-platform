@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -48,7 +49,7 @@ func (f *fakeBPPort) DeleteBranchProtection(context.Context, string, string, str
 // nothing is written and reads report false instead of inverting an unrelated
 // switch (the old mapping flipped block_on_rejected_reviews).
 func TestBranchProtection_AllowForcePushesPortsOntoWireField(t *testing.T) {
-	fam := Family{Platform: provider.PlatformGitea}
+	fam := Family{Platform: model.PlatformGitea}
 	port := &fakeBPPort{
 		fakeBPSection: fakeBPSection{
 			readBack: &FamilyBranchProtection{BranchName: "main"},
@@ -90,7 +91,7 @@ func TestBranchProtection_AllowForcePushesPortsOntoWireField(t *testing.T) {
 // that sets ONLY AllowDeletions must not touch anything force-push related —
 // the unrelated-switch substitution is gone.
 func TestBranchProtection_UpdateWithoutForcePushesLeavesToggleNil(t *testing.T) {
-	fam := Family{Platform: provider.PlatformForgejo}
+	fam := Family{Platform: model.PlatformForgejo}
 	port := &fakeBPPort{fakeBPSection: fakeBPSection{readBack: &FamilyBranchProtection{BranchName: "main"}}}
 
 	off := false
@@ -110,7 +111,7 @@ func TestBranchProtection_UpdateWithoutForcePushesLeavesToggleNil(t *testing.T) 
 // wire's ForcePushes (gitea's enable_force_push) maps to AllowForcePushes,
 // and RequiredApprovals/EnableStatusCheck keep their verbatim mapping.
 func TestBranchProtection_ReadSideMapsWireValues(t *testing.T) {
-	fam := Family{Platform: provider.PlatformGitea}
+	fam := Family{Platform: model.PlatformGitea}
 	port := &fakeBPPort{fakeBPSection: fakeBPSection{readBack: &FamilyBranchProtection{
 		BranchName:        "main",
 		RequiredApprovals: 2,

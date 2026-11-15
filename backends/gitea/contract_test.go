@@ -7,13 +7,14 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	"github.com/yi-nology/go-git-platform/backends/gitea"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitea_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "Gitea",
-		Platform: provider.PlatformGitea,
+		Platform: model.PlatformGitea,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			// The Gitea SDK requires /api/v1/version on client init. Wrap the
 			// mock server so the version endpoint is intercepted and every
@@ -179,5 +180,5 @@ func TestGitea_WebhookCorpus(t *testing.T) {
 	// (platform, event header), so the corpus runs against a real provider
 	// rather than a zero-value struct.
 	p := newTestProvider(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitea, p, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformGitea, p, "testdata/webhooks")
 }

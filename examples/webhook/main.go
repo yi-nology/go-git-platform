@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -25,7 +26,7 @@ func main() {
 	req.Header.Set("X-Hub-Signature-256", os.Getenv("X_HUB_SIGNATURE_256"))
 
 	if err := provider.DefaultWebhookRegistry().Validate(
-		provider.PlatformGitHub, req, body, secret,
+		model.PlatformGitHub, req, body, secret,
 	); err != nil {
 		log.Fatalf("webhook validation failed: %v", err)
 	}

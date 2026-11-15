@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -29,7 +30,7 @@ func TestRemoveIssueLabels_StopsAtFirstError(t *testing.T) {
 	defer srv.Close()
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub, BaseURL: srv.URL, Token: "t",
+		Platform: model.PlatformGitHub, BaseURL: srv.URL, Token: "t",
 	})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
@@ -58,7 +59,7 @@ func TestRemoveIssueLabels_EmptySendsNothing(t *testing.T) {
 	defer srv.Close()
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub, BaseURL: srv.URL, Token: "t",
+		Platform: model.PlatformGitHub, BaseURL: srv.URL, Token: "t",
 	})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)

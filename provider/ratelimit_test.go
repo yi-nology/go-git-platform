@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/transport"
 )
 
@@ -16,7 +17,7 @@ func TestWrapCopiesRateLimitHints(t *testing.T) {
 	h.Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
 	src := transport.NewStatusErrorWithHeaders("GET", "/repos", 429, []byte(`{}`), h)
 
-	pe := Wrap(PlatformGitHub, "ListRepos", src).(*ProviderError)
+	pe := Wrap(model.PlatformGitHub, "ListRepos", src).(*ProviderError)
 	if !IsRateLimited(pe) {
 		t.Fatal("wrapped error should classify as rate-limited")
 	}
@@ -33,7 +34,7 @@ func TestWrapCopiesRateLimitHints(t *testing.T) {
 }
 
 func TestRateLimitRecoveryWithoutHints(t *testing.T) {
-	if _, _, ok := RateLimitRecovery(Wrap(PlatformGitHub, "GetRepo", transport.NewStatusError("GET", "/x", 404, nil))); ok {
+	if _, _, ok := RateLimitRecovery(Wrap(model.PlatformGitHub, "GetRepo", transport.NewStatusError("GET", "/x", 404, nil))); ok {
 		t.Fatal("404 must not carry rate-limit hints")
 	}
 	if _, _, ok := RateLimitRecovery(nil); ok {

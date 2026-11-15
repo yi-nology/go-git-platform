@@ -35,6 +35,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -84,7 +85,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 
 	client, err := gitee.NewClient(opts...)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "New", err)
+		return nil, provider.Wrap(model.PlatformGitee, "New", err)
 	}
 
 	return &Provider{
@@ -96,7 +97,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 }
 
 // Platform implements provider.Provider.
-func (p *Provider) Platform() provider.Platform { return provider.PlatformGitee }
+func (p *Provider) Platform() model.Platform { return model.PlatformGitee }
 
 // Capabilities implements provider.Provider.
 func (p *Provider) Capabilities() provider.CapabilitySet {
@@ -104,12 +105,12 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 }
 
 // TestConnection implements provider.Provider.
-func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
+func (p *Provider) TestConnection(ctx context.Context) (*model.TestConnectionResult, error) {
 	user, _, err := p.client.Users.GetAuthenticated(ctx)
 	if err != nil {
-		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
+		return &model.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-	result := &provider.TestConnectionResult{
+	result := &model.TestConnectionResult{
 		Connected: true,
 		Platform:  string(p.Platform()),
 		UserName:  deref(user.Login),

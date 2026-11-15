@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -35,7 +36,7 @@ type MilestonesHarnessConfig struct {
 // MilestonesHarnessConfig.
 type MilestonesHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	MilestonesHarnessConfig
 }
@@ -167,8 +168,8 @@ func assertMilestoneListNormalized(t *testing.T, mm provider.MilestoneManager) {
 	if milestones[0].Title != "v1" {
 		t.Errorf("expected milestone title %q, got %q", "v1", milestones[0].Title)
 	}
-	if milestones[0].State != provider.MilestoneStateOpen {
-		t.Errorf("expected normalized state %q, got %q", provider.MilestoneStateOpen, milestones[0].State)
+	if milestones[0].State != model.MilestoneStateOpen {
+		t.Errorf("expected normalized state %q, got %q", model.MilestoneStateOpen, milestones[0].State)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/google/go-github/v93/github"
 
@@ -12,12 +13,12 @@ import (
 )
 
 // GetCRDiff implements provider.DiffManager.
-func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*provider.MergeDiff, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "GetCRDiff", number)
+func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*model.MergeDiff, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "GetCRDiff", number)
 	if err != nil {
 		return nil, err
 	}
-	diff := &provider.MergeDiff{}
+	diff := &model.MergeDiff{}
 	page := 1
 	for {
 		files, _, err := p.client.PullRequests.ListFiles(ctx, owner, repo, n, &github.ListOptions{
@@ -25,10 +26,10 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 			PerPage: 100,
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "GetCRDiff", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "GetCRDiff", err)
 		}
 		for _, f := range files {
-			cf := &provider.ChangedFile{
+			cf := &model.ChangedFile{
 				OldPath:   f.GetPreviousFilename(),
 				NewPath:   f.GetFilename(),
 				Diff:      f.GetPatch(),
@@ -54,7 +55,7 @@ func (p *Provider) GetCRDiff(ctx context.Context, owner, repo, number string) (*
 }
 
 // GetCRFiles implements provider.DiffManager.
-func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*provider.ChangedFile, error) {
+func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) ([]*model.ChangedFile, error) {
 	diff, err := p.GetCRDiff(ctx, owner, repo, number)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func (p *Provider) GetCRFiles(ctx context.Context, owner, repo, number string) (
 
 // CreateNote implements provider.DiffManager.
 func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body string) (string, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CreateNote", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "CreateNote", number)
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +73,7 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 		Body: body,
 	})
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitHub, "CreateNote", err)
+		return "", provider.Wrap(model.PlatformGitHub, "CreateNote", err)
 	}
 	return strconv.FormatInt(comment.GetID(), 10), nil
 }
@@ -81,23 +82,23 @@ func (p *Provider) CreateNote(ctx context.Context, owner, repo, number, body str
 // by its numeric platform ID; the change-request number is only validated,
 // as GitHub's delete-comment endpoint does not take it.
 func (p *Provider) DeleteNote(ctx context.Context, owner, repo, number, noteID string) error {
-	if _, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "DeleteNote", number); err != nil {
+	if _, err := backendutil.ParsePRNumber(model.PlatformGitHub, "DeleteNote", number); err != nil {
 		return err
 	}
 	id, err := strconv.ParseInt(noteID, 10, 64)
 	if err != nil {
-		return provider.Wrapf(provider.PlatformGitHub, "DeleteNote", "invalid note ID %q: %w", noteID, err)
+		return provider.Wrapf(model.PlatformGitHub, "DeleteNote", "invalid note ID %q: %w", noteID, err)
 	}
 	_, err = p.client.Issues.DeleteComment(ctx, owner, repo, id)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteNote", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteNote", err)
 	}
 	return nil
 }
 
 // CreateDiscussion implements provider.DiffManager.
 func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number string, opts provider.DiscussionOptions) (string, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CreateDiscussion", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "CreateDiscussion", number)
 	if err != nil {
 		return "", err
 	}
@@ -114,7 +115,7 @@ func (p *Provider) CreateDiscussion(ctx context.Context, owner, repo, number str
 	}
 	c, _, err := p.client.PullRequests.CreateComment(ctx, owner, repo, n, *comment)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitHub, "CreateDiscussion", err)
+		return "", provider.Wrap(model.PlatformGitHub, "CreateDiscussion", err)
 	}
 	return strconv.FormatInt(c.GetID(), 10), nil
 }

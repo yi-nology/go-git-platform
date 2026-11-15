@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -46,7 +47,7 @@ func testCollaboratorsSuite(t *testing.T, h Harness) {
 // CollaboratorsHarness bundles inputs for the collaborator suite.
 type CollaboratorsHarness struct {
 	Name               string
-	Platform           provider.Platform
+	Platform           model.Platform
 	NewProvider        func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse       string
 	UserLookupResponse string

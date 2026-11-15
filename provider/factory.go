@@ -1,10 +1,14 @@
 package provider
 
-import oekiterrors "github.com/oekit/pkg/errors"
+import (
+	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // Config holds the configuration for creating a Provider.
 type Config struct {
-	Platform Platform
+	Platform model.Platform
 	BaseURL  string
 	Token    string
 	SkipTLS  bool

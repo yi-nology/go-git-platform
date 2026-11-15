@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/backends/gitee"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -145,7 +146,7 @@ func TestGitee_ListCRs_StateMapping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitee.New: %v", err)
 	}
-	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: provider.CRStateOpened})
+	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r", State: model.CRStateOpened})
 	_, _, _ = p.ListCRs(context.Background(), provider.ListCROptions{Owner: "o", Repo: "r"})
 	if len(got) != 2 || got[0] != "open" || got[1] != "" {
 		t.Fatalf("expected state mapping [open \"\"(=不过滤)], got %v", got)

@@ -33,6 +33,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -75,14 +76,14 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client:   client,
 		logger:   logger,
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
-		family: giteafamily.Family{Platform: provider.PlatformGitea, EventIDPrefix: "gt", EventHeaders: []string{"X-Gitea-Event"}, EventDeliveryHeaders: []string{"X-Gitea-Delivery"}, PageSize: listPageSize,
+		family: giteafamily.Family{Platform: model.PlatformGitea, EventIDPrefix: "gt", EventHeaders: []string{"X-Gitea-Event"}, EventDeliveryHeaders: []string{"X-Gitea-Delivery"}, PageSize: listPageSize,
 			CRPointersHaveReviewers: true, PRWireHasDraft: true},
 		ports: sdkPorts{c: client},
 	}, nil
 }
 
 // Platform implements provider.Provider.
-func (p *Provider) Platform() provider.Platform { return provider.PlatformGitea }
+func (p *Provider) Platform() model.Platform { return model.PlatformGitea }
 
 // Capabilities implements provider.Provider. Gitea implements the optional
 // LabelManager (see labels.go), IssueManager (see issues.go),
@@ -93,12 +94,12 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 }
 
 // TestConnection implements provider.Provider.
-func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
+func (p *Provider) TestConnection(ctx context.Context) (*model.TestConnectionResult, error) {
 	user, _, err := p.client.Users.GetMyUserInfo(ctx)
 	if err != nil {
-		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
+		return &model.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-	result := &provider.TestConnectionResult{
+	result := &model.TestConnectionResult{
 		Connected: true,
 		Platform:  string(p.Platform()),
 		UserName:  user.UserName,

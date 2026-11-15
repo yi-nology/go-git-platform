@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 
 	// register every shipped backend
@@ -46,7 +47,7 @@ func main() {
 	owner, repo := os.Getenv("OWNER"), os.Getenv("REPO")
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.Platform(platform),
+		Platform: model.Platform(platform),
 		BaseURL:  os.Getenv("PLATFORM_URL"),
 		Token:    token,
 	})

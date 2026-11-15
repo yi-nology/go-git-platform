@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -42,7 +43,7 @@ type ReleasesHarnessConfig struct {
 // builds it from the enclosing Harness plus ReleasesHarnessConfig.
 type ReleaseHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	ReleasesHarnessConfig
 }

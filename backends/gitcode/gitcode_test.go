@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/backends/gitcode"
 	"github.com/yi-nology/go-git-platform/provider"
@@ -26,7 +27,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 func newTestProvider(t *testing.T, srv *httptest.Server) *gitcode.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitCode,
+		Platform: model.PlatformGitCode,
 		BaseURL:  srv.URL,
 		Token:    "test-token",
 	})
@@ -80,7 +81,7 @@ func TestGetReview_UsesSingleReviewEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if review == nil || review.ID != 42 || review.User != "dev" || review.State != provider.ReviewStateApproved {
+	if review == nil || review.ID != 42 || review.User != "dev" || review.State != model.ReviewStateApproved {
 		t.Fatalf("unexpected review: %+v", review)
 	}
 	if len(paths) != 1 || paths[0] != "GET /repos/owner/repo/pulls/1/reviews/42" {
@@ -143,7 +144,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	// best-effort. This test asserts that the SDK at least tolerates 5xx
 	// responses and eventually succeeds.
 	p, err := gitcode.New(provider.Config{
-		Platform:    provider.PlatformGitCode,
+		Platform:    model.PlatformGitCode,
 		BaseURL:     srv.URL,
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},

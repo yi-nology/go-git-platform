@@ -41,6 +41,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -103,7 +104,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		gongfeng.WithLogger(logger),
 	)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "New", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "New", err)
 	}
 
 	return &Provider{
@@ -144,7 +145,7 @@ func tencentTLS12Transport() *http.Transport {
 }
 
 // Platform implements provider.Provider.
-func (p *Provider) Platform() provider.Platform { return provider.PlatformTencentCode }
+func (p *Provider) Platform() model.Platform { return model.PlatformTencentCode }
 
 // Capabilities implements provider.Provider. The backend declares the
 // optional capability interfaces it implements (currently Labels,
@@ -154,14 +155,14 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 }
 
 // TestConnection implements provider.Provider.
-func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
+func (p *Provider) TestConnection(ctx context.Context) (*model.TestConnectionResult, error) {
 	var user struct {
 		Username string `json:"username"`
 	}
 	if err := p.doRequest(ctx, "TestConnection", "GET", "user", nil, &user); err != nil {
-		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
+		return &model.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-	result := &provider.TestConnectionResult{
+	result := &model.TestConnectionResult{
 		Connected: true,
 		Platform:  string(p.Platform()),
 		UserName:  user.Username,
@@ -190,10 +191,10 @@ var (
 func (p *Provider) doRequest(ctx context.Context, op, method, path string, body, result any) error {
 	req, err := p.client.NewRequest(ctx, method, path, body)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, op, err)
+		return provider.Wrap(model.PlatformTencentCode, op, err)
 	}
 	if _, err := p.client.Do(req, result); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, op, err)
+		return provider.Wrap(model.PlatformTencentCode, op, err)
 	}
 	return nil
 }

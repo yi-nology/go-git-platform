@@ -33,6 +33,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -75,7 +76,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		client:   client,
 		logger:   logger,
 		labelIDs: backendutil.NewIDCache(5 * time.Minute),
-		family: giteafamily.Family{Platform: provider.PlatformForgejo, EventIDPrefix: "gt",
+		family: giteafamily.Family{Platform: model.PlatformForgejo, EventIDPrefix: "gt",
 			// 双头回退（issue #99）：签名验证器对旧 Gitea 品牌头已双头容忍
 			// （ForgejoWebhookValidator 的 X-Gitea-Signature fallback）——事件
 			// 头与投递 ID 头若不接受同品牌回退，旧 fork 投递会出现「验签通过
@@ -88,7 +89,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 }
 
 // Platform implements provider.Provider.
-func (p *Provider) Platform() provider.Platform { return provider.PlatformForgejo }
+func (p *Provider) Platform() model.Platform { return model.PlatformForgejo }
 
 // Capabilities implements provider.Provider. Forgejo implements the optional
 // LabelManager (see labels.go), IssueManager (see issues.go),
@@ -99,12 +100,12 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 }
 
 // TestConnection implements provider.Provider.
-func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
+func (p *Provider) TestConnection(ctx context.Context) (*model.TestConnectionResult, error) {
 	user, _, err := p.client.GetMyUserInfo()
 	if err != nil {
-		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
+		return &model.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-	result := &provider.TestConnectionResult{
+	result := &model.TestConnectionResult{
 		Connected: true,
 		Platform:  string(p.Platform()),
 		UserName:  user.UserName,

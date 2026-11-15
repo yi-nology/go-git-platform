@@ -6,14 +6,15 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCommit implements provider.CommitManager.
-func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
+func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error) {
 	c, err := p.client.GetCommit(ctx, owner, repo, sha)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetCommit", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetCommit", err)
 	}
 	return convertCommit(c), nil
 }
@@ -23,15 +24,15 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// Since/Until 先经共享解析器校验（issue #52）——malformed 报
 	// ErrInvalidInput，与其他后端同判；校验通过的值本平台无法下传
 	// （SDK 的 commit-list 选项不带时间过滤），按 divergence 台账登记。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListCommits", err)
 	}
 	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListCommits", err)
 	}
 	fetch := func(page, perPage int) ([]*gitcode.Commit, error) {
 		return p.client.ListCommits(ctx, owner, repo, gitcode.ListCommitsOptions{
@@ -45,9 +46,9 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 			return fetch(page, perPage)
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListCommits", err)
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertCommit(c))
 	}
@@ -55,12 +56,12 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 }
 
 // CompareCommits implements provider.CommitManager.
-func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
+func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error) {
 	cmp, err := p.client.CompareCommits(ctx, owner, repo, base, head)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CompareCommits", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CompareCommits", err)
 	}
-	result := &provider.CompareResult{
+	result := &model.CompareResult{
 		TotalCommits: cmp.TotalCommits,
 		AheadBy:      cmp.AheadBy,
 		BehindBy:     cmp.BehindBy,
@@ -69,7 +70,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 		result.Commits = append(result.Commits, convertCommit(c))
 	}
 	for _, f := range cmp.Files {
-		result.Files = append(result.Files, &provider.ChangedFile{
+		result.Files = append(result.Files, &model.ChangedFile{
 			OldPath:   f.PreviousFilename,
 			NewPath:   f.Filename,
 			Additions: f.Additions,

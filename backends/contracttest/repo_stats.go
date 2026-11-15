@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -41,7 +42,7 @@ func testRepoStatsSuite(t *testing.T, h Harness) {
 // RepoStatsHarness bundles inputs for the repo-stats suite.
 type RepoStatsHarness struct {
 	Name                 string
-	Platform             provider.Platform
+	Platform             model.Platform
 	NewProvider          func(t *testing.T, cfg provider.Config) provider.Provider
 	ForksResponse        string
 	StargazersResponse   string

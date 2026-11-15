@@ -11,6 +11,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -45,14 +46,14 @@ import (
 // len(result), the served rows' count — previously this backend reported
 // the platform total (X-Total) on caller-driven pages, a different `total`
 // semantic from every other backend.
-func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
+func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*model.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gongfeng.ListIssuesOptions{
 		ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
 	}
 	if opts.State != "" {
 		s := string(opts.State)
-		if s == string(provider.IssueStateOpen) {
+		if s == string(model.IssueStateOpen) {
 			s = "opened" // 工蜂's issues API vocabulary; inbound convertIssue maps back
 		}
 		listOpts.State = gongfeng.Ptr(s)
@@ -62,9 +63,9 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	}
 	issues, _, err := p.client.Issues.ListIssues(ctx, pid(opts.Owner, opts.Repo), listOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformTencentCode, "ListIssues", err)
+		return nil, 0, provider.Wrap(model.PlatformTencentCode, "ListIssues", err)
 	}
-	result := make([]*provider.Issue, 0, len(issues))
+	result := make([]*model.Issue, 0, len(issues))
 	for _, i := range issues {
 		result = append(result, convertIssue(i))
 	}
@@ -72,14 +73,14 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 }
 
 // GetIssue implements provider.IssueManager. 工蜂 addresses issues by IID.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "GetIssue", number)
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetIssue", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -87,7 +88,7 @@ func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*p
 // CreateIssue implements provider.IssueManager. opts.Assignees resolves to
 // 工蜂's assignee_ids csv through the Users API (see users.go); an unknown
 // username fails the call with a NotFound error.
-func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*model.Issue, error) {
 	createOpts := &gongfeng.CreateIssueOptions{Title: gongfeng.Ptr(opts.Title)}
 	if opts.Body != "" {
 		createOpts.Description = gongfeng.Ptr(opts.Body)
@@ -96,7 +97,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		createOpts.Labels = gongfeng.Ptr(strings.Join(opts.Labels, ","))
 	}
 	if opts.Milestone != "" {
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "CreateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(model.PlatformTencentCode, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -111,7 +112,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	}
 	issue, _, err := p.client.Issues.CreateIssue(ctx, pid(opts.Owner, opts.Repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateIssue", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -128,8 +129,8 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 // provider.ErrClearNotSupported——既有登记 no-op（空 csv 结构性不可上
 // wire）尊重之，不凭结构分析推翻（divergence.go 的 RemoveIssueLabel
 // 条目）。
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "UpdateIssue", number)
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	if opts.State != "" {
 		event := "close"
-		if opts.State == provider.IssueStateOpen {
+		if opts.State == model.IssueStateOpen {
 			event = "reopen"
 		}
 		updateOpts.StateEvent = gongfeng.Ptr(event) // IssueState → state_event verb
@@ -177,7 +178,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		if m == "" {
 			updateOpts.MilestoneID = gongfeng.Ptr(0) // "milestone_id":0
 		} else {
-			m64, err := backendutil.ParseMilestoneNumber(provider.PlatformTencentCode, "UpdateIssue", m)
+			m64, err := backendutil.ParseMilestoneNumber(model.PlatformTencentCode, "UpdateIssue", m)
 			if err != nil {
 				return nil, err
 			}
@@ -186,35 +187,35 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateIssue", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CloseIssue implements provider.IssueManager via the state_event API.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "CloseIssue", number)
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n,
 		&gongfeng.UpdateIssueOptions{StateEvent: gongfeng.Ptr("close")})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CloseIssue", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CloseIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // ReopenIssue implements provider.IssueManager via the state_event API.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "ReopenIssue", number)
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n,
 		&gongfeng.UpdateIssueOptions{StateEvent: gongfeng.Ptr("reopen")})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ReopenIssue", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ReopenIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -222,8 +223,8 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 // ListIssueComments implements provider.IssueManager via the notes API,
 // exhausting 工蜂's pagination (the loop advances until an empty page, so
 // the result is the complete comment list).
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "ListIssueComments", number)
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -234,9 +235,9 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListIssueComments", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListIssueComments", err)
 	}
-	result := make([]*provider.IssueComment, 0, len(notes))
+	result := make([]*model.IssueComment, 0, len(notes))
 	for _, note := range notes {
 		result = append(result, convertIssueComment(note))
 	}
@@ -244,15 +245,15 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 }
 
 // CreateIssueComment implements provider.IssueManager via the notes API.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "CreateIssueComment", number)
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
 	note, _, err := p.client.Notes.CreateIssueNote(ctx, pid(owner, repo), n,
 		&gongfeng.CreateIssueNoteOptions{Body: gongfeng.Ptr(body)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateIssueComment", err)
 	}
 	return convertIssueComment(note), nil
 }
@@ -260,15 +261,15 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // UpdateIssueComment implements provider.IssueManager via the notes API.
 // 工蜂 addresses issue notes through the issue, so number must carry the
 // issue's number; the platform only lets the note's author perform the edit.
-func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "UpdateIssueComment", number)
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "UpdateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
 	note, _, err := p.client.Notes.UpdateIssueNote(ctx, pid(owner, repo), n, int(commentID),
 		&gongfeng.UpdateIssueNoteOptions{Body: gongfeng.Ptr(body)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateIssueComment", err)
 	}
 	return convertIssueComment(note), nil
 }
@@ -280,17 +281,17 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // endpoint, so we use the SDK client's NewRequest/Do for a raw API call
 // (same pattern as DiffManager.DeleteNote).
 func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "DeleteIssueComment", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "DeleteIssueComment", number)
 	if err != nil {
 		return err
 	}
 	path := fmt.Sprintf("projects/%s/issues/%d/notes/%d", backendutil.Esc(pid(owner, repo)), n, commentID)
 	req, err := p.client.NewRequest(ctx, http.MethodDelete, path, nil)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteIssueComment", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteIssueComment", err)
 	}
 	if _, err := p.client.Do(req, nil); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteIssueComment", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteIssueComment", err)
 	}
 	return nil
 }
@@ -298,18 +299,18 @@ func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number s
 // ListIssueLabels implements provider.IssueManager: repository-level
 // labels (labels.go owns the model conversion; IDs stay zero because the
 // gongfeng Label model has none), exhausting pagination.
-func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
+func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*model.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*gongfeng.Label, error) {
 		batch, _, err := p.client.Labels.ListLabels(ctx, pid(owner, repo),
 			&gongfeng.ListLabelsOptions{ListOptions: gongfeng.ListOptions{Page: page, PerPage: backendutil.LabelPageSize}})
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListIssueLabels", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListIssueLabels", err)
 	}
-	result := make([]*provider.IssueLabel, 0, len(labels))
+	result := make([]*model.IssueLabel, 0, len(labels))
 	for _, l := range labels {
-		result = append(result, &provider.IssueLabel{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
+		result = append(result, &model.IssueLabel{Name: l.Name, Color: strings.TrimPrefix(l.Color, "#")})
 	}
 	return result, nil
 }
@@ -318,17 +319,17 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 // takes the full label set only (no add_labels), so the current set is
 // fetched, unioned with the adds, and rewritten.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "AddIssueLabels", err)
+		return provider.Wrap(model.PlatformTencentCode, "AddIssueLabels", err)
 	}
 	merged := unionLabels(issue.Labels, labels)
 	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(merged)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "AddIssueLabels", err)
+		return provider.Wrap(model.PlatformTencentCode, "AddIssueLabels", err)
 	}
 	return nil
 }
@@ -340,13 +341,13 @@ func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number strin
 // omitempty drops from the PUT body, so the update is a no-op and the
 // label stays.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabel", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveIssueLabel", err)
 	}
 	remaining := make([]string, 0, len(issue.Labels))
 	for _, l := range issue.Labels {
@@ -355,7 +356,7 @@ func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, na
 		}
 	}
 	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(remaining)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabel", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveIssueLabel", err)
 	}
 	return nil
 }
@@ -367,13 +368,13 @@ func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number st
 	if len(labels) == 0 {
 		return nil
 	}
-	n, err := backendutil.ParseIssueNumber(provider.PlatformTencentCode, "RemoveIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformTencentCode, "RemoveIssueLabels", number)
 	if err != nil {
 		return err
 	}
 	issue, _, err := p.client.Issues.GetIssue(ctx, pid(owner, repo), n)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabels", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveIssueLabels", err)
 	}
 	drop := make(map[string]struct{}, len(labels))
 	for _, l := range labels {
@@ -386,7 +387,7 @@ func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number st
 		}
 	}
 	if _, _, err := p.client.Issues.UpdateIssue(ctx, pid(owner, repo), n, labelUpdate(remaining)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveIssueLabels", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveIssueLabels", err)
 	}
 	return nil
 }
@@ -418,16 +419,16 @@ func unionLabels(existing, adds []string) []string {
 	return merged
 }
 
-// convertIssue maps a gongfeng.Issue to a provider.Issue. Number carries
+// convertIssue maps a gongfeng.Issue to a model.Issue. Number carries
 // the IID (the identifier the write endpoints take); 工蜂 reports state
 // "opened" and the SDK normalizes to "open"; MilestoneRef.Number carries
 // the milestone ID (registered — the same identifier issue writes take);
 // WebURL stays empty (the model has no field; registered).
-func convertIssue(i *gongfeng.Issue) *provider.Issue {
+func convertIssue(i *gongfeng.Issue) *model.Issue {
 	if i == nil {
 		return nil
 	}
-	issue := &provider.Issue{
+	issue := &model.Issue{
 		ID:     int64(i.ID),
 		Number: strconv.Itoa(i.IID),
 		Title:  i.Title,
@@ -437,12 +438,12 @@ func convertIssue(i *gongfeng.Issue) *provider.Issue {
 	}
 	switch i.State {
 	case "opened", "reopened":
-		issue.State = provider.IssueStateOpen
+		issue.State = model.IssueStateOpen
 	case "closed":
-		issue.State = provider.IssueStateClosed
+		issue.State = model.IssueStateClosed
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{Number: strconv.Itoa(i.Milestone.ID), Title: i.Milestone.Title}
+		issue.Milestone = &model.MilestoneRef{Number: strconv.Itoa(i.Milestone.ID), Title: i.Milestone.Title}
 	}
 	for _, a := range i.Assignees {
 		issue.Assignees = append(issue.Assignees, a.Username)
@@ -451,12 +452,12 @@ func convertIssue(i *gongfeng.Issue) *provider.Issue {
 	return issue
 }
 
-// convertIssueComment maps a gongfeng.Note to a provider.IssueComment.
-func convertIssueComment(n *gongfeng.Note) *provider.IssueComment {
+// convertIssueComment maps a gongfeng.Note to a model.IssueComment.
+func convertIssueComment(n *gongfeng.Note) *model.IssueComment {
 	if n == nil {
 		return nil
 	}
-	return &provider.IssueComment{
+	return &model.IssueComment{
 		ID:        int64(n.ID),
 		Body:      n.Body,
 		Author:    convertUser(n.Author),

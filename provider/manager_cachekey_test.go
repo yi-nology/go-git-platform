@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	_ "github.com/yi-nology/go-git-platform/backends/all"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -28,7 +29,7 @@ func cacheKeyHarness(t *testing.T) (*httptest.Server, *provider.Manager) {
 
 // baseCacheCfg 返回一个最小可用 Config;各案例在它之上只改一个字段。
 func baseCacheCfg(baseURL string) provider.Config {
-	return provider.Config{Platform: provider.PlatformGitHub, BaseURL: baseURL, Token: "tok"}
+	return provider.Config{Platform: model.PlatformGitHub, BaseURL: baseURL, Token: "tok"}
 }
 
 // TestManager_CacheKey_CoversAllWireAffectingFields 缓存键必须涵盖全部

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -65,30 +66,30 @@ type ReleasePort interface {
 
 // ListTags lists every tag (the provider surface carries no pagination
 // parameters; the engine walks the endpoint).
-func ListTags(ctx context.Context, f Family, c ReleasePort, owner, repo string) ([]*provider.TagInfo, error) {
+func ListTags(ctx context.Context, f Family, c ReleasePort, owner, repo string) ([]*model.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*FamilyTag, error) {
 		return c.ListRepoTags(ctx, owner, repo, ListOptions{Page: page, PageSize: f.PageSize})
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
-		result = append(result, &provider.TagInfo{Name: t.Name, Commit: t.CommitSHA})
+		result = append(result, &model.TagInfo{Name: t.Name, Commit: t.CommitSHA})
 	}
 	return result, nil
 }
 
 // ListReleases lists every release (the provider surface carries no
 // pagination parameters; the engine walks the endpoint).
-func ListReleases(ctx context.Context, f Family, c ReleasePort, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func ListReleases(ctx context.Context, f Family, c ReleasePort, owner, repo string) ([]*model.ReleaseInfo, error) {
 	releases, err := backendutil.AllPages(func(page int) ([]*FamilyRelease, error) {
 		return c.ListReleases(ctx, owner, repo, ListOptions{Page: page, PageSize: f.PageSize})
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
 		result = append(result, convertRelease(r))
 	}
@@ -99,7 +100,7 @@ func ListReleases(ctx context.Context, f Family, c ReleasePort, owner, repo stri
 // always serializes (target_commitish carries no omitempty), so a
 // Target-less create sends an empty string, which the server treats as
 // unchanged (the default branch).
-func CreateRelease(ctx context.Context, f Family, c ReleasePort, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func CreateRelease(ctx context.Context, f Family, c ReleasePort, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	r, err := c.CreateRelease(ctx, owner, repo, FamilyCreateReleaseOption{
 		TagName:      opts.TagName,
 		Target:       opts.Target,
@@ -116,7 +117,7 @@ func CreateRelease(ctx context.Context, f Family, c ReleasePort, owner, repo str
 
 // GetReleaseByTag fetches one release addressed by its tag (the family
 // exposes a dedicated tag-addressed endpoint).
-func GetReleaseByTag(ctx context.Context, f Family, c ReleasePort, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func GetReleaseByTag(ctx context.Context, f Family, c ReleasePort, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	r, err := c.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "GetReleaseByTag", err)
@@ -130,7 +131,7 @@ func GetReleaseByTag(ctx context.Context, f Family, c ReleasePort, owner, repo, 
 // fields are plain strings that would clobber the release when sent empty,
 // so the current values from the resolution fetch backfill every option the
 // caller left nil; draft/prerelease are pointers that pass through.
-func UpdateRelease(ctx context.Context, f Family, c ReleasePort, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func UpdateRelease(ctx context.Context, f Family, c ReleasePort, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	cur, err := c.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "UpdateRelease", err)
@@ -175,11 +176,11 @@ func GetArchive(ctx context.Context, f Family, c ReleasePort, owner, repo, ref, 
 }
 
 // convertRelease maps a family release to the provider shape.
-func convertRelease(r *FamilyRelease) *provider.ReleaseInfo {
+func convertRelease(r *FamilyRelease) *model.ReleaseInfo {
 	if r == nil {
 		return nil
 	}
-	return &provider.ReleaseInfo{
+	return &model.ReleaseInfo{
 		ID:          r.ID,
 		TagName:     r.TagName,
 		Title:       r.Title,
@@ -218,7 +219,7 @@ type ReactionPort interface {
 }
 
 // ListIssueReactions lists every reaction on an issue.
-func ListIssueReactions(ctx context.Context, f Family, c ReactionPort, owner, repo, number string) ([]*provider.Reaction, error) {
+func ListIssueReactions(ctx context.Context, f Family, c ReactionPort, owner, repo, number string) ([]*model.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "ListIssueReactions", number)
 	if err != nil {
 		return nil, err
@@ -231,7 +232,7 @@ func ListIssueReactions(ctx context.Context, f Family, c ReactionPort, owner, re
 }
 
 // AddIssueReaction adds an emoji reaction to an issue.
-func AddIssueReaction(ctx context.Context, f Family, c ReactionPort, owner, repo, number, emoji string) (*provider.Reaction, error) {
+func AddIssueReaction(ctx context.Context, f Family, c ReactionPort, owner, repo, number, emoji string) (*model.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "AddIssueReaction", number)
 	if err != nil {
 		return nil, err
@@ -273,7 +274,7 @@ func RemoveIssueReaction(ctx context.Context, f Family, c ReactionPort, owner, r
 // ListCRComments walks the issue-comment endpoint), so PR-level reactions
 // are the issue reactions of that index — the same delegation the GitHub
 // backend makes (issue #57: 实装 instead of a sentinel-less stub).
-func ListCRReactions(ctx context.Context, f Family, c ReactionPort, owner, repo, number string) ([]*provider.Reaction, error) {
+func ListCRReactions(ctx context.Context, f Family, c ReactionPort, owner, repo, number string) ([]*model.Reaction, error) {
 	n, err := backendutil.ParseIssueNumber64(f.Platform, "ListCRReactions", number)
 	if err != nil {
 		return nil, err
@@ -286,7 +287,7 @@ func ListCRReactions(ctx context.Context, f Family, c ReactionPort, owner, repo,
 }
 
 // ListIssueCommentReactions lists every reaction on an issue comment.
-func ListIssueCommentReactions(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
+func ListIssueCommentReactions(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64) ([]*model.Reaction, error) {
 	reactions, err := c.GetIssueCommentReactions(ctx, owner, repo, commentID)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListIssueCommentReactions", err)
@@ -295,7 +296,7 @@ func ListIssueCommentReactions(ctx context.Context, f Family, c ReactionPort, ow
 }
 
 // AddIssueCommentReaction adds an emoji reaction to an issue comment.
-func AddIssueCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
+func AddIssueCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64, emoji string) (*model.Reaction, error) {
 	r, err := c.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "AddIssueCommentReaction", err)
@@ -323,7 +324,7 @@ func RemoveIssueCommentReaction(ctx context.Context, f Family, c ReactionPort, o
 // issue-comment endpoint), so the comment ID is an issue-comment ID and the
 // issue-comment reaction endpoints address it directly (issue #57 实装;
 // the (nil, nil) silent-empty form was indistinguishable from "no reactions").
-func ListCRCommentReactions(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64) ([]*provider.Reaction, error) {
+func ListCRCommentReactions(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64) ([]*model.Reaction, error) {
 	reactions, err := c.GetIssueCommentReactions(ctx, owner, repo, commentID)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCRCommentReactions", err)
@@ -333,7 +334,7 @@ func ListCRCommentReactions(ctx context.Context, f Family, c ReactionPort, owner
 
 // AddCRCommentReaction adds an emoji reaction to a change-request comment
 // (an issue comment, see ListCRCommentReactions).
-func AddCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64, emoji string) (*provider.Reaction, error) {
+func AddCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owner, repo string, commentID int64, emoji string) (*model.Reaction, error) {
 	r, err := c.PostIssueCommentReaction(ctx, owner, repo, commentID, emoji)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "AddCRCommentReaction", err)
@@ -357,21 +358,21 @@ func RemoveCRCommentReaction(ctx context.Context, f Family, c ReactionPort, owne
 	return provider.Wrapf(f.Platform, "RemoveCRCommentReaction", "%w: reaction %d not found", provider.ErrNotFound, reactionID)
 }
 
-func convertReactions(in []*FamilyReaction) []*provider.Reaction {
-	out := make([]*provider.Reaction, 0, len(in))
+func convertReactions(in []*FamilyReaction) []*model.Reaction {
+	out := make([]*model.Reaction, 0, len(in))
 	for _, r := range in {
 		out = append(out, convertReaction(r))
 	}
 	return out
 }
 
-func convertReaction(r *FamilyReaction) *provider.Reaction {
+func convertReaction(r *FamilyReaction) *model.Reaction {
 	if r == nil {
 		return nil
 	}
-	out := &provider.Reaction{Emoji: r.Reaction, ID: r.UserID}
+	out := &model.Reaction{Emoji: r.Reaction, ID: r.UserID}
 	if r.UserID != 0 || r.Username != "" {
-		out.User = &provider.CRUser{ID: r.UserID, Username: r.Username}
+		out.User = &model.CRUser{ID: r.UserID, Username: r.Username}
 	}
 	return out
 }
@@ -421,14 +422,14 @@ type BranchProtectionPort interface {
 
 // ListBranchProtections lists every protection rule (the provider surface
 // carries no pagination parameters; the engine walks the endpoint).
-func ListBranchProtections(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string) ([]*provider.BranchProtection, error) {
+func ListBranchProtections(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string) ([]*model.BranchProtection, error) {
 	bps, err := backendutil.AllPages(func(page int) ([]*FamilyBranchProtection, error) {
 		return c.ListBranchProtections(ctx, owner, repo, ListOptions{Page: page, PageSize: f.PageSize})
 	})
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListBranchProtections", err)
 	}
-	result := make([]*provider.BranchProtection, 0, len(bps))
+	result := make([]*model.BranchProtection, 0, len(bps))
 	for _, bp := range bps {
 		result = append(result, convertBranchProtection(bp))
 	}
@@ -436,7 +437,7 @@ func ListBranchProtections(ctx context.Context, f Family, c BranchProtectionPort
 }
 
 // GetBranchProtection fetches one protection rule by branch name.
-func GetBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string) (*provider.BranchProtection, error) {
+func GetBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string) (*model.BranchProtection, error) {
 	bp, err := c.GetBranchProtection(ctx, owner, repo, branch)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "GetBranchProtection", err)
@@ -453,7 +454,7 @@ func GetBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, 
 // 登记两家族的 DivergenceIgnore。绝不再拿语义无关的开关当替身——#93 把
 // AllowDeletions 反号写进 BlockOnRejectedReviews（评审驳回阻塞合并），
 // Create(AllowDeletions=false) 会静默打开一个调用意图之外的保护特性。
-func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	bp, err := c.CreateBranchProtection(ctx, owner, repo, FamilyCreateBranchProtectionOption{
 		BranchName:        opts.BranchName,
 		RequiredApprovals: int64(opts.RequiredApprovingReviews),
@@ -471,7 +472,7 @@ func CreateBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 // force-push toggle where the SDK models it (issue #130); AllowDeletions
 // has no family wire face and is dropped (ledger-registered), never
 // substituted onto an unrelated switch.
-func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func UpdateBranchProtection(ctx context.Context, f Family, c BranchProtectionPort, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	edit := FamilyEditBranchProtectionOption{}
 	if opts.RequiredApprovingReviews != nil {
 		v := int64(*opts.RequiredApprovingReviews)
@@ -503,8 +504,8 @@ func DeleteBranchProtection(ctx context.Context, f Family, c BranchProtectionPor
 // only); AllowDeletions always reports the zero value — the family wire
 // has no deletions face, and fabricating it from an unrelated switch was
 // exactly the #130 defect.
-func convertBranchProtection(bp *FamilyBranchProtection) *provider.BranchProtection {
-	return &provider.BranchProtection{
+func convertBranchProtection(bp *FamilyBranchProtection) *model.BranchProtection {
+	return &model.BranchProtection{
 		BranchName:               bp.BranchName,
 		RequiredApprovingReviews: int(bp.RequiredApprovals),
 		RequiredStatusChecks:     bp.EnableStatusCheck,

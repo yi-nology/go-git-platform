@@ -9,12 +9,13 @@ import (
 	oekiterrors "github.com/oekit/pkg/errors"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListIssues implements provider.IssueManager.
-func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
+func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*model.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.IssueListByRepoOptions{ListOptions: github.ListOptions{Page: page, PerPage: perPage}}
 	if opts.State != "" {
@@ -35,9 +36,9 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	}
 	issues, _, err := p.client.Issues.ListByRepo(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "ListIssues", err)
+		return nil, 0, provider.Wrap(model.PlatformGitHub, "ListIssues", err)
 	}
-	result := make([]*provider.Issue, 0, len(issues))
+	result := make([]*model.Issue, 0, len(issues))
 	for _, i := range issues {
 		result = append(result, convertIssue(i))
 	}
@@ -45,20 +46,20 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 }
 
 // GetIssue implements provider.IssueManager.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "GetIssue", number)
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.Get(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetIssue", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CreateIssue implements provider.IssueManager.
-func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*model.Issue, error) {
 	req := &github.CreateIssueRequest{Title: opts.Title}
 	if opts.Body != "" {
 		req.Body = new(opts.Body)
@@ -70,7 +71,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		req.Labels = opts.Labels
 	}
 	if opts.Milestone != "" {
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "CreateIssue", opts.Milestone)
+		m64, err := backendutil.ParseMilestoneNumber(model.PlatformGitHub, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -78,14 +79,14 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	}
 	issue, _, err := p.client.Issues.Create(ctx, opts.Owner, opts.Repo, *req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateIssue", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // UpdateIssue implements provider.IssueManager.
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "UpdateIssue", number)
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +109,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 			// A/B 矩阵 B 级：go-github Milestone *int omitempty 发不出 null。
 			return nil, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear milestone", "platform", "github", "field", "milestone")
 		}
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateIssue", m)
+		m64, err := backendutil.ParseMilestoneNumber(model.PlatformGitHub, "UpdateIssue", m)
 		if err != nil {
 			return nil, err
 		}
@@ -123,40 +124,40 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	}
 	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, *req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateIssue", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CloseIssue implements provider.IssueManager.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "CloseIssue", number)
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: new("closed")})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CloseIssue", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CloseIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // ReopenIssue implements provider.IssueManager.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ReopenIssue", number)
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, _, err := p.client.Issues.Update(ctx, owner, repo, n, github.UpdateIssueRequest{State: new("open")})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenIssue", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ReopenIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // ListIssueComments implements provider.IssueManager.
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "ListIssueComments", number)
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -167,9 +168,9 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueComments", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListIssueComments", err)
 	}
-	result := make([]*provider.IssueComment, 0, len(comments))
+	result := make([]*model.IssueComment, 0, len(comments))
 	for _, c := range comments {
 		result = append(result, convertIssueComment(c))
 	}
@@ -177,14 +178,14 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 }
 
 // CreateIssueComment implements provider.IssueManager.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "CreateIssueComment", number)
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
 	comment, _, err := p.client.Issues.CreateComment(ctx, owner, repo, n, github.IssueCommentRequest{Body: body})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateIssueComment", err)
 	}
 	return convertIssueComment(comment), nil
 }
@@ -192,10 +193,10 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // UpdateIssueComment implements provider.IssueManager. The edit endpoint
 // addresses the comment directly, so number is unused. The platform only
 // lets the comment's author perform the edit.
-func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*model.IssueComment, error) {
 	comment, _, err := p.client.Issues.UpdateComment(ctx, owner, repo, commentID, github.IssueCommentRequest{Body: body})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateIssueComment", err)
 	}
 	return convertIssueComment(comment), nil
 }
@@ -205,48 +206,48 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // permanent; the platform only lets the comment's author perform it.
 func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
 	if _, err := p.client.Issues.DeleteComment(ctx, owner, repo, commentID); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteIssueComment", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteIssueComment", err)
 	}
 	return nil
 }
 
 // ListIssueLabels implements provider.IssueManager: repository-level labels,
 // exhausting pagination (the loop advances until an empty page).
-func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
+func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*model.IssueLabel, error) {
 	labels, err := backendutil.AllPages(func(page int) ([]*github.Label, error) {
 		batch, _, err := p.client.Issues.ListLabels(ctx, owner, repo, &github.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListIssueLabels", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListIssueLabels", err)
 	}
-	result := make([]*provider.IssueLabel, 0, len(labels))
+	result := make([]*model.IssueLabel, 0, len(labels))
 	for _, l := range labels {
-		result = append(result, &provider.IssueLabel{ID: l.GetID(), Name: l.GetName(), Color: trimHash(l.GetColor())})
+		result = append(result, &model.IssueLabel{ID: l.GetID(), Name: l.GetName(), Color: trimHash(l.GetColor())})
 	}
 	return result, nil
 }
 
 // AddIssueLabels implements provider.IssueManager.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
 	if _, _, err := p.client.Issues.AddLabelsToIssue(ctx, owner, repo, n, labels); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "AddIssueLabels", err)
+		return provider.Wrap(model.PlatformGitHub, "AddIssueLabels", err)
 	}
 	return nil
 }
 
 // RemoveIssueLabel implements provider.IssueManager.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitHub, "RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitHub, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}
 	if _, err := p.client.Issues.RemoveLabelForIssue(ctx, owner, repo, n, name); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "RemoveIssueLabel", err)
+		return provider.Wrap(model.PlatformGitHub, "RemoveIssueLabel", err)
 	}
 	return nil
 }
@@ -263,16 +264,16 @@ func (p *Provider) RemoveIssueLabels(ctx context.Context, owner, repo, number st
 	return nil
 }
 
-// convertIssue maps a github.Issue to a provider.Issue.
-func convertIssue(i *github.Issue) *provider.Issue {
+// convertIssue maps a github.Issue to a model.Issue.
+func convertIssue(i *github.Issue) *model.Issue {
 	if i == nil {
 		return nil
 	}
-	var milestone *provider.MilestoneRef
+	var milestone *model.MilestoneRef
 	if i.Milestone != nil {
-		milestone = &provider.MilestoneRef{Number: strconv.Itoa(i.Milestone.GetNumber()), Title: i.Milestone.GetTitle()}
+		milestone = &model.MilestoneRef{Number: strconv.Itoa(i.Milestone.GetNumber()), Title: i.Milestone.GetTitle()}
 	}
-	issue := &provider.Issue{
+	issue := &model.Issue{
 		ID:        i.GetID(),
 		Number:    strconv.Itoa(i.GetNumber()),
 		Title:     i.GetTitle(),
@@ -286,7 +287,7 @@ func convertIssue(i *github.Issue) *provider.Issue {
 		IsPullRequest: i.PullRequestLinks != nil,
 	}
 	if s := i.GetState(); s != "" {
-		issue.State = provider.IssueState(s)
+		issue.State = model.IssueState(s)
 	}
 	for _, l := range i.Labels {
 		issue.Labels = append(issue.Labels, l.GetName())
@@ -308,12 +309,12 @@ func convertIssue(i *github.Issue) *provider.Issue {
 	return issue
 }
 
-// convertIssueComment maps a github.IssueComment to a provider.IssueComment.
-func convertIssueComment(c *github.IssueComment) *provider.IssueComment {
+// convertIssueComment maps a github.IssueComment to a model.IssueComment.
+func convertIssueComment(c *github.IssueComment) *model.IssueComment {
 	if c == nil {
 		return nil
 	}
-	comment := &provider.IssueComment{
+	comment := &model.IssueComment{
 		ID:     c.GetID(),
 		Body:   c.GetBody(),
 		Author: convertUser(c.GetUser()),

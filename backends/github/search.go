@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -23,7 +24,7 @@ import (
 //     nil when absent (GitHub sometimes omits it).
 
 // SearchRepos implements provider.SearchManager.
-func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*provider.SearchRepoResult, *int, error) {
+func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOptions) ([]*model.SearchRepoResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	result, _, err := p.client.Search.Repositories(ctx, opts.Query, &github.SearchOptions{
 		Sort:        opts.Sort,
@@ -31,11 +32,11 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchRepos", err)
+		return nil, nil, provider.Wrap(model.PlatformGitHub, "SearchRepos", err)
 	}
-	out := make([]*provider.SearchRepoResult, 0, len(result.Repositories))
+	out := make([]*model.SearchRepoResult, 0, len(result.Repositories))
 	for _, r := range result.Repositories {
-		out = append(out, &provider.SearchRepoResult{
+		out = append(out, &model.SearchRepoResult{
 			FullName:      r.GetFullName(),
 			Description:   r.GetDescription(),
 			WebURL:        r.GetHTMLURL(),
@@ -53,7 +54,7 @@ func (p *Provider) SearchRepos(ctx context.Context, opts provider.SearchReposOpt
 
 // SearchIssues implements provider.SearchManager. Repo/State map onto query
 // qualifiers; "is:issue" keeps pull requests out of the results.
-func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*provider.SearchIssueResult, *int, error) {
+func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesOptions) ([]*model.SearchIssueResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	var qualifiers []string
 	if opts.Repo != "" {
@@ -70,19 +71,19 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchIssues", err)
+		return nil, nil, provider.Wrap(model.PlatformGitHub, "SearchIssues", err)
 	}
-	out := make([]*provider.SearchIssueResult, 0, len(result.Issues))
+	out := make([]*model.SearchIssueResult, 0, len(result.Issues))
 	for _, i := range result.Issues {
 		labels := make([]string, 0, len(i.Labels))
 		for _, l := range i.Labels {
 			labels = append(labels, l.GetName())
 		}
-		out = append(out, &provider.SearchIssueResult{
+		out = append(out, &model.SearchIssueResult{
 			Number:    strconv.Itoa(i.GetNumber()),
 			Title:     i.GetTitle(),
 			Body:      i.GetBody(),
-			State:     provider.IssueState(i.GetState()),
+			State:     model.IssueState(i.GetState()),
 			WebURL:    i.GetHTMLURL(),
 			Labels:    labels,
 			Comments:  i.GetComments(),
@@ -96,7 +97,7 @@ func (p *Provider) SearchIssues(ctx context.Context, opts provider.SearchIssuesO
 }
 
 // SearchUsers implements provider.SearchManager.
-func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*provider.SearchUserResult, *int, error) {
+func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOptions) ([]*model.SearchUserResult, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	result, _, err := p.client.Search.Users(ctx, opts.Query, &github.SearchOptions{
 		Sort:        opts.Sort,
@@ -104,11 +105,11 @@ func (p *Provider) SearchUsers(ctx context.Context, opts provider.SearchUsersOpt
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
 	})
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitHub, "SearchUsers", err)
+		return nil, nil, provider.Wrap(model.PlatformGitHub, "SearchUsers", err)
 	}
-	out := make([]*provider.SearchUserResult, 0, len(result.Users))
+	out := make([]*model.SearchUserResult, 0, len(result.Users))
 	for _, u := range result.Users {
-		out = append(out, &provider.SearchUserResult{
+		out = append(out, &model.SearchUserResult{
 			Login:     u.GetLogin(),
 			Name:      u.GetName(),
 			AvatarURL: u.GetAvatarURL(),

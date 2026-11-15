@@ -18,13 +18,14 @@ import (
 	sdkgithub "github.com/google/go-github/v93/github"
 
 	ghbackend "github.com/yi-nology/go-git-platform/backends/github"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func newTestProvider(t *testing.T, baseURL string) *ghbackend.Provider {
 	t.Helper()
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		BaseURL:  baseURL,
 		Token:    "test-token",
 	})
@@ -40,14 +41,14 @@ func newTestProvider(t *testing.T, baseURL string) *ghbackend.Provider {
 
 func TestNewProvider_Success(t *testing.T) {
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		BaseURL:  "http://example.test/api/v3",
 		Token:    "test",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Platform() != provider.PlatformGitHub {
+	if p.Platform() != model.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", p.Platform())
 	}
 }
@@ -71,7 +72,7 @@ func TestListRepos(t *testing.T) {
 	if len(repos) != 2 {
 		t.Fatalf("expected 2, got %d", len(repos))
 	}
-	if repos[0].Platform != provider.PlatformGitHub {
+	if repos[0].Platform != model.PlatformGitHub {
 		t.Errorf("expected GitHub platform, got %s", repos[0].Platform)
 	}
 	if !repos[1].Private {
@@ -201,7 +202,7 @@ func TestCreateCR(t *testing.T) {
 	if cr.Number != "7" {
 		t.Errorf("expected 7, got %q", cr.Number)
 	}
-	if cr.State != provider.CRStateOpened {
+	if cr.State != model.CRStateOpened {
 		t.Errorf("expected opened, got %s", cr.State)
 	}
 }
@@ -229,7 +230,7 @@ func TestListCRs_MergedDetected(t *testing.T) {
 	if total != nil {
 		t.Errorf("expected nil total (no Link header in mock), got %d", *total)
 	}
-	if crs[1].State != provider.CRStateMerged {
+	if crs[1].State != model.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)
 	}
 }
@@ -478,7 +479,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	defer srv.Close()
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform:    provider.PlatformGitHub,
+		Platform:    model.PlatformGitHub,
 		BaseURL:     srv.URL + "/api/v3",
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},
@@ -529,7 +530,7 @@ func TestListMyGists_Pagination(t *testing.T) {
 		gotPage = r.URL.Query().Get("page")
 		gotPerPage = r.URL.Query().Get("per_page")
 		w.Header().Set("Content-Type", "application/json")
-		// 原始 JSON 而非 SDK 结构体:同时验证 provider.Gist 的 json tag
+		// 原始 JSON 而非 SDK 结构体:同时验证 model.Gist 的 json tag
 		// 与 GitHub 响应字段逐一对齐。
 		_, _ = w.Write([]byte(`[{"id":"g1","description":"notes","public":false,` +
 			`"html_url":"https://gist.github.com/g1",` +
@@ -885,7 +886,7 @@ func TestListFailedJobLogs_WorkflowDedup(t *testing.T) {
 	if len(logs) != 2 {
 		t.Fatalf("want 2 failed jobs, got %d: %+v", len(logs), logs)
 	}
-	byName := map[string]provider.JobLog{}
+	byName := map[string]model.JobLog{}
 	for _, l := range logs {
 		byName[l.Name] = l
 	}
@@ -973,7 +974,7 @@ func TestRepoExtras_WireTest(t *testing.T) {
 }
 
 // TestListDeployments_WireTest locks the GitHub deployments listing: the
-// environment filter is sent, the response converts to []provider.Deployment,
+// environment filter is sent, the response converts to []model.Deployment,
 // and the int return carries the page item count — never Response.LastPage,
 // which is a page index (0 on single-page responses) rather than a count
 // (issue #89).

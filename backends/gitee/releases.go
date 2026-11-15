@@ -11,11 +11,12 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListTags implements provider.ReleaseManager.
-func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*model.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*gitee.Tag, error) {
 		opts := &gitee.ListTagsOptions{
 			Page:    gitee.Int(page),
@@ -25,9 +26,9 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListTags", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
 		result = append(result, convertTag(t))
 	}
@@ -35,7 +36,7 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 }
 
 // ListReleases implements provider.ReleaseManager.
-func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*model.ReleaseInfo, error) {
 	releases, err := backendutil.AllPages(func(page int) ([]*gitee.Release, error) {
 		opts := &gitee.ListReleasesOptions{
 			Page:    gitee.Int(page),
@@ -45,9 +46,9 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 		return batch, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListReleases", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
 		result = append(result, convertRelease(r))
 	}
@@ -55,7 +56,7 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateRelease implements provider.ReleaseManager.
-func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	createOpts := &gitee.CreateReleaseOptions{
 		TagName: gitee.String(opts.TagName),
 		Name:    gitee.String(opts.Title),
@@ -71,26 +72,26 @@ func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts p
 	}
 	r, _, err := p.client.Repositories.CreateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateRelease", err)
 	}
 	return convertRelease(r), nil
 }
 
 // GetReleaseByTag implements provider.ReleaseManager.
-func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetReleaseByTag", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetReleaseByTag", err)
 	}
 	return convertRelease(r), nil
 }
 
 // UpdateRelease implements provider.ReleaseManager.
-func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	// Resolve the release ID by tag first.
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateRelease", err)
 	}
 	updateOpts := &gitee.UpdateReleaseOptions{}
 	if opts.Name != nil {
@@ -104,7 +105,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 	}
 	updated, _, err := p.client.Repositories.UpdateRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int64(deref(r.ID)), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateRelease", err)
 	}
 	return convertRelease(updated), nil
 }
@@ -114,11 +115,11 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 	// Resolve the release ID by tag first.
 	r, _, err := p.client.Repositories.GetReleaseByTag(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(tag))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteRelease", err)
 	}
 	_, err = p.client.Repositories.DeleteRelease(ctx, backendutil.Esc(owner), backendutil.Esc(repo), int64(deref(r.ID)))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -144,22 +145,22 @@ func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format stri
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetArchive", err)
 	}
 	req.Header.Set("Accept", "application/json")
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetArchive", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive",
+		return nil, provider.Wrap(model.PlatformGitee, "GetArchive",
 			fmt.Errorf("gitee archive: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(detail))))
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetArchive", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetArchive", err)
 	}
 	return data, nil
 }

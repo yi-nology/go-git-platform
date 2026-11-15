@@ -6,6 +6,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -16,7 +17,7 @@ import (
 // honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every label is returned.
-func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	var labels []*gitee.Label
 	if opts.Page > 0 {
 		page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
@@ -24,7 +25,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 			Page: page, PerPage: perPage,
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListLabels", err)
 		}
 		labels = list
 	} else {
@@ -36,10 +37,10 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListLabels", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListLabels", err)
 		}
 	}
-	result := make([]*provider.Label, 0, len(labels))
+	result := make([]*model.Label, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, convertLabel(l))
 	}
@@ -47,20 +48,20 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 }
 
 // CreateLabel implements provider.LabelManager.
-func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	createOpts := &gitee.CreateLabelOptions{
 		Name:  gitee.String(opts.Name),
 		Color: gitee.String(opts.Color),
 	}
 	label, _, err := p.client.Labels.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
 
 // UpdateLabel implements provider.LabelManager. Gitee addresses labels by name.
-func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	updateOpts := &gitee.UpdateLabelOptions{}
 	if opts.NewName != nil {
 		updateOpts.Name = gitee.String(*opts.NewName)
@@ -70,7 +71,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, _, err := p.client.Labels.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateLabel", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -79,7 +80,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) error {
 	_, err := p.client.Labels.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(name))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteLabel", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteLabel", err)
 	}
 	return nil
 }

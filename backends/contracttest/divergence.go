@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -139,7 +140,7 @@ func dispatchReactionDivergenceCall(p provider.Provider, capability, method stri
 		_, err := rm.ListIssueCommentReactions(ctx, "owner", "repo", 1)
 		return true, err
 	case "ReactionManager.AddIssueCommentReaction":
-		_, err := rm.AddIssueCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+		_, err := rm.AddIssueCommentReaction(ctx, "owner", "repo", 1, model.ReactionHeart)
 		return true, err
 	case "ReactionManager.RemoveIssueCommentReaction":
 		return true, rm.RemoveIssueCommentReaction(ctx, "owner", "repo", 1, 1)
@@ -147,7 +148,7 @@ func dispatchReactionDivergenceCall(p provider.Provider, capability, method stri
 		_, err := rm.ListCRCommentReactions(ctx, "owner", "repo", 1)
 		return true, err
 	case "ReactionManager.AddCRCommentReaction":
-		_, err := rm.AddCRCommentReaction(ctx, "owner", "repo", 1, provider.ReactionHeart)
+		_, err := rm.AddCRCommentReaction(ctx, "owner", "repo", 1, model.ReactionHeart)
 		return true, err
 	case "ReactionManager.RemoveCRCommentReaction":
 		return true, rm.RemoveCRCommentReaction(ctx, "owner", "repo", 1, 1)

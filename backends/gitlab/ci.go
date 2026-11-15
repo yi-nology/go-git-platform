@@ -6,12 +6,13 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListFailedJobLogs implements provider.CILogManager：
 // 最近一条 pipeline 的失败 job → trace 尾部。无 pipeline / 全绿 → 空切片。
-func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
+func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]model.JobLog, error) {
 	pid := pidOf(owner, repo)
 	shaOpt := sha
 	pl, _, err := p.client.Pipelines.ListProjectPipelines(pid, &gitlab.ListProjectPipelinesOptions{
@@ -23,7 +24,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListProjectPipelines", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListProjectPipelines", err)
 	}
 	if len(pl) == 0 {
 		return nil, nil
@@ -34,9 +35,9 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 		},
 	}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListPipelineJobs", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListPipelineJobs", err)
 	}
-	out := make([]provider.JobLog, 0, len(jobs))
+	out := make([]model.JobLog, 0, len(jobs))
 	for _, j := range jobs {
 		// canceled 的 job 是被连带取消的，不产生可归因日志；created 的没轮到
 		// 跑——只收真正跑挂了的。
@@ -48,7 +49,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 			// 单 job trace 拉不到不阻塞其余 job 的归因
 			tail, truncated = "", false
 		}
-		out = append(out, provider.JobLog{
+		out = append(out, model.JobLog{
 			Name: j.Name, Stage: j.Stage, WebURL: j.WebURL,
 			Trace: tail, Truncated: truncated,
 		})
@@ -60,7 +61,7 @@ func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha strin
 func (p *Provider) traceTail(ctx context.Context, pid string, jobID int64) (string, bool, error) {
 	r, _, err := p.client.Jobs.GetTraceFile(pid, jobID, gitlab.WithContext(ctx))
 	if err != nil {
-		return "", false, provider.Wrap(provider.PlatformGitLab, "GetTraceFile", err)
+		return "", false, provider.Wrap(model.PlatformGitLab, "GetTraceFile", err)
 	}
 	return backendutil.TailOfReader(r, backendutil.CILogTailBytes)
 }

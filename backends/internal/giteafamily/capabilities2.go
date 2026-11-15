@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -53,11 +54,11 @@ type Branch struct {
 }
 
 // ConvertRepo projects a family Repo onto the provider repository shape.
-func ConvertRepo(r *Repo, platform provider.Platform) *provider.PlatformRepo {
+func ConvertRepo(r *Repo, platform model.Platform) *model.PlatformRepo {
 	if r == nil {
 		return nil
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -76,11 +77,11 @@ func ConvertRepo(r *Repo, platform provider.Platform) *provider.PlatformRepo {
 }
 
 // convertUser projects a family User onto the provider user shape.
-func convertUser(u *User) *provider.CRUser {
+func convertUser(u *User) *model.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{ID: u.ID, Username: u.UserName, Name: u.FullName, AvatarURL: u.AvatarURL}
+	return &model.CRUser{ID: u.ID, Username: u.UserName, Name: u.FullName, AvatarURL: u.AvatarURL}
 }
 
 // --- labels ---
@@ -115,13 +116,13 @@ type LabelPort interface {
 	DeleteLabel(ctx context.Context, owner, repo string, id int64) error
 }
 
-// convertLabel maps a family Label to a provider.Label. Family colors may
+// convertLabel maps a family Label to a model.Label. Family colors may
 // carry a leading '#'; it is stripped for the SDK's canonical form.
-func convertLabel(l *Label) *provider.Label {
+func convertLabel(l *Label) *model.Label {
 	if l == nil {
 		return nil
 	}
-	return &provider.Label{
+	return &model.Label{
 		ID:          l.ID,
 		Name:        l.Name,
 		Color:       strings.TrimPrefix(l.Color, "#"),
@@ -131,7 +132,7 @@ func convertLabel(l *Label) *provider.Label {
 
 // ListLabels lists the repository's labels (one caller-driven page; the
 // provider surface is the normalized single-page contract).
-func ListLabels(ctx context.Context, f Family, c LabelPort, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func ListLabels(ctx context.Context, f Family, c LabelPort, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	// Dual-mode pagination is handled by backendutil.PageList (issue #60 —
 	// the exhaustive family): opts.Page == 0 walks every page
 	// (budget-capped, fails loud); opts.Page > 0 returns exactly that
@@ -146,7 +147,7 @@ func ListLabels(ctx context.Context, f Family, c LabelPort, owner, repo string, 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListLabels", err)
 	}
-	result := make([]*provider.Label, 0, len(labels))
+	result := make([]*model.Label, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, convertLabel(l))
 	}
@@ -154,7 +155,7 @@ func ListLabels(ctx context.Context, f Family, c LabelPort, owner, repo string, 
 }
 
 // CreateLabel creates a label.
-func CreateLabel(ctx context.Context, f Family, c LabelPort, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func CreateLabel(ctx context.Context, f Family, c LabelPort, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	label, err := c.CreateLabel(ctx, owner, repo, CreateLabelOption{
 		Name:        opts.Name,
 		Color:       "#" + opts.Color,
@@ -169,7 +170,7 @@ func CreateLabel(ctx context.Context, f Family, c LabelPort, owner, repo string,
 // UpdateLabel edits a label addressed by name (the family's update endpoint
 // addresses labels by ID, so the label is resolved by name first via the
 // per-provider TTL cache).
-func UpdateLabel(ctx context.Context, f Family, c LabelPort, cache *backendutil.IDCache, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func UpdateLabel(ctx context.Context, f Family, c LabelPort, cache *backendutil.IDCache, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	id, err := resolveLabelID(ctx, f, c, cache, "UpdateLabel", owner, repo, name)
 	if err != nil {
 		return nil, err
@@ -265,7 +266,7 @@ type BranchPort interface {
 // ListBranches lists every branch. The provider surface carries no
 // pagination parameters, so the full branch list is fetched by exhausting
 // the endpoint's pagination (backendutil.AllPages).
-func ListBranches(ctx context.Context, f Family, c BranchPort, owner, repo string) ([]*provider.PlatformBranch, error) {
+func ListBranches(ctx context.Context, f Family, c BranchPort, owner, repo string) ([]*model.PlatformBranch, error) {
 	branches, err := backendutil.AllPages(func(page int) ([]*Branch, error) {
 		return c.ListRepoBranches(ctx, owner, repo, ListRepoBranchesOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -274,17 +275,17 @@ func ListBranches(ctx context.Context, f Family, c BranchPort, owner, repo strin
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListBranches", err)
 	}
-	result := make([]*provider.PlatformBranch, 0, len(branches))
+	result := make([]*model.PlatformBranch, 0, len(branches))
 	for _, b := range branches {
 		if b != nil {
-			result = append(result, &provider.PlatformBranch{Name: b.Name})
+			result = append(result, &model.PlatformBranch{Name: b.Name})
 		}
 	}
 	return result, nil
 }
 
 // CreateBranch creates a branch from an existing ref.
-func CreateBranch(ctx context.Context, f Family, c BranchPort, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
+func CreateBranch(ctx context.Context, f Family, c BranchPort, owner, repo, branch, ref string) (*model.PlatformBranch, error) {
 	b, err := c.CreateBranch(ctx, owner, repo, CreateBranchOption{
 		BranchName:    branch,
 		OldBranchName: ref,
@@ -295,7 +296,7 @@ func CreateBranch(ctx context.Context, f Family, c BranchPort, owner, repo, bran
 	if b == nil {
 		return nil, provider.Wrapf(f.Platform, "CreateBranch", "empty response")
 	}
-	return &provider.PlatformBranch{Name: b.Name}, nil
+	return &model.PlatformBranch{Name: b.Name}, nil
 }
 
 // DeleteBranch removes a branch.
@@ -330,7 +331,7 @@ type ListCollaboratorsOptions struct {
 
 // ListCollaborators lists collaborators, fetching the permission of each
 // (the family's list endpoint returns users without permission info).
-func ListCollaborators(ctx context.Context, f Family, c CollaboratorPort, owner, repo string) ([]*provider.Collaborator, error) {
+func ListCollaborators(ctx context.Context, f Family, c CollaboratorPort, owner, repo string) ([]*model.Collaborator, error) {
 	users, err := backendutil.AllPages(func(page int) ([]*User, error) {
 		return c.ListCollaborators(ctx, owner, repo, ListCollaboratorsOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -339,9 +340,9 @@ func ListCollaborators(ctx context.Context, f Family, c CollaboratorPort, owner,
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCollaborators", err)
 	}
-	result := make([]*provider.Collaborator, 0, len(users))
+	result := make([]*model.Collaborator, 0, len(users))
 	for _, u := range users {
-		collab := &provider.Collaborator{
+		collab := &model.Collaborator{
 			ID:       u.ID,
 			Username: u.UserName,
 		}
@@ -398,7 +399,7 @@ type RepoStatsPort interface {
 // ListForks lists every fork. The provider surface carries no pagination
 // parameters, so the full fork list is fetched by exhausting the endpoint's
 // pagination.
-func ListForks(ctx context.Context, f Family, c RepoStatsPort, owner, repo string) ([]*provider.PlatformRepo, error) {
+func ListForks(ctx context.Context, f Family, c RepoStatsPort, owner, repo string) ([]*model.PlatformRepo, error) {
 	forks, err := backendutil.AllPages(func(page int) ([]*Repo, error) {
 		return c.ListForks(ctx, owner, repo, ListForksOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -407,7 +408,7 @@ func ListForks(ctx context.Context, f Family, c RepoStatsPort, owner, repo strin
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListForks", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(forks))
+	result := make([]*model.PlatformRepo, 0, len(forks))
 	for _, r := range forks {
 		result = append(result, ConvertRepo(r, f.Platform))
 	}
@@ -417,7 +418,7 @@ func ListForks(ctx context.Context, f Family, c RepoStatsPort, owner, repo strin
 // ListStargazers lists every stargazer. The provider surface carries no
 // pagination parameters, so the full stargazer list is fetched by
 // exhausting the endpoint's pagination.
-func ListStargazers(ctx context.Context, f Family, c RepoStatsPort, owner, repo string) ([]*provider.CRUser, error) {
+func ListStargazers(ctx context.Context, f Family, c RepoStatsPort, owner, repo string) ([]*model.CRUser, error) {
 	stargazers, err := backendutil.AllPages(func(page int) ([]*User, error) {
 		return c.ListRepoStargazers(ctx, owner, repo, ListStargazersOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -426,7 +427,7 @@ func ListStargazers(ctx context.Context, f Family, c RepoStatsPort, owner, repo 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListStargazers", err)
 	}
-	result := make([]*provider.CRUser, 0, len(stargazers))
+	result := make([]*model.CRUser, 0, len(stargazers))
 	for _, u := range stargazers {
 		if u != nil {
 			result = append(result, convertUser(u))
@@ -439,6 +440,6 @@ func ListStargazers(ctx context.Context, f Family, c RepoStatsPort, owner, repo 
 // contributors list endpoint. The sentinel rides provider.Wrap so
 // IsNotImplemented stays decidable (issue #56: a bare Wrapf makes the
 // predicate always false and the DivergenceSuite stub lock blind).
-func ListContributors(_ context.Context, f Family, _ RepoStatsPort, _, _ string) ([]*provider.Contributor, error) {
+func ListContributors(_ context.Context, f Family, _ RepoStatsPort, _, _ string) ([]*model.Contributor, error) {
 	return nil, provider.Wrap(f.Platform, "ListContributors", provider.ErrNotImplemented)
 }

@@ -7,6 +7,7 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -15,17 +16,17 @@ import (
 // (GitCode's page-size ceiling is 100) through the SDK's paginated
 // ListTagsWithOptions rather than the hard-coded per_page=100 single-shot
 // ListTags helper.
-func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provider.TagInfo, error) {
+func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*model.TagInfo, error) {
 	tags, err := backendutil.AllPages(func(page int) ([]*gitcode.Tag, error) {
 		return p.client.ListTagsWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: 100})
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListTags", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListTags", err)
 	}
-	result := make([]*provider.TagInfo, 0, len(tags))
+	result := make([]*model.TagInfo, 0, len(tags))
 	for _, t := range tags {
 		// Tag.Commit is a value type in the SDK; no nil check needed.
-		result = append(result, &provider.TagInfo{Name: t.Name, Commit: t.Commit.SHA})
+		result = append(result, &model.TagInfo{Name: t.Name, Commit: t.Commit.SHA})
 	}
 	return result, nil
 }
@@ -34,12 +35,12 @@ func (p *Provider) ListTags(ctx context.Context, owner, repo string) ([]*provide
 // endpoint exposes no page parameter (it hard-codes per_page=100), so the
 // call stays single-shot; GitCode's page-size ceiling bounds what one call
 // can return.
-func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*provider.ReleaseInfo, error) {
+func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*model.ReleaseInfo, error) {
 	releases, err := p.client.ListReleases(ctx, owner, repo)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListReleases", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListReleases", err)
 	}
-	result := make([]*provider.ReleaseInfo, 0, len(releases))
+	result := make([]*model.ReleaseInfo, 0, len(releases))
 	for _, r := range releases {
 		result = append(result, convertRelease(r))
 	}
@@ -47,23 +48,23 @@ func (p *Provider) ListReleases(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateRelease implements provider.ReleaseManager.
-func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) CreateRelease(ctx context.Context, owner, repo string, opts provider.CreateReleaseOptions) (*model.ReleaseInfo, error) {
 	r, err := p.client.CreateRelease(ctx, owner, repo, gitcode.CreateReleaseOptions{
 		TagName: opts.TagName, Target: opts.Target, Title: opts.Title,
 		Body: opts.Body, Draft: opts.Draft, Prerelease: opts.Prerelease,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateRelease", err)
 	}
 	return convertRelease(r), nil
 }
 
 // GetReleaseByTag implements provider.ReleaseManager. GitCode exposes a
 // dedicated tag-addressed endpoint.
-func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*provider.ReleaseInfo, error) {
+func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string) (*model.ReleaseInfo, error) {
 	r, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetReleaseByTag", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetReleaseByTag", err)
 	}
 	return convertRelease(r), nil
 }
@@ -75,10 +76,10 @@ func (p *Provider) GetReleaseByTag(ctx context.Context, owner, repo, tag string)
 // empty, so the current values from the resolution fetch backfill every
 // option the caller left nil; draft/prerelease are pointers that pass
 // through untouched.
-func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*provider.ReleaseInfo, error) {
+func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, opts provider.UpdateReleaseOptions) (*model.ReleaseInfo, error) {
 	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateRelease", err)
 	}
 	name, body := cur.Name, cur.Body
 	if opts.Name != nil {
@@ -95,7 +96,7 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 		Prerelease: opts.Prerelease,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateRelease", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateRelease", err)
 	}
 	return convertRelease(r), nil
 }
@@ -110,10 +111,10 @@ func (p *Provider) UpdateRelease(ctx context.Context, owner, repo, tag string, o
 func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) error {
 	cur, err := p.client.GetReleaseByTag(ctx, owner, repo, tag)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteRelease", err)
 	}
 	if err := p.client.DeleteReleaseByID(ctx, owner, repo, cur.ID); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteRelease", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteRelease", err)
 	}
 	return nil
 }
@@ -125,7 +126,7 @@ func (p *Provider) DeleteRelease(ctx context.Context, owner, repo, tag string) e
 // for ReleaseManager completeness and fails with ErrNotImplemented so
 // callers can classify; use ListTags/CreateRelease instead.
 func (p *Provider) GetArchive(ctx context.Context, owner, repo, ref, format string) ([]byte, error) {
-	return nil, provider.Wrap(provider.PlatformGitCode, "GetArchive",
+	return nil, provider.Wrap(model.PlatformGitCode, "GetArchive",
 		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no archive endpoint (live-verified 2026-11-03)"))
 }
 

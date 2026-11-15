@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -26,7 +27,7 @@ import (
 // honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every matching milestone is returned.
-func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
+func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]model.Milestone, error) {
 	state := opts.State
 	if state == "" {
 		state = "all" // unified empty-State contract (issue #61)
@@ -38,7 +39,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 		baseOpts.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
 		list, _, err := p.client.Issues.ListMilestones(ctx, owner, repo, &baseOpts)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListMilestones", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListMilestones", err)
 		}
 		milestones = list
 	} else {
@@ -50,10 +51,10 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListMilestones", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListMilestones", err)
 		}
 	}
-	result := make([]provider.Milestone, 0, len(milestones))
+	result := make([]model.Milestone, 0, len(milestones))
 	for _, m := range milestones {
 		result = append(result, convertMilestone(m))
 	}
@@ -61,21 +62,21 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 }
 
 // GetMilestone implements provider.MilestoneManager.
-func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "GetMilestone", number)
+func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*model.Milestone, error) {
+	n, err := backendutil.ParseMilestoneNumber(model.PlatformGitHub, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
 	m, _, err := p.client.Issues.GetMilestone(ctx, owner, repo, int(n))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
 }
 
 // CreateMilestone implements provider.MilestoneManager.
-func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
+func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*model.Milestone, error) {
 	createOpts := &github.CreateMilestoneRequest{
 		Title:       opts.Title,
 		Description: new(opts.Description),
@@ -85,7 +86,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	}
 	m, _, err := p.client.Issues.CreateMilestone(ctx, owner, repo, *createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
@@ -93,8 +94,8 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 
 // UpdateMilestone implements provider.MilestoneManager. Nil fields in opts
 // stay absent from the PATCH body, leaving the milestone unchanged.
-func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "UpdateMilestone", number)
+func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*model.Milestone, error) {
+	n, err := backendutil.ParseMilestoneNumber(model.PlatformGitHub, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +114,7 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 	}
 	m, _, err := p.client.Issues.UpdateMilestone(ctx, owner, repo, int(n), *editOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateMilestone", err)
 	}
 	ms := convertMilestone(m)
 	return &ms, nil
@@ -121,29 +122,29 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	n, err := backendutil.ParseMilestoneNumber(provider.PlatformGitHub, "DeleteMilestone", number)
+	n, err := backendutil.ParseMilestoneNumber(model.PlatformGitHub, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
 	if _, err := p.client.Issues.DeleteMilestone(ctx, owner, repo, int(n)); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteMilestone", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteMilestone", err)
 	}
 	return nil
 }
 
-// convertMilestone maps a github.Milestone to a provider.Milestone.
+// convertMilestone maps a github.Milestone to a model.Milestone.
 // GitHub's wire states ("open"/"closed") are already the SDK's vocabulary;
 // anything else passes through unchanged.
-func convertMilestone(m *github.Milestone) provider.Milestone {
-	var ms provider.Milestone
+func convertMilestone(m *github.Milestone) model.Milestone {
+	var ms model.Milestone
 	if m == nil {
 		return ms
 	}
-	ms = provider.Milestone{
+	ms = model.Milestone{
 		Number:      strconv.Itoa(m.GetNumber()),
 		Title:       m.GetTitle(),
 		Description: m.GetDescription(),
-		State:       provider.MilestoneState(m.GetState()),
+		State:       model.MilestoneState(m.GetState()),
 	}
 	if m.DueOn != nil {
 		due := m.DueOn.Time

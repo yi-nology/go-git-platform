@@ -6,6 +6,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -13,7 +14,7 @@ import (
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (Gitee's per_page caps at 100; fetch until an empty
 // page).
-func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*provider.DeployKey, error) {
+func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*model.DeployKey, error) {
 	keys, err := backendutil.AllPages(func(page int) ([]*gitee.SSHKey, error) {
 		list, _, err := p.client.Repositories.ListKeys(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{
 			Page: page, PerPage: 100,
@@ -21,9 +22,9 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListDeployKeys", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListDeployKeys", err)
 	}
-	result := make([]*provider.DeployKey, 0, len(keys))
+	result := make([]*model.DeployKey, 0, len(keys))
 	for _, k := range keys {
 		result = append(result, convertSSHKey(k))
 	}
@@ -31,13 +32,13 @@ func (p *Provider) ListDeployKeys(ctx context.Context, owner, repo string) ([]*p
 }
 
 // AddDeployKey implements provider.DeploymentKeyManager.
-func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
+func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts provider.AddDeployKeyOptions) (*model.DeployKey, error) {
 	key, _, err := p.client.Repositories.CreateKey(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.CreateKeyOptions{
 		Title: gitee.String(opts.Title),
 		Key:   gitee.String(opts.Key),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "AddDeployKey", err)
+		return nil, provider.Wrap(model.PlatformGitee, "AddDeployKey", err)
 	}
 	return convertSSHKey(key), nil
 }
@@ -45,14 +46,14 @@ func (p *Provider) AddDeployKey(ctx context.Context, owner, repo string, opts pr
 // DeleteDeployKey implements provider.DeploymentKeyManager.
 func (p *Provider) DeleteDeployKey(ctx context.Context, owner, repo string, keyID int64) error {
 	_, err := p.client.Repositories.DeleteKey(ctx, backendutil.Esc(owner), backendutil.Esc(repo), keyID)
-	return provider.Wrap(provider.PlatformGitee, "DeleteDeployKey", err)
+	return provider.Wrap(model.PlatformGitee, "DeleteDeployKey", err)
 }
 
-func convertSSHKey(k *gitee.SSHKey) *provider.DeployKey {
+func convertSSHKey(k *gitee.SSHKey) *model.DeployKey {
 	if k == nil {
 		return nil
 	}
-	return &provider.DeployKey{
+	return &model.DeployKey{
 		ID:    int64(deref(k.ID)),
 		Title: deref(k.Title),
 		Key:   deref(k.Key),

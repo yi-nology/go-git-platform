@@ -8,6 +8,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -16,7 +17,7 @@ import (
 // the branch list is walked and its protected rows returned as summaries.
 // The row payload carries no approval-rule fields — approver rules surface
 // through GetBranchProtection.
-func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*provider.BranchProtection, error) {
+func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string) ([]*model.BranchProtection, error) {
 	pid := owner + "/" + repo
 	branches, err := backendutil.AllPages(func(page int) ([]*gongfeng.Branch, error) {
 		list, _, err := p.client.Branches.ListBranches(ctx, pid,
@@ -24,23 +25,23 @@ func (p *Provider) ListBranchProtections(ctx context.Context, owner, repo string
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListBranchProtections", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListBranchProtections", err)
 	}
-	result := make([]*provider.BranchProtection, 0)
+	result := make([]*model.BranchProtection, 0)
 	for _, b := range branches {
 		if b != nil && b.Protected {
-			result = append(result, &provider.BranchProtection{BranchName: b.Name})
+			result = append(result, &model.BranchProtection{BranchName: b.Name})
 		}
 	}
 	return result, nil
 }
 
 // GetBranchProtection implements provider.BranchProtectionManager.
-func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*provider.BranchProtection, error) {
+func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch string) (*model.BranchProtection, error) {
 	pid := owner + "/" + repo
 	pb, _, err := p.client.Branches.GetProtectedBranch(ctx, pid, branch)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetBranchProtection", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetBranchProtection", err)
 	}
 	if pb == nil || !pb.Protected {
 		// 未保护分支是「资源不存在」而非普通失败：哨兵必须进错误链
@@ -48,7 +49,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 		// 文本，IsNotFound 恒 false，provider/ensure.go 创建分支的
 		// !IsNotFound 分支在 tencentcode 上永远判不出「未保护」。%w 走
 		// oekiterrors.Errorf 的 cause 链，errors.Is 照常命中。
-		return nil, provider.Wrapf(provider.PlatformTencentCode, "GetBranchProtection",
+		return nil, provider.Wrapf(model.PlatformTencentCode, "GetBranchProtection",
 			"%w: branch protection %q not found", provider.ErrNotFound, branch)
 	}
 	return convertProtectedBranch(pb), nil
@@ -59,7 +60,7 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 // force-push flag (registered ignores for the rest of the contract
 // options); the PUT response is the protection detail and is converted
 // directly — no read-back round trip.
-func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	putOpts := &ProtectBranchOptions{AllowForcePush: opts.AllowForcePushes}
 	pb, err := p.putBranchProtection(ctx, "CreateBranchProtection", owner, repo, opts.BranchName, putOpts)
 	if err != nil {
@@ -72,7 +73,7 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 // same protect PUT (upsert). Nil fields stay off the wire so they are left
 // unchanged; AllowForcePushes is write-only on this platform — a successful
 // update cannot be read back through the detail payload.
-func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*provider.BranchProtection, error) {
+func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, branch string, opts provider.UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
 	putOpts := &ProtectBranchOptions{}
 	if opts.AllowForcePushes != nil {
 		putOpts.AllowForcePush = *opts.AllowForcePushes
@@ -110,8 +111,8 @@ func (p *Provider) putBranchProtection(ctx context.Context, op, owner, repo, bra
 // approve, 1 = single, N = N approvals — registered mapping); the payload
 // exposes no status-check or deletion flags, and allow_force_push is
 // write-only, so those fields read back as zero values.
-func convertProtectedBranch(pb *gongfeng.ProtectedBranch) *provider.BranchProtection {
-	return &provider.BranchProtection{
+func convertProtectedBranch(pb *gongfeng.ProtectedBranch) *model.BranchProtection {
+	return &model.BranchProtection{
 		BranchName:               pb.Name,
 		RequiredApprovingReviews: pb.ApproverRule,
 	}

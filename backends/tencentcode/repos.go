@@ -6,6 +6,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -14,14 +15,14 @@ import (
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	if opts.Owner != "" {
 		// Get group projects via GetGroup (which returns embedded projects).
 		group, _, err := p.client.Groups.GetGroup(ctx, opts.Owner)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
+			return nil, provider.Wrap(model.PlatformTencentCode, "ListRepos", err)
 		}
-		repos := make([]*provider.PlatformRepo, 0, len(group.Projects))
+		repos := make([]*model.PlatformRepo, 0, len(group.Projects))
 		for _, proj := range group.Projects {
 			repos = append(repos, convertProject(proj))
 		}
@@ -40,9 +41,9 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListRepos", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListRepos", err)
 	}
-	repos := make([]*provider.PlatformRepo, 0, len(projects))
+	repos := make([]*model.PlatformRepo, 0, len(projects))
 	for _, proj := range projects {
 		repos = append(repos, convertProject(proj))
 	}
@@ -50,17 +51,17 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 }
 
 // GetRepo implements provider.RepoManager.
-func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
 	pid := owner + "/" + repo
 	proj, _, err := p.client.Projects.GetProject(ctx, pid)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetRepo", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetRepo", err)
 	}
 	return convertProject(proj), nil
 }
 
 // CreateRepo implements provider.RepoManager.
-func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	createOpts := &gongfeng.CreateProjectOptions{
 		Name: gongfeng.Ptr(opts.Name),
 	}
@@ -74,17 +75,17 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 	}
 	proj, _, err := p.client.Projects.CreateProject(ctx, createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateRepo", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateRepo", err)
 	}
 	return convertProject(proj), nil
 }
 
 // ForkRepo implements provider.RepoManager.
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	pid := owner + "/" + repo
 	proj, _, err := p.client.Forks.ForkProject(ctx, pid)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ForkRepo", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ForkRepo", err)
 	}
 	return convertProject(proj), nil
 }
@@ -94,13 +95,13 @@ func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	pid := owner + "/" + repo
 	_, err := p.client.Projects.DeleteProject(ctx, pid)
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteRepo", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteRepo", err)
 	}
 	return nil
 }
 
 // UpdateRepo implements provider.RepoManager.
-func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	pid := owner + "/" + repo
 	updateOpts := &gongfeng.UpdateProjectOptions{}
 	if opts.Name != "" {
@@ -121,7 +122,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	}
 	proj, _, err := p.client.Projects.UpdateProject(ctx, pid, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateRepo", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateRepo", err)
 	}
 	return convertProject(proj), nil
 }

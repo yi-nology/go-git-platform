@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -82,7 +83,7 @@ func TestListCommitStatuses_InFlightRunsStayNonTerminal(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, statuses, 2)
 
-	assert.Equal(t, provider.CommitStatusRunning, statuses[0].State, "in_progress 必须归一 Running")
+	assert.Equal(t, model.CommitStatusRunning, statuses[0].State, "in_progress 必须归一 Running")
 	assert.False(t, statuses[0].State.Terminal(), "in-flight 态不得是终态(门禁不得放行)")
-	assert.Equal(t, provider.CommitStatusSuccess, statuses[1].State, "completed+success 归一 Success")
+	assert.Equal(t, model.CommitStatusSuccess, statuses[1].State, "completed+success 归一 Success")
 }

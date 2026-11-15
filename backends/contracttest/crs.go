@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -51,7 +52,7 @@ type CRHarnessConfig struct {
 // CRHarness is the full harness RunCRSuite consumes.
 type CRHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	CRHarnessConfig
 }
@@ -346,8 +347,8 @@ func assertCRGetParses(t *testing.T, cm provider.ChangeRequestManager) {
 	if cr.Title != "fix bug" {
 		t.Errorf("expected title \"fix bug\", got %q", cr.Title)
 	}
-	if cr.State != provider.CRStateOpened {
-		t.Errorf("expected normalized state %q, got %q", provider.CRStateOpened, cr.State)
+	if cr.State != model.CRStateOpened {
+		t.Errorf("expected normalized state %q, got %q", model.CRStateOpened, cr.State)
 	}
 	if cr.SourceBranch != "feature-x" {
 		t.Errorf("expected source branch %q, got %q", "feature-x", cr.SourceBranch)

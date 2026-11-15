@@ -7,6 +7,7 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -15,8 +16,8 @@ import (
 // (probe round 2026-11-03, see gitcode_api docs/wire-provenance.md); only
 // the repo-scoped endpoints exist. The interface couples the two, so the
 // global half fails with ErrNotImplemented; use ListRepoNotifications.
-func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
-	return nil, provider.Wrap(provider.PlatformGitCode, "ListNotifications",
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
+	return nil, provider.Wrap(model.PlatformGitCode, "ListNotifications",
 		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use ListRepoNotifications"))
 }
 
@@ -25,11 +26,11 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的
 	// 接受/拒绝面必须全后端一致（见 gitee/commits.go 同批注）。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListRepoNotifications", err)
 	}
 	buildOpts := func(page, perPage int) gitcode.ListNotificationsOptions {
 		return gitcode.ListNotificationsOptions{
@@ -44,9 +45,9 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 			return p.client.ListRepoNotifications(ctx, owner, repo, buildOpts(page, perPage))
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListRepoNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(threads))
+	result := make([]*model.Notification, 0, len(threads))
 	for _, t := range threads {
 		result = append(result, convertNotification(t))
 	}
@@ -57,7 +58,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 // thread-read route hangs off the global inbox GitCode does not serve
 // (live-verified 2026-11-03); it fails with ErrNotImplemented.
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
-	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationRead",
+	return provider.Wrap(model.PlatformGitCode, "MarkNotificationRead",
 		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use MarkRepoNotificationsRead"))
 }
 
@@ -65,7 +66,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // global mark-all route 404s live (probe round 2026-11-03); it fails with
 // ErrNotImplemented.
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
-	return provider.Wrap(provider.PlatformGitCode, "MarkNotificationsRead",
+	return provider.Wrap(model.PlatformGitCode, "MarkNotificationsRead",
 		oekiterrors.Wrap(provider.ErrNotImplemented, "GitCode serves no global notification inbox (live-verified 2026-11-03); use MarkRepoNotificationsRead"))
 }
 
@@ -77,9 +78,9 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 // last_read_at）。
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
 	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", err)
+		return provider.Wrap(model.PlatformGitCode, "MarkRepoNotificationsRead", err)
 	}
-	return provider.Wrap(provider.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, owner, repo, gitcode.MarkNotificationsOptions{
+	return provider.Wrap(model.PlatformGitCode, "MarkRepoNotificationsRead", p.client.MarkRepoNotificationsAsRead(ctx, owner, repo, gitcode.MarkNotificationsOptions{
 		LastReadAt: opts.LastReadAt,
 	}))
 }

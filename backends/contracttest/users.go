@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -38,7 +39,7 @@ func testUsersSuite(t *testing.T, h Harness) {
 // UsersHarness bundles inputs for the user-manager suite.
 type UsersHarness struct {
 	Name            string
-	Platform        provider.Platform
+	Platform        model.Platform
 	NewProvider     func(t *testing.T, cfg provider.Config) provider.Provider
 	GetUserResponse string
 }

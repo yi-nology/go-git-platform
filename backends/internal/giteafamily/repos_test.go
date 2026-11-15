@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -56,7 +57,7 @@ func (f *fakeRepoPort) EditRepo(context.Context, string, string, FamilyEditRepoO
 // The org endpoint 404s for personal logins, so the engine falls back to
 // the user endpoint (github's #80 shape).
 func TestListRepos_OwnerTargetsNamespaceEndpoints(t *testing.T) {
-	fam := Family{Platform: provider.PlatformForgejo}
+	fam := Family{Platform: model.PlatformForgejo}
 
 	t.Run("org hit", func(t *testing.T) {
 		port := &fakeRepoPort{

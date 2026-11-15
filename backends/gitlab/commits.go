@@ -6,29 +6,30 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCommit implements provider.CommitManager.
-func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
+func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error) {
 	c, _, err := p.client.Commits.GetCommit(pidOf(owner, repo), sha, nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetCommit", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetCommit", err)
 	}
 	return convertCommit(c), nil
 }
 
 // ListCommits implements provider.CommitManager.
-func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// Since/Until 解析失败必须报错（issue #52，批2 #75 LastReadAt 同型）：
 	// 静默丢弃会把格式笔误升级成不过滤的全量历史。
 	since, err := provider.ParseTimestamp("Since", opts.Since)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCommits", err)
 	}
 	until, err := provider.ParseTimestamp("Until", opts.Until)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCommits", err)
 	}
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &gitlab.ListCommitsOptions{
@@ -45,9 +46,9 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 	}
 	commits, _, err := p.client.Commits.ListCommits(pidOf(owner, repo), listOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCommits", err)
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertCommit(c))
 	}
@@ -55,21 +56,21 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 }
 
 // CompareCommits implements provider.CommitManager.
-func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
+func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error) {
 	cmp, _, err := p.client.Repositories.Compare(pidOf(owner, repo),
 		&gitlab.CompareOptions{From: new(base), To: new(head)},
 		gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CompareCommits", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CompareCommits", err)
 	}
-	result := &provider.CompareResult{}
+	result := &model.CompareResult{}
 	for _, c := range cmp.Commits {
 		result.Commits = append(result.Commits, convertCommit(c))
 		result.TotalCommits++
 	}
 	for _, d := range cmp.Diffs {
 		add, del := provider.CountDiffLines(d.Diff)
-		result.Files = append(result.Files, &provider.ChangedFile{
+		result.Files = append(result.Files, &model.ChangedFile{
 			OldPath: d.OldPath, NewPath: d.NewPath, Diff: d.Diff,
 			Additions: add, Deletions: del,
 			IsNew: d.NewFile, IsDeleted: d.DeletedFile, IsRenamed: d.RenamedFile,
@@ -88,13 +89,13 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 	}
 	_, _, err := p.client.Commits.SetCommitStatus(pidOf(owner, repo), sha, statusOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "CreateCommitStatus", err)
+		return provider.Wrap(model.PlatformGitLab, "CreateCommitStatus", err)
 	}
 	return nil
 }
 
 // ListCommitStatuses implements provider.CommitStatusManager.
-func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	statuses, err := backendutil.AllPages(func(page int) ([]*gitlab.CommitStatus, error) {
 		list, _, err := p.client.Commits.GetCommitStatuses(pidOf(owner, repo), sha,
 			&gitlab.GetCommitStatusesOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}},
@@ -102,7 +103,7 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCommitStatuses", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCommitStatuses", err)
 	}
 	return convertCommitStatuses(statuses), nil
 }
@@ -112,14 +113,14 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 // (client-go's CommitStatus.Status), while "name" is the per-check context;
 // GitLab verbs (pending/running/success/failed/canceled) normalize through
 // the shared vocabulary.
-func convertCommitStatuses(statuses []*gitlab.CommitStatus) []provider.CommitStatus {
-	result := make([]provider.CommitStatus, 0, len(statuses))
+func convertCommitStatuses(statuses []*gitlab.CommitStatus) []model.CommitStatus {
+	result := make([]model.CommitStatus, 0, len(statuses))
 	for _, s := range statuses {
 		if s == nil {
 			continue
 		}
-		result = append(result, provider.CommitStatus{
-			State:       provider.NormalizeCommitStatusState(s.Status),
+		result = append(result, model.CommitStatus{
+			State:       model.NormalizeCommitStatusState(s.Status),
 			Context:     s.Name,
 			Description: s.Description,
 			TargetURL:   s.TargetURL,

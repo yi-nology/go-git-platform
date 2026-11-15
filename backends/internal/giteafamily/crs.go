@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -93,7 +94,7 @@ type PRPort interface {
 }
 
 // CreateCR opens a change request.
-func CreateCR(ctx context.Context, f Family, c PRPort, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func CreateCR(ctx context.Context, f Family, c PRPort, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	// #160：gitea.dev/sdk 与 forgejo-sdk 的创建面均无 draft 参数——
 	// Draft=true 显式拒绝（台账 Field:"opts.Draft" 登记），绝不静默产出
 	// 非 draft CR；false 现行为逐字保留。
@@ -113,7 +114,7 @@ func CreateCR(ctx context.Context, f Family, c PRPort, opts provider.CreateCROpt
 }
 
 // GetCR fetches one change request.
-func GetCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*provider.ChangeRequest, error) {
+func GetCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*model.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "GetCR", number)
 	if err != nil {
 		return nil, err
@@ -129,7 +130,7 @@ func GetCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) 
 // open/closed vocabulary; when the backend's dialect parameter reports the
 // narrow vocabulary (Forgejo) the engine maps the provider-uniform state
 // onto it, otherwise it passes the provider state through.
-func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	opts.Page, opts.PerPage = provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	// The family's list endpoint filters by its open/closed vocabulary; both
 	// forks reject unknown values ("opened") by returning ALL pull requests,
@@ -142,7 +143,7 @@ func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROption
 	if err != nil {
 		return nil, nil, provider.Wrap(f.Platform, "ListCRs", err)
 	}
-	crs := make([]*provider.ChangeRequest, 0, len(prs))
+	crs := make([]*model.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		crs = append(crs, ConvertPR(pr, f))
 	}
@@ -163,11 +164,11 @@ func ListCRs(ctx context.Context, f Family, c PRPort, opts provider.ListCROption
 // **未指定状态(零值)⇒ 不加过滤**:平台上"不加 state"= 全部。
 // 以前落到 "open" ⇒ 调用方只想"列出 CR"时,closed/merged 的 **静默丢失**
 // (GitHub / GitLab / 工蜂 都是"零值=不过滤",这里与它们不一致)。
-func mapListState(s provider.CRState) string {
+func mapListState(s model.CRState) string {
 	switch s {
-	case provider.CRStateClosed, provider.CRStateMerged:
+	case model.CRStateClosed, model.CRStateMerged:
 		return "closed"
-	case provider.CRStateOpened:
+	case model.CRStateOpened:
 		return "open"
 	default:
 		return ""
@@ -177,7 +178,7 @@ func mapListState(s provider.CRState) string {
 // MergeCR merges a change request. The family returns 405 when the PR is
 // already merged; the engine recovers by re-fetching the CR when the current
 // state is merged.
-func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
+func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "MergeCR", number)
 	if err != nil {
 		return nil, err
@@ -201,7 +202,7 @@ func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 	if err != nil {
 		if status == 405 {
 			cr, getErr := GetCR(ctx, f, c, owner, repo, number)
-			if getErr == nil && cr.State == provider.CRStateMerged {
+			if getErr == nil && cr.State == model.CRStateMerged {
 				return cr, nil
 			}
 		}
@@ -211,7 +212,7 @@ func MergeCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 }
 
 // CloseCR closes a change request.
-func CloseCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*provider.ChangeRequest, error) {
+func CloseCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*model.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "CloseCR", number)
 	if err != nil {
 		return nil, err
@@ -224,7 +225,7 @@ func CloseCR(ctx context.Context, f Family, c PRPort, owner, repo, number string
 }
 
 // ReopenCR reopens a change request.
-func ReopenCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*provider.ChangeRequest, error) {
+func ReopenCR(ctx context.Context, f Family, c PRPort, owner, repo, number string) (*model.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "ReopenCR", number)
 	if err != nil {
 		return nil, err
@@ -238,7 +239,7 @@ func ReopenCR(ctx context.Context, f Family, c PRPort, owner, repo, number strin
 }
 
 // UpdateCR edits a change request; empty fields leave the value unchanged.
-func UpdateCR(ctx context.Context, f Family, c PRPort, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
+func UpdateCR(ctx context.Context, f Family, c PRPort, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "UpdateCR", number)
 	if err != nil {
 		return nil, err
@@ -279,13 +280,13 @@ func UpdateCR(ctx context.Context, f Family, c PRPort, owner, repo, number strin
 // the dialect parameters: CRPointersHaveReviewers (gitea) uses the wire's
 // RequestedReviewers; PRWireHasDraft (gitea) uses the wire's Draft; Forgejo
 // folds reviewers into Assignees and always reports Draft=false.
-func ConvertPR(pr *FamilyPullRequest, f Family) *provider.ChangeRequest {
+func ConvertPR(pr *FamilyPullRequest, f Family) *model.ChangeRequest {
 	if pr == nil {
 		return nil
 	}
-	var author *provider.CRUser
+	var author *model.CRUser
 	if pr.Poster != nil {
-		author = &provider.CRUser{ID: pr.Poster.ID, Username: pr.Poster.UserName, AvatarURL: pr.Poster.AvatarURL}
+		author = &model.CRUser{ID: pr.Poster.ID, Username: pr.Poster.UserName, AvatarURL: pr.Poster.AvatarURL}
 	}
 	var labels []string
 	for _, l := range pr.Labels {
@@ -293,17 +294,17 @@ func ConvertPR(pr *FamilyPullRequest, f Family) *provider.ChangeRequest {
 			labels = append(labels, l.Name)
 		}
 	}
-	var assignees []*provider.CRUser
+	var assignees []*model.CRUser
 	for _, a := range pr.Assignees {
 		if a != nil {
-			assignees = append(assignees, &provider.CRUser{ID: a.ID, Username: a.UserName, AvatarURL: a.AvatarURL})
+			assignees = append(assignees, &model.CRUser{ID: a.ID, Username: a.UserName, AvatarURL: a.AvatarURL})
 		}
 	}
-	var reviewers []*provider.CRUser
+	var reviewers []*model.CRUser
 	if f.CRPointersHaveReviewers {
 		for _, r := range pr.RequestedReviewers {
 			if r != nil {
-				reviewers = append(reviewers, &provider.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
+				reviewers = append(reviewers, &model.CRUser{ID: r.ID, Username: r.UserName, AvatarURL: r.AvatarURL})
 			}
 		}
 	} else {
@@ -311,7 +312,7 @@ func ConvertPR(pr *FamilyPullRequest, f Family) *provider.ChangeRequest {
 		// into Assignees, so the reviewers surface mirrors assignees.
 		reviewers = assignees
 	}
-	cr := &provider.ChangeRequest{
+	cr := &model.ChangeRequest{
 		ID:          pr.ID,
 		Number:      strconv.FormatInt(pr.Index, 10),
 		Title:       pr.Title,
@@ -347,7 +348,7 @@ func ConvertPR(pr *FamilyPullRequest, f Family) *provider.ChangeRequest {
 // ListCRComments lists the comments on a change request (the provider
 // surface carries no pagination parameters; the engine walks the family
 // issue-comment endpoint).
-func ListCRComments(ctx context.Context, f Family, c IssuePort, owner, repo, number string) ([]*provider.CRComment, error) {
+func ListCRComments(ctx context.Context, f Family, c IssuePort, owner, repo, number string) ([]*model.CRComment, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "ListCRComments", number)
 	if err != nil {
 		return nil, err
@@ -360,11 +361,11 @@ func ListCRComments(ctx context.Context, f Family, c IssuePort, owner, repo, num
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(comments))
+	result := make([]*model.CRComment, 0, len(comments))
 	for _, c := range comments {
-		cc := &provider.CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		cc := &model.CRComment{ID: c.ID, Body: c.Body, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 		if c.Poster != nil {
-			cc.Author = &provider.CRUser{ID: c.Poster.ID, Username: c.Poster.UserName, AvatarURL: c.Poster.AvatarURL}
+			cc.Author = &model.CRUser{ID: c.Poster.ID, Username: c.Poster.UserName, AvatarURL: c.Poster.AvatarURL}
 		}
 		result = append(result, cc)
 	}
@@ -373,7 +374,7 @@ func ListCRComments(ctx context.Context, f Family, c IssuePort, owner, repo, num
 
 // ListCRCommits lists the commits on a change request (the provider surface
 // carries no pagination parameters; the engine walks the family endpoint).
-func ListCRCommits(ctx context.Context, f Family, c PRPort, owner, repo, number string) ([]*provider.CRCommit, error) {
+func ListCRCommits(ctx context.Context, f Family, c PRPort, owner, repo, number string) ([]*model.CRCommit, error) {
 	n, err := backendutil.ParsePRNumber64(f.Platform, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
@@ -384,15 +385,15 @@ func ListCRCommits(ctx context.Context, f Family, c PRPort, owner, repo, number 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
 		if c == nil {
 			continue
 		}
-		cc := &provider.CRCommit{SHA: c.SHA, CreatedAt: c.Created}
+		cc := &model.CRCommit{SHA: c.SHA, CreatedAt: c.Created}
 		cc.Message = c.Message
 		if c.AuthorName != "" {
-			cc.Author = &provider.CRUser{Name: c.AuthorName}
+			cc.Author = &model.CRUser{Name: c.AuthorName}
 		}
 		result = append(result, cc)
 	}

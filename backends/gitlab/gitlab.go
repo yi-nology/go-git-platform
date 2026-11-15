@@ -35,6 +35,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 	"github.com/yi-nology/go-git-platform/transport"
 )
@@ -111,7 +112,7 @@ func (p providerTokenSource) Token() (*oauth2.Token, error) {
 }
 
 // Platform implements provider.Provider.
-func (p *Provider) Platform() provider.Platform { return provider.PlatformGitLab }
+func (p *Provider) Platform() model.Platform { return model.PlatformGitLab }
 
 // Capabilities implements provider.Provider. GitLab implements the optional
 // LabelManager (see labels.go), IssueManager (see issues.go),
@@ -122,12 +123,12 @@ func (p *Provider) Capabilities() provider.CapabilitySet {
 }
 
 // TestConnection implements provider.Provider.
-func (p *Provider) TestConnection(ctx context.Context) (*provider.TestConnectionResult, error) {
+func (p *Provider) TestConnection(ctx context.Context) (*model.TestConnectionResult, error) {
 	user, _, err := p.client.Users.CurrentUser(gitlab.WithContext(ctx))
 	if err != nil {
-		return &provider.TestConnectionResult{Connected: false, Message: err.Error()}, nil
+		return &model.TestConnectionResult{Connected: false, Message: err.Error()}, nil
 	}
-	result := &provider.TestConnectionResult{
+	result := &model.TestConnectionResult{
 		Connected: true,
 		Platform:  string(p.Platform()),
 		UserName:  user.Username,

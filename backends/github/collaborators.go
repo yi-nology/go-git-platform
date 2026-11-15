@@ -6,13 +6,14 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListCollaborators implements provider.CollaboratorManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
+func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error) {
 	users, err := backendutil.AllPages(func(page int) ([]*github.User, error) {
 		list, _, err := p.client.Repositories.ListCollaborators(ctx, owner, repo, &github.ListCollaboratorsOptions{
 			ListOptions: github.ListOptions{Page: page, PerPage: 100},
@@ -20,9 +21,9 @@ func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCollaborators", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCollaborators", err)
 	}
-	result := make([]*provider.Collaborator, 0, len(users))
+	result := make([]*model.Collaborator, 0, len(users))
 	for _, u := range users {
 		result = append(result, convertCollaborator(u))
 	}
@@ -34,7 +35,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 	// go-github v93 moved collaborator invitations onto AddCollaboratorRequest.
 	body := github.AddCollaboratorRequest{Permission: new(opts.Permission)}
 	if _, _, err := p.client.Repositories.AddCollaborator(ctx, owner, repo, username, body); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "AddCollaborator", err)
+		return provider.Wrap(model.PlatformGitHub, "AddCollaborator", err)
 	}
 	return nil
 }
@@ -42,19 +43,19 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 // RemoveCollaborator implements provider.CollaboratorManager.
 func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username string) error {
 	if _, err := p.client.Repositories.RemoveCollaborator(ctx, owner, repo, username); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "RemoveCollaborator", err)
+		return provider.Wrap(model.PlatformGitHub, "RemoveCollaborator", err)
 	}
 	return nil
 }
 
-// convertCollaborator maps a github.User to a provider.Collaborator.
+// convertCollaborator maps a github.User to a model.Collaborator.
 // GitHub's ListCollaborators returns User objects; the permission flags are
 // collapsed to the highest role found (admin > maintain > push > triage > pull).
-func convertCollaborator(u *github.User) *provider.Collaborator {
+func convertCollaborator(u *github.User) *model.Collaborator {
 	if u == nil {
 		return nil
 	}
-	c := &provider.Collaborator{
+	c := &model.Collaborator{
 		ID:       u.GetID(),
 		Username: u.GetLogin(),
 	}

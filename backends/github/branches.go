@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -16,7 +17,7 @@ import (
 // exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until the platform returns an empty
 // page) instead of silently truncating at the first page.
-func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*provider.PlatformBranch, error) {
+func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*model.PlatformBranch, error) {
 	branches, err := backendutil.AllPages(func(page int) ([]*github.Branch, error) {
 		list, _, err := p.client.Repositories.ListBranches(ctx, owner, repo, &github.BranchListOptions{
 			ListOptions: github.ListOptions{Page: page, PerPage: 100},
@@ -24,9 +25,9 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListBranches", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListBranches", err)
 	}
-	result := make([]*provider.PlatformBranch, 0, len(branches))
+	result := make([]*model.PlatformBranch, 0, len(branches))
 	for _, b := range branches {
 		result = append(result, convertBranch(b))
 	}
@@ -34,7 +35,7 @@ func (p *Provider) ListBranches(ctx context.Context, owner, repo string) ([]*pro
 }
 
 // CreateBranch implements provider.BranchManager.
-func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*provider.PlatformBranch, error) {
+func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref string) (*model.PlatformBranch, error) {
 	sha := ref
 	if !isCommitSHA(ref) {
 		// Page: 1 pins the dual-mode ListCommits to a single explicit page —
@@ -53,16 +54,16 @@ func (p *Provider) CreateBranch(ctx context.Context, owner, repo, branch, ref st
 		SHA: sha,
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateBranch", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateBranch", err)
 	}
-	return &provider.PlatformBranch{Name: branch}, nil
+	return &model.PlatformBranch{Name: branch}, nil
 }
 
 // DeleteBranch implements provider.BranchManager.
 func (p *Provider) DeleteBranch(ctx context.Context, owner, repo, branch string) error {
 	_, err := p.client.Git.DeleteRef(ctx, owner, repo, "heads/"+branch)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteBranch", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteBranch", err)
 	}
 	return nil
 }

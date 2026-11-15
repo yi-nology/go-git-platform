@@ -6,6 +6,7 @@ import (
 
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -137,7 +138,7 @@ func (p *Provider) ListWatchers(ctx context.Context, owner, repo string, page, p
 	list, _, err := p.client.Watchers.ListWatchers(ctx, pid(owner, repo),
 		&gongfeng.ListWatchersOptions{ListOptions: listOptions(page, perPage)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListWatchers", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListWatchers", err)
 	}
 	result := make([]*WatcherInfo, 0, len(list))
 	for _, w := range list {
@@ -154,7 +155,7 @@ func (p *Provider) ListWatchers(ctx context.Context, owner, repo string, page, p
 func (p *Provider) GetWatchStatus(ctx context.Context, owner, repo string) (bool, error) {
 	watching, _, err := p.client.Watchers.GetWatchStatus(ctx, pid(owner, repo))
 	if err != nil {
-		return false, provider.Wrap(provider.PlatformTencentCode, "GetWatchStatus", err)
+		return false, provider.Wrap(model.PlatformTencentCode, "GetWatchStatus", err)
 	}
 	return watching, nil
 }
@@ -163,7 +164,7 @@ func (p *Provider) GetWatchStatus(ctx context.Context, owner, repo string) (bool
 func (p *Provider) WatchProject(ctx context.Context, owner, repo string) (*WatcherInfo, error) {
 	w, _, err := p.client.Watchers.WatchProject(ctx, pid(owner, repo), &gongfeng.WatchProjectOptions{})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "WatchProject", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "WatchProject", err)
 	}
 	info := &WatcherInfo{Mute: w.Mute}
 	if w.User != nil {
@@ -175,7 +176,7 @@ func (p *Provider) WatchProject(ctx context.Context, owner, repo string) (*Watch
 // UnwatchProject implements TencentCodeProjectExtras.
 func (p *Provider) UnwatchProject(ctx context.Context, owner, repo string) error {
 	if _, err := p.client.Watchers.UnwatchProject(ctx, pid(owner, repo)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "UnwatchProject", err)
+		return provider.Wrap(model.PlatformTencentCode, "UnwatchProject", err)
 	}
 	return nil
 }
@@ -184,7 +185,7 @@ func (p *Provider) UnwatchProject(ctx context.Context, owner, repo string) error
 func (p *Provider) StarProject(ctx context.Context, owner, repo string) (bool, error) {
 	starred, _, err := p.client.Projects.StarProject(ctx, pid(owner, repo))
 	if err != nil {
-		return false, provider.Wrap(provider.PlatformTencentCode, "StarProject", err)
+		return false, provider.Wrap(model.PlatformTencentCode, "StarProject", err)
 	}
 	return starred, nil
 }
@@ -192,7 +193,7 @@ func (p *Provider) StarProject(ctx context.Context, owner, repo string) (bool, e
 // UnstarProject implements TencentCodeProjectExtras.
 func (p *Provider) UnstarProject(ctx context.Context, owner, repo string) error {
 	if _, err := p.client.Projects.UnstarProject(ctx, pid(owner, repo)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "UnstarProject", err)
+		return provider.Wrap(model.PlatformTencentCode, "UnstarProject", err)
 	}
 	return nil
 }
@@ -201,7 +202,7 @@ func (p *Provider) UnstarProject(ctx context.Context, owner, repo string) error 
 func (p *Provider) GetStarStatus(ctx context.Context, owner, repo string) (bool, error) {
 	starred, _, err := p.client.Projects.GetStarStatus(ctx, pid(owner, repo))
 	if err != nil {
-		return false, provider.Wrap(provider.PlatformTencentCode, "GetStarStatus", err)
+		return false, provider.Wrap(model.PlatformTencentCode, "GetStarStatus", err)
 	}
 	return starred, nil
 }
@@ -211,7 +212,7 @@ func (p *Provider) ListProjectStars(ctx context.Context, owner, repo string, pag
 	list, _, err := p.client.Projects.ListProjectStars(ctx, pid(owner, repo),
 		&gongfeng.ListProjectStarsOptions{ListOptions: listOptions(page, perPage)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListProjectStars", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListProjectStars", err)
 	}
 	result := make([]*StarInfo, 0, len(list))
 	for _, s := range list {
@@ -227,7 +228,7 @@ func (p *Provider) ListProjectStars(ctx context.Context, owner, repo string, pag
 // CreateForkRelation implements TencentCodeProjectExtras.
 func (p *Provider) CreateForkRelation(ctx context.Context, owner, repo string, forkedFromID int) error {
 	if _, err := p.client.Forks.CreateForkRelation(ctx, pid(owner, repo), forkedFromID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "CreateForkRelation", err)
+		return provider.Wrap(model.PlatformTencentCode, "CreateForkRelation", err)
 	}
 	return nil
 }
@@ -235,7 +236,7 @@ func (p *Provider) CreateForkRelation(ctx context.Context, owner, repo string, f
 // DeleteForkRelation implements TencentCodeProjectExtras.
 func (p *Provider) DeleteForkRelation(ctx context.Context, owner, repo string) error {
 	if _, err := p.client.Forks.DeleteForkRelation(ctx, pid(owner, repo)); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteForkRelation", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteForkRelation", err)
 	}
 	return nil
 }
@@ -248,7 +249,7 @@ func (p *Provider) CreateTag(ctx context.Context, owner, repo string, opts Creat
 		Message: gongfeng.Ptr(opts.Message),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateTag", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateTag", err)
 	}
 	return convertTagDetail(t), nil
 }
@@ -257,7 +258,7 @@ func (p *Provider) CreateTag(ctx context.Context, owner, repo string, opts Creat
 func (p *Provider) GetTag(ctx context.Context, owner, repo, tag string) (*TagDetail, error) {
 	t, _, err := p.client.Tags.GetTag(ctx, pid(owner, repo), tag)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetTag", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetTag", err)
 	}
 	return convertTagDetail(t), nil
 }
@@ -265,7 +266,7 @@ func (p *Provider) GetTag(ctx context.Context, owner, repo, tag string) (*TagDet
 // DeleteTag implements TencentCodeProjectExtras.
 func (p *Provider) DeleteTag(ctx context.Context, owner, repo, tag string) error {
 	if _, err := p.client.Tags.DeleteTag(ctx, pid(owner, repo), tag); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteTag", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteTag", err)
 	}
 	return nil
 }
@@ -277,7 +278,7 @@ func (p *Provider) ShareProject(ctx context.Context, owner, repo string, opts Sh
 		GroupAccess: gongfeng.Ptr(int(opts.GroupAccess)),
 	})
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "ShareProject", err)
+		return provider.Wrap(model.PlatformTencentCode, "ShareProject", err)
 	}
 	return nil
 }
@@ -286,7 +287,7 @@ func (p *Provider) ShareProject(ctx context.Context, owner, repo string, opts Sh
 func (p *Provider) ListProjectShares(ctx context.Context, owner, repo string) ([]*ProjectShareInfo, error) {
 	list, _, err := p.client.Projects.ListProjectShares(ctx, pid(owner, repo))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListProjectShares", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListProjectShares", err)
 	}
 	result := make([]*ProjectShareInfo, 0, len(list))
 	for _, s := range list {
@@ -304,7 +305,7 @@ func (p *Provider) ListProjectShares(ctx context.Context, owner, repo string) ([
 // DeleteProjectShare implements TencentCodeProjectExtras.
 func (p *Provider) DeleteProjectShare(ctx context.Context, owner, repo string, groupID int) error {
 	if _, err := p.client.Projects.DeleteProjectShare(ctx, pid(owner, repo), groupID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteProjectShare", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteProjectShare", err)
 	}
 	return nil
 }
@@ -314,7 +315,7 @@ func (p *Provider) ListProjectEvents(ctx context.Context, owner, repo string, op
 	list, _, err := p.client.Projects.ListProjectEvents(ctx, pid(owner, repo),
 		&gongfeng.ListProjectEventsOptions{ListOptions: listOptions(opts.Page, opts.PerPage)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListProjectEvents", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListProjectEvents", err)
 	}
 	result := make([]*ProjectEventInfo, 0, len(list))
 	for _, e := range list {
@@ -335,7 +336,7 @@ func (p *Provider) ListProjectEvents(ctx context.Context, owner, repo string, op
 func (p *Provider) GetProjectMember(ctx context.Context, owner, repo string, userID int) (*MemberInfo, error) {
 	m, _, err := p.client.Projects.GetProjectMember(ctx, pid(owner, repo), userID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetProjectMember", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetProjectMember", err)
 	}
 	return convertMemberInfo(m), nil
 }
@@ -345,7 +346,7 @@ func (p *Provider) EditProjectMember(ctx context.Context, owner, repo string, us
 	m, _, err := p.client.Projects.EditProjectMember(ctx, pid(owner, repo), userID,
 		&gongfeng.EditProjectMemberOptions{AccessLevel: gongfeng.Ptr(opts.AccessLevel)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "EditProjectMember", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "EditProjectMember", err)
 	}
 	return convertMemberInfo(m), nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -21,24 +22,24 @@ import (
 // Accept、GHES 版本差异),SDK 会把每项解成空 Repository。因此这里自行
 // 构造请求并逐元素探测两种形状,保证兼容;Accept 仍请求 star+json,与
 // 消费方(下游 org_mirror)的线上行为一致。
-func (p *Provider) ListStarred(ctx context.Context, page, perPage int) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListStarred(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error) {
 	page, perPage = provider.NormalizePageOpts(page, perPage)
 	u := fmt.Sprintf("user/starred?page=%d&per_page=%d", page, perPage)
 	req, err := p.client.NewRequest(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListStarred", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListStarred", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github.star+json")
 
 	var entries []json.RawMessage
 	if _, err := p.client.Do(req, &entries); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListStarred", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListStarred", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(entries))
+	result := make([]*model.PlatformRepo, 0, len(entries))
 	for _, e := range entries {
 		repo, err := decodeStarredEntry(e)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListStarred", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListStarred", err)
 		}
 		result = append(result, convertRepo(repo))
 	}

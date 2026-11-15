@@ -8,6 +8,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 	"github.com/oekit/pkg/timex"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -33,11 +34,11 @@ func parseGiteeTime(s *string) time.Time {
 }
 
 // convertProject translates the SDK Project model into a PlatformRepo.
-func convertProject(p *gitee.Project) *provider.PlatformRepo {
+func convertProject(p *gitee.Project) *model.PlatformRepo {
 	if p == nil {
 		return nil
 	}
-	out := &provider.PlatformRepo{
+	out := &model.PlatformRepo{
 		ID:            int64(deref(p.ID)),
 		FullName:      deref(p.FullName),
 		Name:          deref(p.Name),
@@ -45,7 +46,7 @@ func convertProject(p *gitee.Project) *provider.PlatformRepo {
 		SSHURL:        deref(p.SshURL),
 		DefaultBranch: deref(p.DefaultBranch),
 		Private:       deref(p.Private),
-		Platform:      provider.PlatformGitee,
+		Platform:      model.PlatformGitee,
 	}
 	if p.Owner != nil {
 		out.Owner = deref(p.Owner.Login)
@@ -54,8 +55,8 @@ func convertProject(p *gitee.Project) *provider.PlatformRepo {
 }
 
 // convertPullRequest translates the SDK PullRequest model into a
-// provider.ChangeRequest.
-func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
+// model.ChangeRequest.
+func convertPullRequest(pr *gitee.PullRequest) *model.ChangeRequest {
 	if pr == nil {
 		return nil
 	}
@@ -66,10 +67,10 @@ func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
 			labels = append(labels, deref(l.Name))
 		}
 	}
-	var assignees []*provider.CRUser
+	var assignees []*model.CRUser
 	if pr.Assignees != nil {
 		for _, a := range *pr.Assignees {
-			assignees = append(assignees, &provider.CRUser{
+			assignees = append(assignees, &model.CRUser{
 				ID:       int64(deref(a.ID)),
 				Username: deref(a.Login),
 			})
@@ -79,7 +80,7 @@ func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
 	if deref(pr.Mergeable) {
 		mergeStatus = "mergeable"
 	}
-	out := &provider.ChangeRequest{
+	out := &model.ChangeRequest{
 		ID:          int64(deref(pr.ID)),
 		Number:      strconv.Itoa(deref(pr.Number)),
 		Title:       deref(pr.Title),
@@ -107,7 +108,7 @@ func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
 		}
 	}
 	if pr.User != nil {
-		out.Author = &provider.CRUser{
+		out.Author = &model.CRUser{
 			ID:       int64(deref(pr.User.ID)),
 			Username: deref(pr.User.Login),
 			Name:     deref(pr.User.Name),
@@ -117,19 +118,19 @@ func convertPullRequest(pr *gitee.PullRequest) *provider.ChangeRequest {
 }
 
 // convertPRComment translates the SDK PullRequestComments model into a
-// provider.CRComment.
-func convertPRComment(c *gitee.PullRequestComments) *provider.CRComment {
+// model.CRComment.
+func convertPRComment(c *gitee.PullRequestComments) *model.CRComment {
 	if c == nil {
 		return nil
 	}
-	out := &provider.CRComment{
+	out := &model.CRComment{
 		ID:        int64(deref(c.ID)),
 		Body:      deref(c.Body),
 		CreatedAt: parseGiteeTime(c.CreatedAt),
 		UpdatedAt: parseGiteeTime(c.UpdatedAt),
 	}
 	if c.User != nil {
-		out.Author = &provider.CRUser{
+		out.Author = &model.CRUser{
 			ID:       int64(deref(c.User.ID)),
 			Username: deref(c.User.Login),
 			Name:     deref(c.User.Name),
@@ -139,12 +140,12 @@ func convertPRComment(c *gitee.PullRequestComments) *provider.CRComment {
 }
 
 // convertPRCommit translates the SDK PullRequestCommits model into a
-// provider.CRCommit.
-func convertPRCommit(c *gitee.PullRequestCommits) *provider.CRCommit {
+// model.CRCommit.
+func convertPRCommit(c *gitee.PullRequestCommits) *model.CRCommit {
 	if c == nil {
 		return nil
 	}
-	cc := &provider.CRCommit{SHA: deref(c.Sha)}
+	cc := &model.CRCommit{SHA: deref(c.Sha)}
 	if c.Commit != nil {
 		cc.Message = deref(c.Commit.Message)
 		if c.Commit.Author != nil {
@@ -152,24 +153,24 @@ func convertPRCommit(c *gitee.PullRequestCommits) *provider.CRCommit {
 		}
 	}
 	if c.Author != nil && deref(c.Author.ID) > 0 {
-		cc.Author = &provider.CRUser{
+		cc.Author = &model.CRUser{
 			ID:       int64(deref(c.Author.ID)),
 			Username: deref(c.Author.Login),
 		}
 	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
-		cc.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
+		cc.Author = &model.CRUser{Name: deref(c.Commit.Author.Name)}
 	}
 	return cc
 }
 
 // convertPRFile translates the SDK PullRequestFiles model into a
-// provider.ChangedFile.
-func convertPRFile(f *gitee.PullRequestFiles) *provider.ChangedFile {
+// model.ChangedFile.
+func convertPRFile(f *gitee.PullRequestFiles) *model.ChangedFile {
 	if f == nil {
 		return nil
 	}
 	filename := deref(f.Filename)
-	out := &provider.ChangedFile{
+	out := &model.ChangedFile{
 		OldPath: filename,
 		NewPath: filename,
 	}
@@ -201,8 +202,8 @@ func orDefault(s, fallback string) string {
 }
 
 // convertDiffFile translates the SDK DiffFile (from compare endpoint) into a
-// provider.ChangedFile.
-func convertDiffFile(f *gitee.DiffFile) *provider.ChangedFile {
+// model.ChangedFile.
+func convertDiffFile(f *gitee.DiffFile) *model.ChangedFile {
 	if f == nil {
 		return nil
 	}
@@ -216,7 +217,7 @@ func convertDiffFile(f *gitee.DiffFile) *provider.ChangedFile {
 		del = deref(f.Deletions)
 	}
 	status := deref(f.Status)
-	return &provider.ChangedFile{
+	return &model.ChangedFile{
 		OldPath:   filename,
 		NewPath:   filename,
 		Diff:      patch,
@@ -228,12 +229,12 @@ func convertDiffFile(f *gitee.DiffFile) *provider.ChangedFile {
 	}
 }
 
-// convertRepoCommit translates the SDK RepoCommit into a provider.CommitInfo.
-func convertRepoCommit(c *gitee.RepoCommit) *provider.CommitInfo {
+// convertRepoCommit translates the SDK RepoCommit into a model.CommitInfo.
+func convertRepoCommit(c *gitee.RepoCommit) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{
+	ci := &model.CommitInfo{
 		SHA: deref(c.Sha),
 	}
 	if c.Commit != nil {
@@ -243,15 +244,15 @@ func convertRepoCommit(c *gitee.RepoCommit) *provider.CommitInfo {
 		}
 	}
 	if c.Author != nil && deref(c.Author.ID) > 0 {
-		ci.Author = &provider.CRUser{
+		ci.Author = &model.CRUser{
 			ID:       int64(deref(c.Author.ID)),
 			Username: deref(c.Author.Login),
 		}
 	} else if c.Commit != nil && c.Commit.Author != nil && c.Commit.Author.Name != nil {
-		ci.Author = &provider.CRUser{Name: deref(c.Commit.Author.Name)}
+		ci.Author = &model.CRUser{Name: deref(c.Commit.Author.Name)}
 	}
 	if c.Committer != nil && deref(c.Committer.ID) > 0 {
-		ci.Committer = &provider.CRUser{
+		ci.Committer = &model.CRUser{
 			ID:       int64(deref(c.Committer.ID)),
 			Username: deref(c.Committer.Login),
 		}
@@ -260,12 +261,12 @@ func convertRepoCommit(c *gitee.RepoCommit) *provider.CommitInfo {
 }
 
 // convertRepoCommitWithFiles translates the SDK RepoCommitWithFiles (from
-// GetCommit) into a provider.CommitInfo with stats.
-func convertRepoCommitWithFiles(c *gitee.RepoCommitWithFiles) *provider.CommitInfo {
+// GetCommit) into a model.CommitInfo with stats.
+func convertRepoCommitWithFiles(c *gitee.RepoCommitWithFiles) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{
+	ci := &model.CommitInfo{
 		SHA: deref(c.Sha),
 	}
 	if c.Commit != nil {
@@ -285,10 +286,10 @@ func convertRepoCommitWithFiles(c *gitee.RepoCommitWithFiles) *provider.CommitIn
 
 // convertCommitUser builds a CRUser from a top-level user (with ID/Login)
 // enriched with the commit-level name when available.
-func convertCommitUser(u *gitee.UserBasic, commit *gitee.CommitDetail, isAuthor bool) *provider.CRUser {
-	var cr *provider.CRUser
+func convertCommitUser(u *gitee.UserBasic, commit *gitee.CommitDetail, isAuthor bool) *model.CRUser {
+	var cr *model.CRUser
 	if u != nil && deref(u.ID) > 0 {
-		cr = &provider.CRUser{
+		cr = &model.CRUser{
 			ID:       int64(deref(u.ID)),
 			Username: deref(u.Login),
 		}
@@ -302,7 +303,7 @@ func convertCommitUser(u *gitee.UserBasic, commit *gitee.CommitDetail, isAuthor 
 		}
 		if gitUser != nil && gitUser.Name != nil {
 			if cr == nil {
-				cr = &provider.CRUser{}
+				cr = &model.CRUser{}
 			}
 			cr.Name = deref(gitUser.Name)
 		}
@@ -310,8 +311,8 @@ func convertCommitUser(u *gitee.UserBasic, commit *gitee.CommitDetail, isAuthor 
 	return cr
 }
 
-// convertHook translates the SDK Hook model into a provider.PlatformWebhook.
-func convertHook(h *gitee.Hook) *provider.PlatformWebhook {
+// convertHook translates the SDK Hook model into a model.PlatformWebhook.
+func convertHook(h *gitee.Hook) *model.PlatformWebhook {
 	if h == nil {
 		return nil
 	}
@@ -331,7 +332,7 @@ func convertHook(h *gitee.Hook) *provider.PlatformWebhook {
 	if deref(h.MergeRequestsEvents) {
 		events = append(events, "pull_request")
 	}
-	return &provider.PlatformWebhook{
+	return &model.PlatformWebhook{
 		ID:     int64(deref(h.ID)),
 		URL:    deref(h.URL),
 		Events: events,
@@ -339,19 +340,19 @@ func convertHook(h *gitee.Hook) *provider.PlatformWebhook {
 }
 
 // convertBranch translates the SDK Branch model into a PlatformBranch.
-func convertBranch(b *gitee.Branch) *provider.PlatformBranch {
+func convertBranch(b *gitee.Branch) *model.PlatformBranch {
 	if b == nil {
 		return nil
 	}
-	return &provider.PlatformBranch{Name: deref(b.Name)}
+	return &model.PlatformBranch{Name: deref(b.Name)}
 }
 
-// convertRelease translates the SDK Release model into a provider.ReleaseInfo.
-func convertRelease(r *gitee.Release) *provider.ReleaseInfo {
+// convertRelease translates the SDK Release model into a model.ReleaseInfo.
+func convertRelease(r *gitee.Release) *model.ReleaseInfo {
 	if r == nil {
 		return nil
 	}
-	ri := &provider.ReleaseInfo{
+	ri := &model.ReleaseInfo{
 		ID:         int64(deref(r.ID)),
 		TagName:    deref(r.TagName),
 		Title:      deref(r.Name),
@@ -363,12 +364,12 @@ func convertRelease(r *gitee.Release) *provider.ReleaseInfo {
 	return ri
 }
 
-// convertTag translates the SDK Tag model into a provider.TagInfo.
-func convertTag(t *gitee.Tag) *provider.TagInfo {
+// convertTag translates the SDK Tag model into a model.TagInfo.
+func convertTag(t *gitee.Tag) *model.TagInfo {
 	if t == nil {
 		return nil
 	}
-	ti := &provider.TagInfo{Name: deref(t.Name)}
+	ti := &model.TagInfo{Name: deref(t.Name)}
 	if t.Commit != nil {
 		ti.Commit = deref(t.Commit.Sha)
 	}
@@ -376,59 +377,59 @@ func convertTag(t *gitee.Tag) *provider.TagInfo {
 }
 
 // convertContributor translates the SDK Contributor model into a
-// provider.Contributor.
-func convertContributor(c *gitee.Contributor) *provider.Contributor {
+// model.Contributor.
+func convertContributor(c *gitee.Contributor) *model.Contributor {
 	if c == nil {
 		return nil
 	}
-	return &provider.Contributor{
+	return &model.Contributor{
 		Username:      deref(c.Name),
 		Contributions: deref(c.Contributions),
 	}
 }
 
 // convertCollaborator translates the SDK ProjectMember model into a
-// provider.Collaborator.
-func convertCollaborator(m *gitee.ProjectMember) *provider.Collaborator {
+// model.Collaborator.
+func convertCollaborator(m *gitee.ProjectMember) *model.Collaborator {
 	if m == nil {
 		return nil
 	}
-	return &provider.Collaborator{
+	return &model.Collaborator{
 		ID:       int64(deref(m.ID)),
 		Username: deref(m.Login),
 	}
 }
 
-// convertLabel maps the SDK Label to a provider.Label. Gitee colors are 6-digit
+// convertLabel maps the SDK Label to a model.Label. Gitee colors are 6-digit
 // hex without '#'.
-func convertLabel(l *gitee.Label) *provider.Label {
+func convertLabel(l *gitee.Label) *model.Label {
 	if l == nil {
 		return nil
 	}
-	return &provider.Label{
+	return &model.Label{
 		ID:    int64(deref(l.ID)),
 		Name:  deref(l.Name),
 		Color: strings.TrimPrefix(deref(l.Color), "#"),
 	}
 }
 
-// convertIssue maps the SDK Issue model to a provider.Issue. Gitee issue
+// convertIssue maps the SDK Issue model to a model.Issue. Gitee issue
 // numbers are alphanumeric strings, carried as-is.
-func convertIssue(i *gitee.Issue) *provider.Issue {
+func convertIssue(i *gitee.Issue) *model.Issue {
 	if i == nil {
 		return nil
 	}
-	issue := &provider.Issue{
+	issue := &model.Issue{
 		Number:    deref(i.Number),
 		Title:     deref(i.Title),
 		Body:      deref(i.Body),
-		State:     provider.IssueState(deref(i.State)),
+		State:     model.IssueState(deref(i.State)),
 		WebURL:    deref(i.HTMLURL),
 		CreatedAt: parseGiteeTime(i.CreatedAt),
 		UpdatedAt: parseGiteeTime(i.UpdatedAt),
 	}
 	if i.User != nil {
-		issue.Author = &provider.CRUser{
+		issue.Author = &model.CRUser{
 			ID:       int64(deref(i.User.ID)),
 			Username: deref(i.User.Login),
 			Name:     deref(i.User.Name),
@@ -448,7 +449,7 @@ func convertIssue(i *gitee.Issue) *provider.Issue {
 		}
 	}
 	if i.Milestone != nil {
-		issue.Milestone = &provider.MilestoneRef{
+		issue.Milestone = &model.MilestoneRef{
 			Number: strconv.Itoa(deref(i.Milestone.Number)),
 			Title:  deref(i.Milestone.Title),
 		}
@@ -456,19 +457,19 @@ func convertIssue(i *gitee.Issue) *provider.Issue {
 	return issue
 }
 
-// convertIssueComment maps the SDK Note model to a provider.IssueComment.
-func convertIssueComment(n *gitee.Note) *provider.IssueComment {
+// convertIssueComment maps the SDK Note model to a model.IssueComment.
+func convertIssueComment(n *gitee.Note) *model.IssueComment {
 	if n == nil {
 		return nil
 	}
-	ic := &provider.IssueComment{
+	ic := &model.IssueComment{
 		ID:        int64(deref(n.ID)),
 		Body:      deref(n.Body),
 		CreatedAt: parseGiteeTime(n.CreatedAt),
 		UpdatedAt: parseGiteeTime(n.UpdatedAt),
 	}
 	if n.User != nil {
-		ic.Author = &provider.CRUser{
+		ic.Author = &model.CRUser{
 			ID:       int64(deref(n.User.ID)),
 			Username: deref(n.User.Login),
 			Name:     deref(n.User.Name),
@@ -477,16 +478,16 @@ func convertIssueComment(n *gitee.Note) *provider.IssueComment {
 	return ic
 }
 
-// convertMilestone maps the SDK Milestone to a provider.Milestone.
-func convertMilestone(m *gitee.Milestone) provider.Milestone {
+// convertMilestone maps the SDK Milestone to a model.Milestone.
+func convertMilestone(m *gitee.Milestone) model.Milestone {
 	if m == nil {
-		return provider.Milestone{}
+		return model.Milestone{}
 	}
-	ms := provider.Milestone{
+	ms := model.Milestone{
 		Number:      strconv.Itoa(deref(m.Number)),
 		Title:       deref(m.Title),
 		Description: deref(m.Description),
-		State:       provider.MilestoneState(deref(m.State)),
+		State:       model.MilestoneState(deref(m.State)),
 	}
 	if due, ok := parseGiteeDueOn(deref(m.DueOn)); ok {
 		ms.DueOn = &due

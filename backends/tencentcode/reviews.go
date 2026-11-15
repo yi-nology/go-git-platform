@@ -7,6 +7,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -19,7 +20,7 @@ import (
 //
 //   - state on reads: the gongfeng Note model has no state field (the
 //     reviewer_state verdict travels on writes only and never comes back),
-//     so every review read normalizes to provider.ReviewStateCommented.
+//     so every review read normalizes to model.ReviewStateCommented.
 //   - verdict vocabulary: only APPROVE and REQUEST_CHANGES map to 工蜂's
 //     reviewer_state verbs (approved / change_required); comment-style
 //     events post a plain note with no verdict. 工蜂's third verb
@@ -36,8 +37,8 @@ import (
 // reviewer_state verdict verb (same vocabulary the reviews/{id} commit-note
 // surface uses — the gongfeng SDK's bundled docs/api/notes.md). See the file doc for the registered
 // unmapped fields (Comments, CommitID) and the verdict vocabulary.
-func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "CreateReview", number)
+func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 	}
 	note, _, err := p.client.Notes.CreateMergeRequestNote(ctx, pid(owner, repo), n, createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateReview", err)
 	}
 	return convertReviewNoteResult(note), nil
 }
@@ -58,8 +59,8 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 // reviews and are filtered out. The endpoint has no caller-facing
 // pagination knobs, so every page is fetched via AllPages (工蜂's
 // page-size ceiling is 100) — the same fetch ListCRComments uses.
-func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "ListReviews", number)
+func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +70,9 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListReviews", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListReviews", err)
 	}
-	reviews := make([]provider.Review, 0, len(notes))
+	reviews := make([]model.Review, 0, len(notes))
 	for _, note := range notes {
 		if note == nil || note.System {
 			continue
@@ -85,14 +86,14 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 // merge-request note backing the review: reviewID is the note ID — the same
 // identifier CreateReview returns as ReviewResult.ID, so created reviews
 // round-trip through this call.
-func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformTencentCode, "GetReview", number)
+func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*model.Review, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformTencentCode, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
 	note, _, err := p.client.Notes.GetMergeRequestNote(ctx, pid(owner, repo), n, int(reviewID))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetReview", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetReview", err)
 	}
 	review := convertReviewNote(note)
 	return &review, nil
@@ -123,7 +124,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // equivalent. The call fails fast with a platform error wrapping
 // provider.ErrNotImplemented.
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	return provider.Wrap(provider.PlatformTencentCode, "DismissReview", provider.ErrNotImplemented)
+	return provider.Wrap(model.PlatformTencentCode, "DismissReview", provider.ErrNotImplemented)
 }
 
 // reviewNoteState maps the SDK's review-event vocabulary to 工蜂's
@@ -141,16 +142,16 @@ func reviewNoteState(event string) string {
 }
 
 // convertReviewNote maps a gongfeng merge-request note to a
-// provider.Review. The note model carries no verdict field, so State is
+// model.Review. The note model carries no verdict field, so State is
 // always commented (registered limitation); SubmittedAt carries the note's
 // creation time.
-func convertReviewNote(n *gongfeng.Note) provider.Review {
+func convertReviewNote(n *gongfeng.Note) model.Review {
 	if n == nil {
-		return provider.Review{}
+		return model.Review{}
 	}
-	review := provider.Review{
+	review := model.Review{
 		ID:          int64(n.ID),
-		State:       provider.ReviewStateCommented,
+		State:       model.ReviewStateCommented,
 		Body:        n.Body,
 		SubmittedAt: n.CreatedAt.Time,
 	}
@@ -161,13 +162,13 @@ func convertReviewNote(n *gongfeng.Note) provider.Review {
 }
 
 // convertReviewNoteResult maps the created merge-request note to a
-// provider.ReviewResult; ID carries the note ID, the identifier GetReview
+// model.ReviewResult; ID carries the note ID, the identifier GetReview
 // addresses the review by.
-func convertReviewNoteResult(n *gongfeng.Note) *provider.ReviewResult {
+func convertReviewNoteResult(n *gongfeng.Note) *model.ReviewResult {
 	if n == nil {
 		return nil
 	}
-	return &provider.ReviewResult{
+	return &model.ReviewResult{
 		ID:   strconv.Itoa(n.ID),
 		Body: n.Body,
 		User: convertUser(n.Author),

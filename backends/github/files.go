@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -21,7 +22,7 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	opts := &github.RepositoryContentGetOptions{Ref: ref}
 	rc, resp, err := p.client.Repositories.DownloadContents(ctx, owner, repo, path, opts)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitHub, "GetFileContent", err)
+		return "", provider.Wrap(model.PlatformGitHub, "GetFileContent", err)
 	}
 	if rc == nil {
 		return "", fmt.Errorf("github: file not found: %s", path)
@@ -30,17 +31,17 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	if resp != nil && resp.StatusCode >= 400 {
 		// 错误体只截前 4KB 进错误信息,避免把超大错误页整个吞进内存。
 		body, _ := io.ReadAll(io.LimitReader(rc, 4096))
-		return "", provider.New(provider.PlatformGitHub, "GetFileContent", resp.StatusCode, string(body))
+		return "", provider.New(model.PlatformGitHub, "GetFileContent", resp.StatusCode, string(body))
 	}
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitHub, "GetFileContent", err)
+		return "", provider.Wrap(model.PlatformGitHub, "GetFileContent", err)
 	}
 	return string(data), nil
 }
 
 // CreateFile implements provider.FileManager.
-func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	optsReq := &github.RepositoryContentFileOptions{
 		Message: new(opts.Message),
 		Content: []byte(opts.Content),
@@ -53,13 +54,13 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	resp, _, err := p.client.Repositories.CreateFile(ctx, owner, repo, opts.Path, optsReq)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateFile", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateFile", err)
 	}
-	return &provider.FileResult{CommitSHA: resp.GetSHA()}, nil
+	return &model.FileResult{CommitSHA: resp.GetSHA()}, nil
 }
 
 // UpdateFile implements provider.FileManager.
-func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	optsReq := &github.RepositoryContentFileOptions{
 		Message: new(opts.Message),
 		Content: []byte(opts.Content),
@@ -75,13 +76,13 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	resp, _, err := p.client.Repositories.UpdateFile(ctx, owner, repo, opts.Path, optsReq)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateFile", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateFile", err)
 	}
-	return &provider.FileResult{CommitSHA: resp.GetSHA()}, nil
+	return &model.FileResult{CommitSHA: resp.GetSHA()}, nil
 }
 
 // DeleteFile implements provider.FileManager.
-func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts provider.FileDeleteOptions) (*provider.FileResult, error) {
+func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts provider.FileDeleteOptions) (*model.FileResult, error) {
 	optsReq := &github.RepositoryContentFileOptions{
 		Message: new(opts.Message),
 	}
@@ -96,9 +97,9 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	}
 	resp, _, err := p.client.Repositories.DeleteFile(ctx, owner, repo, opts.Path, optsReq)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "DeleteFile", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "DeleteFile", err)
 	}
-	return &provider.FileResult{CommitSHA: resp.GetSHA()}, nil
+	return &model.FileResult{CommitSHA: resp.GetSHA()}, nil
 }
 
 // compile-time guard

@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	"github.com/yi-nology/go-git-platform/provider"
 	gongfeng "github.com/yi-nology/go-gongfeng"
+
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // applyWebhookEvents maps the unified event vocabulary onto 工蜂's boolean
@@ -38,7 +40,7 @@ func webhookEventSet(events []string) map[string]bool {
 }
 
 // CreateWebhook implements provider.WebhookManager.
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	pid := opts.Owner + "/" + opts.Repo
 	addOpts := &gongfeng.AddWebhookOptions{
 		URL: gongfeng.Ptr(opts.URL),
@@ -53,16 +55,16 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 		&addOpts.TagPushEvents, &addOpts.NoteEvents)
 	hook, _, err := p.client.Webhooks.AddWebhook(ctx, pid, addOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateWebhook", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateWebhook", err)
 	}
 	return convertWebhook(hook), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	hook, _, err := p.client.Webhooks.GetWebhook(ctx, owner+"/"+repo, int(webhookID))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetWebhook", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetWebhook", err)
 	}
 	return convertWebhook(hook), nil
 }
@@ -73,7 +75,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // members, false for the rest) to express removal — mirroring the create
 // mapping's full scope (issue #91: issues/note included, or hooks created
 // for them keep their stale flags through every update).
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	editOpts := &gongfeng.EditWebhookOptions{}
 	if opts.URL != nil {
 		editOpts.URL = opts.URL
@@ -88,7 +90,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 	}
 	hook, _, err := p.client.Webhooks.EditWebhook(ctx, owner+"/"+repo, int(webhookID), editOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateWebhook", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateWebhook", err)
 	}
 	return convertWebhook(hook), nil
 }
@@ -98,7 +100,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 	pid := owner + "/" + repo
 	_, err := p.client.Webhooks.DeleteWebhook(ctx, pid, int(webhookID))
 	if err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteWebhook", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteWebhook", err)
 	}
 	return nil
 }
@@ -106,7 +108,7 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 // ListWebhooks implements provider.WebhookManager. The endpoint has no
 // caller-facing pagination knobs, so every page is fetched via AllPages
 // (工蜂's page-size ceiling is 100).
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	pid := owner + "/" + repo
 	hooks, err := backendutil.AllPages(func(page int) ([]*gongfeng.Webhook, error) {
 		list, _, err := p.client.Webhooks.ListWebhooks(ctx, pid,
@@ -114,9 +116,9 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListWebhooks", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, wh := range hooks {
 		result = append(result, convertWebhook(wh))
 	}
@@ -128,8 +130,8 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformTencentCode, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformTencentCode, r, secret); err != nil {
+		return provider.Wrap(model.PlatformTencentCode, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
@@ -138,7 +140,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // tencentEnvelope is TencentCODE's webhook dialect for the shared envelope
 // steps (dispatch rides the payload's object_kind, not an event header).
 var tencentEnvelope = provider.WebhookEnvelope{
-	Platform: provider.PlatformTencentCode,
+	Platform: model.PlatformTencentCode,
 	IDPrefix: "tc",
 	// 投递 ID 头（issue #48）：工蜂是 GitLab-v3 衍生，投递带 per-webhook
 	// UUID（X-Gitlab-Event-UUID 家族）；此前不声明 IDHeaders ⇒ 每次投递
@@ -147,7 +149,7 @@ var tencentEnvelope = provider.WebhookEnvelope{
 	IDHeaders: []string{"X-Gitlab-Event-UUID", "X-Request-ID"},
 }
 
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	_, body, err := tencentEnvelope.Read(r, secret)
 	if err != nil {
 		return nil, err
@@ -212,7 +214,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		} `json:"commits"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ParseWebhookEvent", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ParseWebhookEvent", err)
 	}
 
 	repoName := pl.Project.PathWithNS
@@ -221,7 +223,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	}
 	er := provider.BuildEventRepo(repoName)
 	er.ID = pl.Project.ID
-	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
+	actor := &model.CRUser{ID: int64(pl.User.ID), Username: pl.User.Username, Name: pl.User.Name}
 
 	event := tencentEnvelope.NewEvent(int64(pl.ObjectAttributes.IID), body)
 	event.Actor = actor
@@ -230,7 +232,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	switch pl.ObjectKind {
 	case "merge_request":
 		state := mapState(pl.ObjectAttributes.State)
-		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == provider.CRStateMerged)
+		action := provider.NormalizeCRAction(pl.ObjectAttributes.Action, state == model.CRStateMerged)
 		event.Type = "cr." + action
 		event.Action = action
 		event.CommitSHA = pl.ObjectAttributes.LastCommit.ID
@@ -241,7 +243,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			pl.ObjectAttributes.MergeCommitSHA,
 			pl.ObjectAttributes.LastCommit.ID,
 		)
-		event.CR = &provider.ChangeRequest{
+		event.CR = &model.ChangeRequest{
 			ID:           int64(pl.ObjectAttributes.IID),
 			Number:       strconv.Itoa(pl.ObjectAttributes.IID),
 			Title:        pl.ObjectAttributes.Title,
@@ -286,7 +288,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		action := provider.NormalizeIssueAction(pl.ObjectAttributes.Action)
 		event.Type = provider.EventTypeIssue + action
 		event.Action = action
-		event.Issue = &provider.Issue{
+		event.Issue = &model.Issue{
 			ID:     int64(pl.ObjectAttributes.IID),
 			Number: strconv.Itoa(pl.ObjectAttributes.IID),
 			Title:  pl.ObjectAttributes.Title,
@@ -297,14 +299,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "note":
 		event.Type = provider.EventTypeComment + provider.CommentActionCreated
 		event.Action = provider.CommentActionCreated
-		event.Comment = &provider.IssueComment{Body: pl.ObjectAttributes.Note, Author: actor}
+		event.Comment = &model.IssueComment{Body: pl.ObjectAttributes.Note, Author: actor}
 		if pl.MergeRequest.IID != 0 {
-			event.CR = &provider.ChangeRequest{
+			event.CR = &model.ChangeRequest{
 				ID: int64(pl.MergeRequest.IID), Number: strconv.Itoa(pl.MergeRequest.IID),
 			}
 		}
 		if pl.Issue.IID != 0 {
-			event.Issue = &provider.Issue{
+			event.Issue = &model.Issue{
 				ID: int64(pl.Issue.IID), Number: strconv.Itoa(pl.Issue.IID), Title: pl.Issue.Name, Author: actor,
 			}
 		}
@@ -314,14 +316,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 
 // mapGongfengIssueState maps gongfeng (GitLab-v3-flavored) issue states
 // onto the unified IssueState vocabulary.
-func mapGongfengIssueState(state string) provider.IssueState {
+func mapGongfengIssueState(state string) model.IssueState {
 	switch state {
 	case "closed":
-		return provider.IssueStateClosed
+		return model.IssueStateClosed
 	case "opened", "reopened", "":
-		return provider.IssueStateOpen
+		return model.IssueStateOpen
 	default:
-		return provider.IssueState(state)
+		return model.IssueState(state)
 	}
 }
 

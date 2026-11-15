@@ -1,6 +1,10 @@
 package provider
 
-import "context"
+import (
+	"context"
+
+	"github.com/yi-nology/go-git-platform/model"
+)
 
 // DiffManager handles diff and discussion operations. Review operations
 // (CreateReview and friends) live on the optional ReviewManager capability
@@ -9,8 +13,8 @@ import "context"
 // platforms parse with strconv and fail with a wrapped "invalid pull
 // request number" error.
 type DiffManager interface {
-	GetCRDiff(ctx context.Context, owner, repo, number string) (*MergeDiff, error)
-	GetCRFiles(ctx context.Context, owner, repo, number string) ([]*ChangedFile, error)
+	GetCRDiff(ctx context.Context, owner, repo, number string) (*model.MergeDiff, error)
+	GetCRFiles(ctx context.Context, owner, repo, number string) ([]*model.ChangedFile, error)
 	CreateNote(ctx context.Context, owner, repo, number, body string) (string, error)
 	DeleteNote(ctx context.Context, owner, repo, number string, noteID string) error
 	CreateDiscussion(ctx context.Context, owner, repo, number string, opts DiscussionOptions) (string, error)
@@ -25,7 +29,7 @@ type DiffManager interface {
 // covered by IssueManager and need not implement this interface.
 type NoteManager interface {
 	// UpdateNote rewrites the body of one CR comment.
-	UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*IssueComment, error)
+	UpdateNote(ctx context.Context, owner, repo, number, noteID, body string) (*model.IssueComment, error)
 	// ListNotes returns every comment on the CR, oldest first (all pages).
-	ListNotes(ctx context.Context, owner, repo, number string) ([]*IssueComment, error)
+	ListNotes(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error)
 }

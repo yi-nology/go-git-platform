@@ -8,15 +8,16 @@ import (
 	"github.com/oekit/pkg/timex"
 	gitcode "github.com/yi-nology/go-gitcode"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
-func convertUser(u *gitcode.User) *provider.CRUser {
+func convertUser(u *gitcode.User) *model.CRUser {
 	if u == nil {
 		return nil
 	}
 	id, _ := parseGitCodeID(u.ID)
-	return &provider.CRUser{
+	return &model.CRUser{
 		ID:        id,
 		Username:  u.Login,
 		Name:      u.Name,
@@ -24,7 +25,7 @@ func convertUser(u *gitcode.User) *provider.CRUser {
 	}
 }
 
-func convertIssue(i *gitcode.Issue) *provider.Issue {
+func convertIssue(i *gitcode.Issue) *model.Issue {
 	if i == nil {
 		return nil
 	}
@@ -40,16 +41,16 @@ func convertIssue(i *gitcode.Issue) *provider.Issue {
 	if author == nil {
 		author = convertUser(i.User)
 	}
-	var milestone *provider.MilestoneRef
+	var milestone *model.MilestoneRef
 	if i.Milestone != nil {
-		milestone = &provider.MilestoneRef{Number: strconv.FormatInt(milestoneAddress(i.Milestone), 10), Title: i.Milestone.Title}
+		milestone = &model.MilestoneRef{Number: strconv.FormatInt(milestoneAddress(i.Milestone), 10), Title: i.Milestone.Title}
 	}
-	return &provider.Issue{
+	return &model.Issue{
 		ID:        i.ID,
 		Number:    strconv.Itoa(int(i.Number)),
 		Title:     i.Title,
 		Body:      i.Body,
-		State:     provider.IssueState(i.State),
+		State:     model.IssueState(i.State),
 		Author:    author,
 		Labels:    labels,
 		Assignees: assignees,
@@ -61,7 +62,7 @@ func convertIssue(i *gitcode.Issue) *provider.Issue {
 	}
 }
 
-func convertIssueComment(c *gitcode.IssueComment) *provider.IssueComment {
+func convertIssueComment(c *gitcode.IssueComment) *model.IssueComment {
 	if c == nil {
 		return nil
 	}
@@ -69,7 +70,7 @@ func convertIssueComment(c *gitcode.IssueComment) *provider.IssueComment {
 	if author == nil {
 		author = convertUser(c.User)
 	}
-	return &provider.IssueComment{
+	return &model.IssueComment{
 		ID:        c.ID,
 		Body:      c.Body,
 		Author:    author,
@@ -78,19 +79,19 @@ func convertIssueComment(c *gitcode.IssueComment) *provider.IssueComment {
 	}
 }
 
-func convertPullRequest(pr *gitcode.PullRequest) *provider.ChangeRequest {
+func convertPullRequest(pr *gitcode.PullRequest) *model.ChangeRequest {
 	if pr == nil {
 		return nil
 	}
-	state := provider.CRStateOpened
+	state := model.CRStateOpened
 	if pr.State == gitcode.PullRequestStateClosed {
 		if pr.Merged {
-			state = provider.CRStateMerged
+			state = model.CRStateMerged
 		} else {
-			state = provider.CRStateClosed
+			state = model.CRStateClosed
 		}
 	}
-	cr := &provider.ChangeRequest{
+	cr := &model.ChangeRequest{
 		ID:          pr.ID,
 		Number:      strconv.Itoa(pr.Number),
 		Title:       pr.Title,
@@ -108,7 +109,7 @@ func convertPullRequest(pr *gitcode.PullRequest) *provider.ChangeRequest {
 	}
 	if pr.Author != nil {
 		authorID, _ := strconv.ParseInt(string(pr.Author.ID), 10, 64)
-		cr.Author = &provider.CRUser{
+		cr.Author = &model.CRUser{
 			ID: authorID, Username: pr.Author.Login, AvatarURL: pr.Author.AvatarURL,
 		}
 	}
@@ -116,25 +117,25 @@ func convertPullRequest(pr *gitcode.PullRequest) *provider.ChangeRequest {
 	return cr
 }
 
-func convertCommit(c *gitcode.Commit) *provider.CommitInfo {
+func convertCommit(c *gitcode.Commit) *model.CommitInfo {
 	if c == nil {
 		return nil
 	}
-	ci := &provider.CommitInfo{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
+	ci := &model.CommitInfo{SHA: c.SHA, Message: c.Message, CreatedAt: c.CreatedAt}
 	if c.Author != nil {
 		authorID, _ := parseGitCodeID(c.Author.ID)
-		ci.Author = &provider.CRUser{
+		ci.Author = &model.CRUser{
 			ID: authorID, Username: c.Author.Login, AvatarURL: c.Author.AvatarURL,
 		}
 	}
 	return ci
 }
 
-func convertLabel(l *gitcode.Label) *provider.Label {
+func convertLabel(l *gitcode.Label) *model.Label {
 	if l == nil {
 		return nil
 	}
-	return &provider.Label{
+	return &model.Label{
 		ID:    l.ID,
 		Name:  l.Name,
 		Color: strings.TrimPrefix(l.Color, "#"),
@@ -168,26 +169,26 @@ func parseGitCodeDueOn(s string) *time.Time {
 	return nil
 }
 
-func convertMilestone(m *gitcode.Milestone) provider.Milestone {
-	var ms provider.Milestone
+func convertMilestone(m *gitcode.Milestone) model.Milestone {
+	var ms model.Milestone
 	if m == nil {
 		return ms
 	}
-	ms = provider.Milestone{
+	ms = model.Milestone{
 		Number:      strconv.FormatInt(milestoneAddress(m), 10),
 		Title:       m.Title,
 		Description: m.Description,
-		State:       provider.MilestoneState(m.State),
+		State:       model.MilestoneState(m.State),
 		DueOn:       parseGitCodeDueOn(m.DueOn),
 	}
 	return ms
 }
 
-func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {
+func convertRelease(r *gitcode.Release) *model.ReleaseInfo {
 	if r == nil {
 		return nil
 	}
-	return &provider.ReleaseInfo{
+	return &model.ReleaseInfo{
 		ID:          r.ID,
 		TagName:     r.TagName,
 		Title:       r.Name,
@@ -200,20 +201,20 @@ func convertRelease(r *gitcode.Release) *provider.ReleaseInfo {
 	}
 }
 
-func convertNotification(t *gitcode.NotificationThread) *provider.Notification {
-	n := &provider.Notification{
+func convertNotification(t *gitcode.NotificationThread) *model.Notification {
+	n := &model.Notification{
 		ID:     strconv.FormatInt(t.ID, 10),
 		Unread: t.Unread,
 	}
 	if t.Subject != nil {
-		n.Subject = provider.NotificationSubject{
+		n.Subject = model.NotificationSubject{
 			Title: t.Subject.Title,
 			Type:  t.Subject.Type,
 			URL:   t.Subject.URL,
 		}
 	}
 	if t.Repository != nil {
-		n.Repo = &provider.EventRepo{
+		n.Repo = &model.EventRepo{
 			ID:       t.Repository.ID,
 			FullName: t.Repository.FullName,
 		}
@@ -225,18 +226,18 @@ func convertNotification(t *gitcode.NotificationThread) *provider.Notification {
 	return n
 }
 
-func convertCollaborator(c *gitcode.Collaborator) *provider.Collaborator {
+func convertCollaborator(c *gitcode.Collaborator) *model.Collaborator {
 	if c == nil {
 		return nil
 	}
-	return &provider.Collaborator{
+	return &model.Collaborator{
 		ID:         c.ID,
 		Username:   c.Login,
 		Permission: c.Permission,
 	}
 }
 
-func convertGitcodeRepo(r *gitcode.Repository) *provider.PlatformRepo {
+func convertGitcodeRepo(r *gitcode.Repository) *model.PlatformRepo {
 	if r == nil {
 		return nil
 	}
@@ -244,7 +245,7 @@ func convertGitcodeRepo(r *gitcode.Repository) *provider.PlatformRepo {
 	if r.Owner != nil {
 		owner = r.Owner.Login
 	}
-	return &provider.PlatformRepo{
+	return &model.PlatformRepo{
 		ID:            r.ID,
 		FullName:      r.FullName,
 		Name:          r.Name,
@@ -254,16 +255,16 @@ func convertGitcodeRepo(r *gitcode.Repository) *provider.PlatformRepo {
 		SSHURL:        r.SSHURL,
 		DefaultBranch: r.DefaultBranch,
 		Private:       r.Private,
-		Platform:      provider.PlatformGitCode,
+		Platform:      model.PlatformGitCode,
 	}
 }
 
-func convertReview(r *gitcode.PullRequestReview) provider.Review {
-	var review provider.Review
+func convertReview(r *gitcode.PullRequestReview) model.Review {
+	var review model.Review
 	if r == nil {
 		return review
 	}
-	review = provider.Review{
+	review = model.Review{
 		ID:   r.ID,
 		Body: r.Body,
 	}
@@ -276,16 +277,16 @@ func convertReview(r *gitcode.PullRequestReview) provider.Review {
 	}
 	switch r.State {
 	case "APPROVED":
-		review.State = provider.ReviewStateApproved
+		review.State = model.ReviewStateApproved
 	case "CHANGES_REQUESTED":
-		review.State = provider.ReviewStateChangesRequested
+		review.State = model.ReviewStateChangesRequested
 	case "COMMENTED":
-		review.State = provider.ReviewStateCommented
+		review.State = model.ReviewStateCommented
 	case "PENDING":
-		review.State = provider.ReviewStatePending
+		review.State = model.ReviewStatePending
 	default:
 		if r.State != "" {
-			review.State = provider.ReviewState(strings.ToLower(r.State))
+			review.State = model.ReviewState(strings.ToLower(r.State))
 		}
 	}
 	if !r.CreatedAt.IsZero() {

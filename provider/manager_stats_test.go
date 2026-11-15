@@ -7,13 +7,14 @@ import (
 	"time"
 
 	_ "github.com/yi-nology/go-git-platform/backends/all"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestManagerStats_HitsAndMisses(t *testing.T) {
 	m := provider.NewManager(30 * time.Minute)
-	cfg := provider.Config{Platform: provider.PlatformGitHub, Token: "test-stats"}
+	cfg := provider.Config{Platform: model.PlatformGitHub, Token: "test-stats"}
 	// First call: miss
 	_, err := m.Get(cfg)
 	if err != nil {
@@ -33,7 +34,7 @@ func TestManagerStats_HitsAndMisses(t *testing.T) {
 
 func TestManagerStats_Reset(t *testing.T) {
 	m := provider.NewManager(30 * time.Minute)
-	cfg := provider.Config{Platform: provider.PlatformGitHub, Token: "reset"}
+	cfg := provider.Config{Platform: model.PlatformGitHub, Token: "reset"}
 	_, _ = m.Get(cfg)
 	_, _ = m.Get(cfg)
 	m.ResetStats()
@@ -53,8 +54,8 @@ func TestManager_Sha256CacheKey(t *testing.T) {
 	m := provider.NewManager(time.Minute)
 	t1 := "abcdef12-same-prefix-suffix-1"
 	t2 := "abcdef12-same-prefix-suffix-2"
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: t1})
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: t2})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: t1})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: t2})
 	if m.Len() != 2 {
 		t.Errorf("expected 2 distinct entries for different tokens, got %d", m.Len())
 	}
@@ -65,11 +66,11 @@ func TestManager_WithHasher(t *testing.T) {
 	m := provider.NewManager(time.Minute, provider.WithHasher(func(token string) string {
 		return "custom-" + token
 	}))
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "abc"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "abc"})
 	// We can't read the internal map, but we can verify that the custom
 	// hasher is used by inspecting the behavior: two requests with the same
 	// token should hit, and the hit counter should be 1.
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "abc"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "abc"})
 	s := m.Stats()
 	if s.Hits != 1 {
 		t.Errorf("expected 1 hit with custom hasher, got %d", s.Hits)
@@ -78,12 +79,12 @@ func TestManager_WithHasher(t *testing.T) {
 
 func TestManager_WithMaxSize_Evicts(t *testing.T) {
 	m := provider.NewManager(time.Minute, provider.WithMaxSize(1))
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "t1"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "t1"})
 	if m.Len() != 1 {
 		t.Fatalf("expected size 1, got %d", m.Len())
 	}
 	// Insert a second token; the first should be evicted.
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "t2"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "t2"})
 	if m.Len() != 1 {
 		t.Errorf("expected size still 1 after eviction, got %d", m.Len())
 	}
@@ -98,9 +99,9 @@ func TestManager_EvictsLeastRecentlyUsed(t *testing.T) {
 	// must evict t2 (least recently used), not t1 (oldest by creation) —
 	// this distinguishes true LRU from the former creation-order eviction.
 	m := provider.NewManager(time.Minute, provider.WithMaxSize(2))
-	cfg1 := provider.Config{Platform: provider.PlatformGitHub, Token: "t1"}
-	cfg2 := provider.Config{Platform: provider.PlatformGitHub, Token: "t2"}
-	cfg3 := provider.Config{Platform: provider.PlatformGitHub, Token: "t3"}
+	cfg1 := provider.Config{Platform: model.PlatformGitHub, Token: "t1"}
+	cfg2 := provider.Config{Platform: model.PlatformGitHub, Token: "t2"}
+	cfg3 := provider.Config{Platform: model.PlatformGitHub, Token: "t3"}
 	_, _ = m.Get(cfg1)
 	_, _ = m.Get(cfg2)
 	if _, err := m.Get(cfg1); err != nil { // hit; refreshes t1's recency
@@ -130,7 +131,7 @@ func TestManager_EvictsLeastRecentlyUsed(t *testing.T) {
 
 func TestManager_StartJanitor(t *testing.T) {
 	m := provider.NewManager(20 * time.Millisecond)
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "janitor"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "janitor"})
 	if m.Len() != 1 {
 		t.Fatalf("expected size 1, got %d", m.Len())
 	}
@@ -163,8 +164,8 @@ func TestManager_DefaultHasher_OpaqueToken(t *testing.T) {
 	token1 := "very-long-secret-token-1-abcdef"
 	token2 := "very-long-secret-token-2-ghijkl"
 	m := provider.NewManager(time.Minute)
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: token1})
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: token2})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: token1})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: token2})
 	if m.Len() != 2 {
 		t.Errorf("expected distinct entries, got %d", m.Len())
 	}
@@ -185,7 +186,7 @@ func TestManager_buildKey_IsOpaque(t *testing.T) {
 		// Use the real default hasher for the test
 		return provider.HashToken(t)
 	}))
-	_, _ = m.Get(provider.Config{Platform: provider.PlatformGitHub, Token: "supersecrettoken12345"})
+	_, _ = m.Get(provider.Config{Platform: model.PlatformGitHub, Token: "supersecrettoken12345"})
 	// We can't inspect the key, but if HashToken returns a 16-char hex
 	// string, the test passes.
 	hashed := provider.HashToken("supersecrettoken12345")

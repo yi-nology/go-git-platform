@@ -7,6 +7,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -40,7 +41,7 @@ type waitStatusIn struct {
 }
 
 type waitStatusOut struct {
-	State provider.CommitStatusState `json:"state"`
+	State model.CommitStatusState `json:"state"`
 }
 
 func registerStatus(s *mcp.Server, st *state) {
@@ -49,12 +50,12 @@ func registerStatus(s *mcp.Server, st *state) {
 		return
 	}
 
-	add(s, st, "get_commit_statuses", "Get commit statuses", "List the CI statuses reported on a commit (full history, newest first; use the first entry per context).", false, func(ctx context.Context, in getCommitIn) ([]*provider.CommitStatus, error) {
+	add(s, st, "get_commit_statuses", "Get commit statuses", "List the CI statuses reported on a commit (full history, newest first; use the first entry per context).", false, func(ctx context.Context, in getCommitIn) ([]*model.CommitStatus, error) {
 		list, err := csm.ListCommitStatuses(ctx, in.Owner, in.Repo, in.SHA)
 		if err != nil {
 			return nil, err
 		}
-		out := make([]*provider.CommitStatus, len(list))
+		out := make([]*model.CommitStatus, len(list))
 		for i := range list {
 			out[i] = &list[i]
 		}

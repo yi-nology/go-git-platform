@@ -12,6 +12,7 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -37,7 +38,7 @@ var gitcodeHookEventFlags = map[string]string{
 // CreateWebhook implements provider.WebhookManager. Subscriptions ride the
 // documented per-family flags; the default event set matches the other
 // backends ("push" + "pull_request" → push_events + merge_requests_events).
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
@@ -56,16 +57,16 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 		MergeRequestsEvents: gitcode.Bool(em["pull_request"]),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	hook, err := p.client.GetWebhook(ctx, owner, repo, webhookID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -74,7 +75,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // endpoint is boolean-flag based: omitted flags mean "unchanged", so a
 // non-nil Events slice sets every flag of gitcodeHookEventFlags explicitly
 // (true for members, false for the rest) to express removal.
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	em := map[string]bool{}
 	for _, e := range opts.Events {
 		em[e] = true
@@ -95,7 +96,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 	}
 	hook, err := p.client.UpdateWebhook(ctx, owner, repo, webhookID, sdkOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -104,7 +105,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	err := p.client.DeleteWebhook(ctx, owner, repo, webhookID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteWebhook", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteWebhook", err)
 	}
 	return nil
 }
@@ -112,14 +113,14 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 // ListWebhooks implements provider.WebhookManager. The SDK's hook-list
 // endpoint takes the documented page/per_page since go-gitcode v0.8.0, so
 // the walk covers every page.
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	hooks, err := backendutil.AllPages(func(page int) ([]*gitcode.Webhook, error) {
 		return p.client.ListWebhooksWithOptions(ctx, owner, repo, gitcode.ListOptions{Page: page, PerPage: backendutil.LabelPageSize})
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListWebhooks", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
 		result = append(result, convertHook(h))
 	}
@@ -128,7 +129,7 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 
 // convertHook maps the SDK hook (per-family FlexBool flags) onto the
 // platform-neutral webhook shape, reversing gitcodeHookEventFlags.
-func convertHook(h *gitcode.Webhook) *provider.PlatformWebhook {
+func convertHook(h *gitcode.Webhook) *model.PlatformWebhook {
 	if h == nil {
 		return nil
 	}
@@ -139,7 +140,7 @@ func convertHook(h *gitcode.Webhook) *provider.PlatformWebhook {
 		}
 	}
 	sort.Strings(events)
-	return &provider.PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
+	return &model.PlatformWebhook{ID: h.ID, URL: h.URL, Events: events}
 }
 
 // hookFlag reads one event family off the SDK hook by its field name.
@@ -164,8 +165,8 @@ func hookFlag(h *gitcode.Webhook, field string) bool {
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitCode, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitCode, r, secret); err != nil {
+		return provider.Wrap(model.PlatformGitCode, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
@@ -175,14 +176,14 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // steps: GitCode brands both the Gitea event header and its own, so the
 // dialect lists the fallback chain; it never set an event ID (no prefix).
 var gitcodeEnvelope = provider.WebhookEnvelope{
-	Platform:     provider.PlatformGitCode,
+	Platform:     model.PlatformGitCode,
 	EventHeaders: []string{"X-Gitea-Event", "X-GitCode-Event"},
 	// 投递 ID(重投时值不变)⇒ 真幂等键;没有该头时回落到本地合成的 ID
 	// (仍保证非空 —— 空 ID 会让上层把第 2 条起的事件全挡掉)。
 	IDHeaders: []string{"X-GitHub-Delivery", "X-GitCode-Delivery"},
 }
 
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	eventType, body, err := gitcodeEnvelope.Read(r, secret)
 	if err != nil {
 		return nil, err
@@ -194,14 +195,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "pull_request":
 		prEvent, err := p.client.ParsePullRequestEvent(body)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		action := provider.NormalizeCRAction(prEvent.Action, prEvent.PullRequest != nil && prEvent.PullRequest.Merged)
 		ne.Type = provider.EventTypeCR + action
 		ne.Action = action
 		if prEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(prEvent.Sender.ID)
-			ne.Actor = &provider.CRUser{
+			ne.Actor = &model.CRUser{
 				ID: senderID, Username: prEvent.Sender.Login, AvatarURL: prEvent.Sender.AvatarURL,
 			}
 		}
@@ -217,7 +218,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "push":
 		pushEvent, err := p.client.ParsePushEvent(body)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		// 删除归一（issue #67，同族 #47 的 push 案）：gitcode 的分支删除以
 		// push + 全零 after 投递（其独立 delete 事件路径只覆盖部分场景）——
@@ -234,7 +235,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		ne.Branch = strings.TrimPrefix(pushEvent.Ref, "refs/heads/")
 		if pushEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(pushEvent.Sender.ID)
-			ne.Actor = &provider.CRUser{
+			ne.Actor = &model.CRUser{
 				ID: senderID, Username: pushEvent.Sender.Login, AvatarURL: pushEvent.Sender.AvatarURL,
 			}
 		}
@@ -244,7 +245,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "tag_push":
 		tagEvent, err := p.client.ParseTagPushEvent(body)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		// 删除归一（issue #47，同 GitLab 家族——全零 after 即删除投递）
 		if provider.IsWebhookDeletionSHA(tagEvent.After) && !provider.IsWebhookDeletionSHA(tagEvent.Before) {
@@ -260,7 +261,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 		if tagEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(tagEvent.Sender.ID)
-			ne.Actor = &provider.CRUser{
+			ne.Actor = &model.CRUser{
 				ID: senderID, Username: tagEvent.Sender.Login, AvatarURL: tagEvent.Sender.AvatarURL,
 			}
 		}
@@ -275,7 +276,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Repository *gitcode.Repository `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &createEvent); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		if createEvent.RefType == "tag" {
 			ne.Type = provider.EventTypeTag + "created"
@@ -288,7 +289,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 		if createEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(createEvent.Sender.ID)
-			ne.Actor = &provider.CRUser{
+			ne.Actor = &model.CRUser{
 				ID: senderID, Username: createEvent.Sender.Login, AvatarURL: createEvent.Sender.AvatarURL,
 			}
 		}
@@ -303,7 +304,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Repository *gitcode.Repository `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &deleteEvent); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		if deleteEvent.RefType == "tag" {
 			ne.Type = provider.EventTypeTag + "deleted"
@@ -316,7 +317,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		}
 		if deleteEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(deleteEvent.Sender.ID)
-			ne.Actor = &provider.CRUser{
+			ne.Actor = &model.CRUser{
 				ID: senderID, Username: deleteEvent.Sender.Login, AvatarURL: deleteEvent.Sender.AvatarURL,
 			}
 		}
@@ -331,7 +332,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Repository *gitcode.Repository  `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &issueEvent); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		action := provider.NormalizeIssueAction(issueEvent.Action)
 		ne.Type = provider.EventTypeIssue + action
@@ -348,15 +349,15 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 			Repository *gitcode.Repository `json:"repository"`
 		}
 		if err := json.Unmarshal(body, &commentEvent); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitCode, "ParseWebhookEvent", err)
+			return nil, provider.Wrap(model.PlatformGitCode, "ParseWebhookEvent", err)
 		}
 		ne.Type = provider.EventTypeComment + provider.CommentActionCreated
 		ne.Action = provider.CommentActionCreated
 		if commentEvent.Comment != nil && commentEvent.Sender != nil {
 			senderID, _ := parseGitCodeID(commentEvent.Sender.ID)
-			ne.Comment = &provider.IssueComment{
+			ne.Comment = &model.IssueComment{
 				Body:   commentEvent.Comment.Body,
-				Author: &provider.CRUser{ID: senderID, Username: commentEvent.Sender.Login, AvatarURL: commentEvent.Sender.AvatarURL},
+				Author: &model.CRUser{ID: senderID, Username: commentEvent.Sender.Login, AvatarURL: commentEvent.Sender.AvatarURL},
 			}
 		}
 		attachGitCodeIssue(ne, commentEvent.Issue, commentEvent.Sender, commentEvent.Repository)
@@ -381,10 +382,10 @@ type gitcodeIssuePayload struct {
 	} `json:"pull_request"`
 }
 
-func attachGitCodeIssue(ne *provider.NormalizedEvent, issue *gitcodeIssuePayload, sender *gitcode.User, repo *gitcode.Repository) {
+func attachGitCodeIssue(ne *model.NormalizedEvent, issue *gitcodeIssuePayload, sender *gitcode.User, repo *gitcode.Repository) {
 	if sender != nil {
 		senderID, _ := parseGitCodeID(sender.ID)
-		ne.Actor = &provider.CRUser{ID: senderID, Username: sender.Login, AvatarURL: sender.AvatarURL}
+		ne.Actor = &model.CRUser{ID: senderID, Username: sender.Login, AvatarURL: sender.AvatarURL}
 	}
 	if repo != nil {
 		ne.Repo = provider.BuildEventRepo(repo.FullName)
@@ -392,16 +393,16 @@ func attachGitCodeIssue(ne *provider.NormalizedEvent, issue *gitcodeIssuePayload
 	if issue == nil {
 		return
 	}
-	state := provider.IssueStateOpen
+	state := model.IssueStateOpen
 	if issue.State == "closed" {
-		state = provider.IssueStateClosed
+		state = model.IssueStateClosed
 	}
-	var author *provider.CRUser
+	var author *model.CRUser
 	if issue.User != nil {
 		userID, _ := parseGitCodeID(issue.User.ID)
-		author = &provider.CRUser{ID: userID, Username: issue.User.Login, AvatarURL: issue.User.AvatarURL}
+		author = &model.CRUser{ID: userID, Username: issue.User.Login, AvatarURL: issue.User.AvatarURL}
 	}
-	ne.Issue = &provider.Issue{
+	ne.Issue = &model.Issue{
 		ID:     int64(issue.Number),
 		Number: strconv.Itoa(issue.Number),
 		Title:  issue.Title,
@@ -411,7 +412,7 @@ func attachGitCodeIssue(ne *provider.NormalizedEvent, issue *gitcodeIssuePayload
 		WebURL: issue.HTMLURL,
 	}
 	if issue.PullRequest != nil {
-		ne.CR = &provider.ChangeRequest{
+		ne.CR = &model.ChangeRequest{
 			ID: int64(issue.Number), Number: strconv.Itoa(issue.Number), Title: issue.Title,
 		}
 	}

@@ -6,59 +6,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
-
-func TestNormalizeCommitStatusState(t *testing.T) {
-	tests := []struct {
-		in   string
-		want CommitStatusState
-	}{
-		{"success", CommitStatusSuccess},
-		{"SUCCESS", CommitStatusSuccess},
-		{"warning", CommitStatusSuccess},
-		{"neutral", CommitStatusSuccess},
-		{"failure", CommitStatusFailure},
-		{"failed", CommitStatusFailure},
-		{"error", CommitStatusError},
-		{"canceled", CommitStatusCanceled},
-		{"cancelled", CommitStatusCanceled},
-		{"running", CommitStatusRunning},
-		{"created", CommitStatusRunning},
-		{"waiting_for_resource", CommitStatusRunning},
-		{"pending", CommitStatusPending},
-		{"", CommitStatusPending},
-		{"some-new-verb", CommitStatusPending},
-	}
-	for _, tt := range tests {
-		if got := NormalizeCommitStatusState(tt.in); got != tt.want {
-			t.Errorf("NormalizeCommitStatusState(%q) = %q, want %q", tt.in, got, tt.want)
-		}
-	}
-}
-
-func TestCombineCommitStatusStates(t *testing.T) {
-	p, r, s, e, c := CommitStatusPending, CommitStatusRunning, CommitStatusSuccess, CommitStatusError, CommitStatusCanceled
-	tests := []struct {
-		name   string
-		states []CommitStatusState
-		want   CommitStatusState
-	}{
-		{"empty is pending", nil, CommitStatusPending},
-		{"all success", []CommitStatusState{s, s}, CommitStatusSuccess},
-		{"success then pending stays pending", []CommitStatusState{s, p}, CommitStatusPending},
-		{"pending then running stays pending", []CommitStatusState{p, r}, CommitStatusPending},
-		{"failure dominates others", []CommitStatusState{s, c, CommitStatusFailure, p}, CommitStatusFailure},
-		{"error dominates all", []CommitStatusState{s, c, p, e}, CommitStatusError},
-		{"canceled dominates running", []CommitStatusState{c, p, r}, CommitStatusCanceled},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := CombineCommitStatusStates(tt.states); got != tt.want {
-				t.Errorf("CombineCommitStatusStates(%v) = %q, want %q", tt.states, got, tt.want)
-			}
-		})
-	}
-}
 
 // waitFakeProvider embeds the nil Provider interface so only Platform and
 // the CommitStatusManager method set are real. Everything is
@@ -66,13 +16,13 @@ func TestCombineCommitStatusStates(t *testing.T) {
 type waitFakeProvider struct {
 	Provider
 	mu       sync.Mutex
-	statuses []CommitStatus
+	statuses []model.CommitStatus
 	err      error
 	calls    int
 }
 
-func (f *waitFakeProvider) Platform() Platform { return PlatformGitHub }
-func (f *waitFakeProvider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]CommitStatus, error) {
+func (f *waitFakeProvider) Platform() model.Platform { return model.PlatformGitHub }
+func (f *waitFakeProvider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -82,7 +32,7 @@ func (f *waitFakeProvider) CreateCommitStatus(ctx context.Context, owner, repo, 
 	return nil
 }
 
-func (f *waitFakeProvider) set(statuses []CommitStatus) {
+func (f *waitFakeProvider) set(statuses []model.CommitStatus) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.statuses, f.err = statuses, nil
@@ -98,14 +48,14 @@ func TestWaitForCommitStatusNotImplemented(t *testing.T) {
 
 func TestWaitForCommitStatusConverges(t *testing.T) {
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{{State: CommitStatusRunning, Context: "ci"}})
+	fake.set([]model.CommitStatus{{State: model.CommitStatusRunning, Context: "ci"}})
 
 	// flip to success (with an unrelated failing context) after a beat
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		fake.set([]CommitStatus{
-			{State: CommitStatusSuccess, Context: "ci"},
-			{State: CommitStatusFailure, Context: "other"},
+		fake.set([]model.CommitStatus{
+			{State: model.CommitStatusSuccess, Context: "ci"},
+			{State: model.CommitStatusFailure, Context: "other"},
 		})
 	}()
 
@@ -114,14 +64,14 @@ func TestWaitForCommitStatusConverges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WaitForCommitStatus() err = %v", err)
 	}
-	if state != CommitStatusSuccess {
+	if state != model.CommitStatusSuccess {
 		t.Fatalf("state = %q, want success (other-context failure must be excluded by the filter)", state)
 	}
 }
 
 func TestWaitForCommitStatusContextFilterWaitsForAllContexts(t *testing.T) {
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{{State: CommitStatusSuccess, Context: "ci/lint"}})
+	fake.set([]model.CommitStatus{{State: model.CommitStatusSuccess, Context: "ci/lint"}})
 
 	_, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
 		WaitOptions{Interval: 5 * time.Millisecond, Timeout: 80 * time.Millisecond, Contexts: []string{"ci/lint", "ci/test"}})
@@ -132,9 +82,9 @@ func TestWaitForCommitStatusContextFilterWaitsForAllContexts(t *testing.T) {
 
 func TestWaitForCommitStatusFailureIsTerminal(t *testing.T) {
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{
-		{State: CommitStatusSuccess, Context: "ci/lint"},
-		{State: CommitStatusFailure, Context: "ci/test"},
+	fake.set([]model.CommitStatus{
+		{State: model.CommitStatusSuccess, Context: "ci/lint"},
+		{State: model.CommitStatusFailure, Context: "ci/test"},
 	})
 
 	state, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
@@ -142,14 +92,14 @@ func TestWaitForCommitStatusFailureIsTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WaitForCommitStatus() err = %v", err)
 	}
-	if state != CommitStatusFailure {
+	if state != model.CommitStatusFailure {
 		t.Fatalf("state = %q, want failure", state)
 	}
 }
 
 func TestWaitForCommitStatusTimeout(t *testing.T) {
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{{State: CommitStatusPending, Context: "ci"}})
+	fake.set([]model.CommitStatus{{State: model.CommitStatusPending, Context: "ci"}})
 
 	_, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
 		WaitOptions{Interval: 5 * time.Millisecond, Timeout: 80 * time.Millisecond})
@@ -162,7 +112,7 @@ func TestWaitForCommitStatusReadErrorsKeepPolling(t *testing.T) {
 	fake := &waitFakeProvider{err: errors.New("transient")}
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		fake.set([]CommitStatus{{State: CommitStatusSuccess, Context: "ci"}})
+		fake.set([]model.CommitStatus{{State: model.CommitStatusSuccess, Context: "ci"}})
 	}()
 
 	state, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
@@ -173,14 +123,14 @@ func TestWaitForCommitStatusReadErrorsKeepPolling(t *testing.T) {
 	fake.mu.Lock()
 	calls := fake.calls
 	fake.mu.Unlock()
-	if state != CommitStatusSuccess || calls < 2 {
+	if state != model.CommitStatusSuccess || calls < 2 {
 		t.Fatalf("state = %q calls = %d, want success after retrying past read errors", state, calls)
 	}
 }
 
 func TestWaitForCommitStatusContextCancellation(t *testing.T) {
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{{State: CommitStatusPending, Context: "ci"}})
+	fake.set([]model.CommitStatus{{State: model.CommitStatusPending, Context: "ci"}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -200,7 +150,7 @@ func TestWaitForCommitStatusNegativeTimeoutNoBudget(t *testing.T) {
 	// failing fast with ErrWaitTimedOut. Deleting the timeout<0 branch
 	// in WaitForCommitStatus turns this red.
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{{State: CommitStatusPending, Context: "ci"}})
+	fake.set([]model.CommitStatus{{State: model.CommitStatusPending, Context: "ci"}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -222,9 +172,9 @@ func TestWaitForCommitStatusRerunHistoryTakesLatest(t *testing.T) {
 	// The newest report must win (GitHub combined-status semantics) —
 	// folding the raw list would keep waiting on the stale failure.
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{
-		{State: CommitStatusSuccess, Context: "ci/test"},
-		{State: CommitStatusFailure, Context: "ci/test"},
+	fake.set([]model.CommitStatus{
+		{State: model.CommitStatusSuccess, Context: "ci/test"},
+		{State: model.CommitStatusFailure, Context: "ci/test"},
 	})
 
 	state, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
@@ -232,7 +182,7 @@ func TestWaitForCommitStatusRerunHistoryTakesLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WaitForCommitStatus() err = %v", err)
 	}
-	if state != CommitStatusSuccess {
+	if state != model.CommitStatusSuccess {
 		t.Fatalf("state = %q, want success (latest per context wins)", state)
 	}
 }
@@ -241,9 +191,9 @@ func TestWaitForCommitStatusDuplicateMustNotVoteForMissingContext(t *testing.T) 
 	// ci/lint reported twice but ci/test never did: the missing context
 	// must keep the wait pending instead of passing the gate.
 	fake := &waitFakeProvider{}
-	fake.set([]CommitStatus{
-		{State: CommitStatusSuccess, Context: "ci/lint"},
-		{State: CommitStatusSuccess, Context: "ci/lint"},
+	fake.set([]model.CommitStatus{
+		{State: model.CommitStatusSuccess, Context: "ci/lint"},
+		{State: model.CommitStatusSuccess, Context: "ci/lint"},
 	})
 
 	_, err := WaitForCommitStatus(context.Background(), fake, "o", "r", "sha",
@@ -255,7 +205,7 @@ func TestWaitForCommitStatusDuplicateMustNotVoteForMissingContext(t *testing.T) 
 
 func TestWaitForCommitStatusNotFoundReturnsImmediately(t *testing.T) {
 	fake := &waitFakeProvider{}
-	notFound := New(PlatformGitHub, "ListCommitStatuses", 404, "no such commit")
+	notFound := New(model.PlatformGitHub, "ListCommitStatuses", 404, "no such commit")
 	fake.mu.Lock()
 	fake.err = notFound
 	fake.mu.Unlock()
@@ -306,13 +256,13 @@ func TestInitWaitTimeoutSemantics(t *testing.T) {
 }
 
 func TestLatestCommitStatuses(t *testing.T) {
-	in := []CommitStatus{
-		{State: CommitStatusSuccess, Context: "b"},
-		{State: CommitStatusFailure, Context: "a"},
-		{State: CommitStatusPending, Context: "b"},
+	in := []model.CommitStatus{
+		{State: model.CommitStatusSuccess, Context: "b"},
+		{State: model.CommitStatusFailure, Context: "a"},
+		{State: model.CommitStatusPending, Context: "b"},
 	}
 	out := LatestCommitStatuses(in)
-	if len(out) != 2 || out[0].Context != "b" || out[0].State != CommitStatusSuccess ||
+	if len(out) != 2 || out[0].Context != "b" || out[0].State != model.CommitStatusSuccess ||
 		out[1].Context != "a" {
 		t.Fatalf("LatestCommitStatuses() = %v, want first-occurrence-per-context", out)
 	}

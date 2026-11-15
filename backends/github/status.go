@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -23,8 +24,8 @@ import (
 // off, and RateLimitRecovery found no window. The classifier restores the
 // verdict plus the recovery hints (rate reset / RetryAfter).
 func init() {
-	provider.RegisterStatusExtractor(provider.PlatformGitHub, githubStatusExtractor)
-	provider.RegisterThrottleClassifier(provider.PlatformGitHub, githubThrottleClassifier)
+	provider.RegisterStatusExtractor(model.PlatformGitHub, githubStatusExtractor)
+	provider.RegisterThrottleClassifier(model.PlatformGitHub, githubThrottleClassifier)
 }
 
 // githubStatusExtractor reads the HTTP status out of go-github's five

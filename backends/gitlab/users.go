@@ -7,6 +7,7 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -25,7 +26,7 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 			&gitlab.ListUsersOptions{Username: new(name)},
 			gitlab.WithContext(ctx))
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitLab, op, err)
+			return nil, provider.Wrap(model.PlatformGitLab, op, err)
 		}
 		var (
 			id    int64
@@ -38,7 +39,7 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 			}
 		}
 		if !found {
-			return nil, provider.New(provider.PlatformGitLab, op, http.StatusNotFound, fmt.Sprintf("user %q not found", name))
+			return nil, provider.New(model.PlatformGitLab, op, http.StatusNotFound, fmt.Sprintf("user %q not found", name))
 		}
 		p.userIDs.Put(name, id)
 		ids = append(ids, id)
@@ -47,16 +48,16 @@ func (p *Provider) resolveUserIDs(ctx context.Context, op string, usernames []st
 }
 
 // GetUser implements provider.UserManager.
-func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUser, error) {
+func (p *Provider) GetUser(ctx context.Context, username string) (*model.CRUser, error) {
 	users, _, err := p.client.Users.ListUsers(
 		&gitlab.ListUsersOptions{Username: new(username)},
 		gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetUser", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetUser", err)
 	}
 	for _, u := range users {
 		if u != nil && u.Username == username {
-			return &provider.CRUser{
+			return &model.CRUser{
 				ID:        u.ID,
 				Username:  u.Username,
 				Name:      u.Name,
@@ -64,18 +65,18 @@ func (p *Provider) GetUser(ctx context.Context, username string) (*provider.CRUs
 			}, nil
 		}
 	}
-	return nil, provider.New(provider.PlatformGitLab, "GetUser", http.StatusNotFound, fmt.Sprintf("user %q not found", username))
+	return nil, provider.New(model.PlatformGitLab, "GetUser", http.StatusNotFound, fmt.Sprintf("user %q not found", username))
 }
 
 // ResolveUsernames implements provider.UserManager.
-func (p *Provider) ResolveUsernames(ctx context.Context, usernames []string) ([]*provider.CRUser, error) {
+func (p *Provider) ResolveUsernames(ctx context.Context, usernames []string) ([]*model.CRUser, error) {
 	ids, err := p.resolveUserIDs(ctx, "ResolveUsernames", usernames)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*provider.CRUser, len(usernames))
+	result := make([]*model.CRUser, len(usernames))
 	for i, name := range usernames {
-		result[i] = &provider.CRUser{ID: ids[i], Username: name}
+		result[i] = &model.CRUser{ID: ids[i], Username: name}
 	}
 	return result, nil
 }

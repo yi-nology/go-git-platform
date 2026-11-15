@@ -8,6 +8,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
@@ -32,7 +33,7 @@ import (
 // loud); opts.Page > 0 returns exactly that single caller-driven page. The
 // pre-fix shape normalized Page==0 to page 1 and silently returned only
 // GitLab's default 20-milestone page.
-func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
+func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts provider.ListMilestonesOptions) ([]model.Milestone, error) {
 	milestones, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitlab.Milestone, error) {
 			listOpts := &gitlab.ListMilestonesOptions{
@@ -40,7 +41,7 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 			}
 			if opts.State != "" {
 				s := opts.State
-				if s == string(provider.MilestoneStateOpen) {
+				if s == string(model.MilestoneStateOpen) {
 					s = "active" // GitLab milestones vocabulary
 				}
 				listOpts.State = new(s)
@@ -49,9 +50,9 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListMilestones", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListMilestones", err)
 	}
-	result := make([]provider.Milestone, 0, len(milestones))
+	result := make([]model.Milestone, 0, len(milestones))
 	for _, ms := range milestones {
 		result = append(result, convertMilestone(ms))
 	}
@@ -59,21 +60,21 @@ func (p *Provider) ListMilestones(ctx context.Context, owner, repo string, opts 
 }
 
 // GetMilestone implements provider.MilestoneManager.
-func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*provider.Milestone, error) {
-	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "GetMilestone", number)
+func (p *Provider) GetMilestone(ctx context.Context, owner, repo, number string) (*model.Milestone, error) {
+	id, err := backendutil.ParseMilestoneNumber(model.PlatformGitLab, "GetMilestone", number)
 	if err != nil {
 		return nil, err
 	}
 	ms, _, err := p.client.Milestones.GetMilestone(pidOf(owner, repo), id, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
 }
 
 // CreateMilestone implements provider.MilestoneManager.
-func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
+func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts provider.CreateMilestoneOptions) (*model.Milestone, error) {
 	createOpts := &gitlab.CreateMilestoneOptions{
 		Title:       new(opts.Title),
 		Description: new(opts.Description),
@@ -83,7 +84,7 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 	}
 	ms, _, err := p.client.Milestones.CreateMilestone(pidOf(owner, repo), createOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
@@ -92,8 +93,8 @@ func (p *Provider) CreateMilestone(ctx context.Context, owner, repo string, opts
 // UpdateMilestone implements provider.MilestoneManager. Nil fields in opts
 // stay absent from the PUT body, leaving the milestone unchanged; state
 // changes travel as GitLab's state_event verb.
-func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
-	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "UpdateMilestone", number)
+func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*model.Milestone, error) {
+	id, err := backendutil.ParseMilestoneNumber(model.PlatformGitLab, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
 	}
@@ -108,17 +109,17 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 		updateOpts.DueDate = new(gitlab.ISOTime(*opts.DueOn))
 	}
 	switch opts.State {
-	case provider.MilestoneStateOpen:
+	case model.MilestoneStateOpen:
 		updateOpts.StateEvent = new("activate")
-	case provider.MilestoneStateClosed:
+	case model.MilestoneStateClosed:
 		updateOpts.StateEvent = new("close")
 	case "":
 	default:
-		return nil, provider.Wrapf(provider.PlatformGitLab, "UpdateMilestone", "unsupported milestone state %q", opts.State)
+		return nil, provider.Wrapf(model.PlatformGitLab, "UpdateMilestone", "unsupported milestone state %q", opts.State)
 	}
 	ms, _, err := p.client.Milestones.UpdateMilestone(pidOf(owner, repo), id, updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateMilestone", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateMilestone", err)
 	}
 	out := convertMilestone(ms)
 	return &out, nil
@@ -126,34 +127,34 @@ func (p *Provider) UpdateMilestone(ctx context.Context, owner, repo, number stri
 
 // DeleteMilestone implements provider.MilestoneManager.
 func (p *Provider) DeleteMilestone(ctx context.Context, owner, repo, number string) error {
-	id, err := backendutil.ParseMilestoneNumber(provider.PlatformGitLab, "DeleteMilestone", number)
+	id, err := backendutil.ParseMilestoneNumber(model.PlatformGitLab, "DeleteMilestone", number)
 	if err != nil {
 		return err
 	}
 	if _, err := p.client.Milestones.DeleteMilestone(pidOf(owner, repo), id, gitlab.WithContext(ctx)); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteMilestone", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteMilestone", err)
 	}
 	return nil
 }
 
-// convertMilestone maps a gitlab.Milestone to a provider.Milestone. Number
+// convertMilestone maps a gitlab.Milestone to a model.Milestone. Number
 // carries the GitLab milestone ID (the identifier the write endpoints
 // take); the wire state "active" maps to the SDK's "open".
-func convertMilestone(m *gitlab.Milestone) provider.Milestone {
-	var ms provider.Milestone
+func convertMilestone(m *gitlab.Milestone) model.Milestone {
+	var ms model.Milestone
 	if m == nil {
 		return ms
 	}
-	ms = provider.Milestone{
+	ms = model.Milestone{
 		Number:      strconv.FormatInt(m.ID, 10),
 		Title:       m.Title,
 		Description: m.Description,
 	}
 	switch m.State {
 	case "active":
-		ms.State = provider.MilestoneStateOpen
+		ms.State = model.MilestoneStateOpen
 	default:
-		ms.State = provider.MilestoneState(m.State) // "closed" (and unknowns) pass through
+		ms.State = model.MilestoneState(m.State) // "closed" (and unknowns) pass through
 	}
 	if m.DueDate != nil {
 		due := time.Time(*m.DueDate)

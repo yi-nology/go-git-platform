@@ -6,14 +6,15 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCommit implements provider.CommitManager.
-func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
+func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error) {
 	c, _, err := p.client.Repositories.GetCommit(ctx, owner, repo, sha, nil)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetCommit", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetCommit", err)
 	}
 	return convertCommit(c), nil
 }
@@ -27,17 +28,17 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // empty page — so every matching commit is returned. In full-fetch mode
 // opts.PerPage only sizes the underlying requests and defaults to the
 // platform maximum of 100.
-func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// Since/Until 解析失败必须报错（issue #52，批2 #75 LastReadAt 同型）：
 	// 旧的静默丢弃（err==nil 才赋值）让一个格式笔误（如 "2026/01/01"）悄悄
 	// 变成不过滤的全量历史，err 仍为 nil，增量同步无从察觉。
 	since, err := provider.ParseTimestamp("Since", opts.Since)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCommits", err)
 	}
 	until, err := provider.ParseTimestamp("Until", opts.Until)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCommits", err)
 	}
 	baseOpts := github.CommitsListOptions{}
 	if opts.Branch != "" {
@@ -56,7 +57,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 		baseOpts.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
 		list, _, err := p.client.Repositories.ListCommits(ctx, owner, repo, &baseOpts)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListCommits", err)
 		}
 		commits = list
 	} else {
@@ -68,10 +69,10 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListCommits", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListCommits", err)
 		}
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertCommit(c))
 	}
@@ -86,14 +87,14 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 // 首页返回且全量上限 300 条、无分页线可走——len==300 时置
 // CompareResult.FilesTruncated，截断可见（对照：GetCRDiff 的 PR files 线有
 // 分页，走全）。
-func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
+func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error) {
 	const (
 		compareCommitsPerPage = 250 // GitHub compare commits cap per call
 		compareMaxChangedFile = 300 // GitHub compare changed-files cap overall
 		compareMaxPages       = 50  // pagination budget, mirrors backendutil.AllPages
 	)
 	var (
-		result  *provider.CompareResult
+		result  *model.CompareResult
 		commits []*github.RepositoryCommit
 		files   []*github.CommitFile
 	)
@@ -101,12 +102,12 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 		cmp, _, err := p.client.Repositories.CompareCommits(ctx, owner, repo, base, head,
 			&github.ListOptions{Page: page, PerPage: compareCommitsPerPage})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "CompareCommits", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "CompareCommits", err)
 		}
 		if result == nil {
 			// Metadatas ride every page; changed files ride the first page
 			// only — snapshot both there.
-			result = &provider.CompareResult{
+			result = &model.CompareResult{
 				TotalCommits: cmp.GetTotalCommits(),
 				AheadBy:      cmp.GetAheadBy(),
 				BehindBy:     cmp.GetBehindBy(),
@@ -123,7 +124,7 @@ func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head s
 		result.Commits = append(result.Commits, convertCommit(c))
 	}
 	for _, f := range files {
-		result.Files = append(result.Files, &provider.ChangedFile{
+		result.Files = append(result.Files, &model.ChangedFile{
 			OldPath:   f.GetPreviousFilename(),
 			NewPath:   f.GetFilename(),
 			Additions: f.GetAdditions(),
@@ -145,20 +146,20 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 		TargetURL:   new(opts.TargetURL),
 	})
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "CreateCommitStatus", err)
+		return provider.Wrap(model.PlatformGitHub, "CreateCommitStatus", err)
 	}
 	return nil
 }
 
 // ListCommitStatuses implements provider.CommitStatusManager.
-func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	statuses, err := backendutil.AllPages(func(page int) ([]*github.RepoStatus, error) {
 		list, _, err := p.client.Repositories.ListStatuses(ctx, owner, repo, sha,
 			&github.ListOptions{Page: page, PerPage: 100})
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCommitStatuses", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCommitStatuses", err)
 	}
 	return convertCommitStatuses(statuses), nil
 }
@@ -166,14 +167,14 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 // convertCommitStatuses maps go-github RepoStatus entries onto the unified
 // vocabulary. GitHub already speaks the canonical verbs (error/failure/
 // pending/success); they pass through NormalizeCommitStatusState unchanged.
-func convertCommitStatuses(statuses []*github.RepoStatus) []provider.CommitStatus {
-	result := make([]provider.CommitStatus, 0, len(statuses))
+func convertCommitStatuses(statuses []*github.RepoStatus) []model.CommitStatus {
+	result := make([]model.CommitStatus, 0, len(statuses))
 	for _, s := range statuses {
 		if s == nil {
 			continue
 		}
-		result = append(result, provider.CommitStatus{
-			State:       provider.NormalizeCommitStatusState(s.GetState()),
+		result = append(result, model.CommitStatus{
+			State:       model.NormalizeCommitStatusState(s.GetState()),
 			Context:     s.GetContext(),
 			Description: s.GetDescription(),
 			TargetURL:   s.GetTargetURL(),

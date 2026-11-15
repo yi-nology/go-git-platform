@@ -6,9 +6,11 @@ import (
 
 	oekiterrors "github.com/oekit/pkg/errors"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	"github.com/yi-nology/go-git-platform/provider"
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
+
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListNotifications implements provider.NotificationManager.
@@ -24,11 +26,11 @@ import (
 // ignoring Page/PerPage entirely and truncating at GitLab's default 20
 // todos, violating the interface's "exhausting the platform's pagination"
 // contract.
-func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	// Since 无 Todos 线路面（登记 mapping 台账）：合法值按 ignore 丢弃，
 	// 但 malformed 值仍必须报错（issue #52）——时间戳选项的拒绝面全后端一致。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListNotifications", err)
 	}
 	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
 		func(page, perPage int) ([]*gitlab.Todo, error) {
@@ -38,9 +40,9 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(todos))
+	result := make([]*model.Notification, 0, len(todos))
 	for _, t := range todos {
 		result = append(result, convertTodo(t))
 	}
@@ -50,13 +52,13 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // ListRepoNotifications implements provider.NotificationManager.
 // Filters todos by project ID (resolved from owner/repo via the project
 // API) with the same dual-mode pagination as ListNotifications (issue #60).
-func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListRepoNotifications", err)
 	}
 	pid, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListRepoNotifications", err)
 	}
 	projectID := pid.ID
 	todos, err := backendutil.PageList(opts.Page, opts.PerPage, provider.MaxPerPage,
@@ -68,9 +70,9 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListRepoNotifications", err)
 	}
-	result := make([]*provider.Notification, 0, len(todos))
+	result := make([]*model.Notification, 0, len(todos))
 	for _, t := range todos {
 		result = append(result, convertTodo(t))
 	}
@@ -82,10 +84,10 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
 	id, err := strconv.ParseInt(threadID, 10, 64)
 	if err != nil {
-		return provider.Wrapf(provider.PlatformGitLab, "MarkNotificationRead", "invalid thread ID %q", threadID)
+		return provider.Wrapf(model.PlatformGitLab, "MarkNotificationRead", "invalid thread ID %q", threadID)
 	}
 	_, err = p.client.Todos.MarkTodoAsDone(id, gitlab.WithContext(ctx))
-	return provider.Wrap(provider.PlatformGitLab, "MarkNotificationRead", err)
+	return provider.Wrap(model.PlatformGitLab, "MarkNotificationRead", err)
 }
 
 // MarkNotificationsRead implements provider.NotificationManager.
@@ -96,10 +98,10 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 // 与 #52/#75/#97 的时间戳选项拒绝面全后端一致。
 func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.MarkNotificationsOptions) error {
 	if _, err := provider.ParseTimestamp("LastReadAt", opts.LastReadAt); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "MarkNotificationsRead", err)
+		return provider.Wrap(model.PlatformGitLab, "MarkNotificationsRead", err)
 	}
 	_, err := p.client.Todos.MarkAllTodosAsDone(gitlab.WithContext(ctx))
-	return provider.Wrap(provider.PlatformGitLab, "MarkNotificationsRead", err)
+	return provider.Wrap(model.PlatformGitLab, "MarkNotificationsRead", err)
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
@@ -107,28 +109,28 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 // ErrNotImplemented (registered divergence). Callers should use
 // MarkNotificationsRead (global) or MarkNotificationRead per thread.
 func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo string, opts provider.MarkNotificationsOptions) error {
-	return provider.Wrap(provider.PlatformGitLab, "MarkRepoNotificationsRead",
+	return provider.Wrap(model.PlatformGitLab, "MarkRepoNotificationsRead",
 		oekiterrors.Wrap(provider.ErrNotImplemented, "gitlab todos API has no per-project mark-all-as-done; use MarkNotificationsRead or MarkNotificationRead"))
 }
 
-func convertTodo(t *gitlab.Todo) *provider.Notification {
+func convertTodo(t *gitlab.Todo) *model.Notification {
 	if t == nil {
 		return nil
 	}
-	n := &provider.Notification{
+	n := &model.Notification{
 		ID:     strconv.FormatInt(t.ID, 10),
 		Unread: t.State == "pending",
 		Reason: string(t.ActionName),
 	}
 	if t.Target != nil {
-		n.Subject = provider.NotificationSubject{
+		n.Subject = model.NotificationSubject{
 			Title: t.Target.Title,
 			Type:  string(t.TargetType),
 			URL:   t.TargetURL,
 		}
 	}
 	if t.Project != nil {
-		n.Repo = &provider.EventRepo{
+		n.Repo = &model.EventRepo{
 			ID:       t.Project.ID,
 			FullName: t.Project.PathWithNamespace,
 		}

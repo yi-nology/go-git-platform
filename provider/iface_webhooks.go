@@ -3,14 +3,16 @@ package provider
 import (
 	"context"
 	"net/http"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // WebhookManager handles webhook CRUD and event parsing.
 type WebhookManager interface {
-	CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*PlatformWebhook, error)
+	CreateWebhook(ctx context.Context, opts CreateWebhookOptions) (*model.PlatformWebhook, error)
 	DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error
-	ListWebhooks(ctx context.Context, owner, repo string) ([]*PlatformWebhook, error)
-	ParseWebhookEvent(r *http.Request, secret string) (*NormalizedEvent, error)
+	ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error)
+	ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error)
 	ValidateWebhookSignature(r *http.Request, secret string) error
 }
 
@@ -28,9 +30,9 @@ type WebhookManager interface {
 // write-only on every platform: GetWebhook never returns it.
 type WebhookConfigManager interface {
 	// GetWebhook returns one webhook by its platform ID.
-	GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*PlatformWebhook, error)
+	GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error)
 	// UpdateWebhook patches one webhook. Nil URL/Secret leave the
 	// corresponding setting untouched; a nil Events slice leaves the event
 	// set untouched while a non-nil one replaces it wholesale.
-	UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts UpdateWebhookOptions) (*PlatformWebhook, error)
+	UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts UpdateWebhookOptions) (*model.PlatformWebhook, error)
 }

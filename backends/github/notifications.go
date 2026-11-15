@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -31,10 +32,10 @@ func notificationBaseOpts(opts provider.ListNotificationsOptions) (github.Notifi
 // honored via NormalizePageOpts); opts.Page == 0 (the default) exhausts
 // pagination via backendutil.AllPages — fetching 100 per page until an
 // empty page — so every matching notification is returned.
-func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	base, err := notificationBaseOpts(opts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListNotifications", err)
 	}
 	var threads []*github.Notification
 	if opts.Page > 0 {
@@ -42,7 +43,7 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 		base.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
 		list, _, err := p.client.Activity.ListNotifications(ctx, &base)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListNotifications", err)
 		}
 		threads = list
 	} else {
@@ -54,10 +55,10 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListNotifications", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListNotifications", err)
 		}
 	}
-	result := make([]*provider.Notification, 0, len(threads))
+	result := make([]*model.Notification, 0, len(threads))
 	for _, t := range threads {
 		result = append(result, convertNotification(t))
 	}
@@ -69,10 +70,10 @@ func (p *Provider) ListNotifications(ctx context.Context, opts provider.ListNoti
 // Dual pagination mode, mirroring ListNotifications: opts.Page > 0 returns
 // exactly that one caller-managed page; opts.Page == 0 exhausts pagination
 // via backendutil.AllPages.
-func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*provider.Notification, error) {
+func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string, opts provider.ListNotificationsOptions) ([]*model.Notification, error) {
 	base, err := notificationBaseOpts(opts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListRepoNotifications", err)
 	}
 	var threads []*github.Notification
 	if opts.Page > 0 {
@@ -80,7 +81,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 		base.ListOptions = github.ListOptions{Page: page, PerPage: perPage}
 		list, _, err := p.client.Activity.ListRepositoryNotifications(ctx, owner, repo, &base)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListRepoNotifications", err)
 		}
 		threads = list
 	} else {
@@ -92,10 +93,10 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "ListRepoNotifications", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "ListRepoNotifications", err)
 		}
 	}
-	result := make([]*provider.Notification, 0, len(threads))
+	result := make([]*model.Notification, 0, len(threads))
 	for _, t := range threads {
 		result = append(result, convertNotification(t))
 	}
@@ -105,7 +106,7 @@ func (p *Provider) ListRepoNotifications(ctx context.Context, owner, repo string
 // MarkNotificationRead implements provider.NotificationManager.
 func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) error {
 	_, err := p.client.Activity.MarkThreadRead(ctx, threadID)
-	return provider.Wrap(provider.PlatformGitHub, "MarkNotificationRead", err)
+	return provider.Wrap(model.PlatformGitHub, "MarkNotificationRead", err)
 }
 
 // parseLastReadAt resolves opts.LastReadAt per the contract ("RFC3339;
@@ -122,7 +123,7 @@ func (p *Provider) MarkNotificationRead(ctx context.Context, threadID string) er
 func parseLastReadAt(op, raw string) (github.Timestamp, error) {
 	t, err := provider.ParseTimestamp("LastReadAt", raw)
 	if err != nil {
-		return github.Timestamp{}, provider.Wrap(provider.PlatformGitHub, op, err)
+		return github.Timestamp{}, provider.Wrap(model.PlatformGitHub, op, err)
 	}
 	return github.Timestamp{Time: t}, nil
 }
@@ -134,7 +135,7 @@ func (p *Provider) MarkNotificationsRead(ctx context.Context, opts provider.Mark
 		return err
 	}
 	_, err = p.client.Activity.MarkNotificationsRead(ctx, lastRead)
-	return provider.Wrap(provider.PlatformGitHub, "MarkNotificationsRead", err)
+	return provider.Wrap(model.PlatformGitHub, "MarkNotificationsRead", err)
 }
 
 // MarkRepoNotificationsRead implements provider.NotificationManager.
@@ -144,24 +145,24 @@ func (p *Provider) MarkRepoNotificationsRead(ctx context.Context, owner, repo st
 		return err
 	}
 	_, err = p.client.Activity.MarkRepositoryNotificationsRead(ctx, owner, repo, lastRead)
-	return provider.Wrap(provider.PlatformGitHub, "MarkRepoNotificationsRead", err)
+	return provider.Wrap(model.PlatformGitHub, "MarkRepoNotificationsRead", err)
 }
 
-func convertNotification(n *github.Notification) *provider.Notification {
-	out := &provider.Notification{
+func convertNotification(n *github.Notification) *model.Notification {
+	out := &model.Notification{
 		ID:     n.GetID(),
 		Unread: n.GetUnread(),
 		Reason: n.GetReason(),
 	}
 	if n.Subject != nil {
-		out.Subject = provider.NotificationSubject{
+		out.Subject = model.NotificationSubject{
 			Title: n.Subject.GetTitle(),
 			Type:  n.Subject.GetType(),
 			URL:   n.Subject.GetURL(),
 		}
 	}
 	if n.Repository != nil {
-		out.Repo = &provider.EventRepo{
+		out.Repo = &model.EventRepo{
 			ID:       n.Repository.GetID(),
 			FullName: n.Repository.GetFullName(),
 		}

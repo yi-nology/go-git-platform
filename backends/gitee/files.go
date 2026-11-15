@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -18,18 +19,18 @@ func (p *Provider) GetFileContent(ctx context.Context, owner, repo, path, ref st
 	}
 	contents, _, err := p.client.Repositories.GetContents(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(path), opts)
 	if err != nil {
-		return "", provider.Wrap(provider.PlatformGitee, "GetFileContent", err)
+		return "", provider.Wrap(model.PlatformGitee, "GetFileContent", err)
 	}
 	if len(contents) == 0 {
-		return "", provider.Wrapf(provider.PlatformGitee, "GetFileContent", "no content returned for %s", path)
+		return "", provider.Wrapf(model.PlatformGitee, "GetFileContent", "no content returned for %s", path)
 	}
 	// **必须按 Encoding 解码**:Gitee 的内容端点返回 base64,
 	// 以前原样返回 ⇒ 调用方拿到的是 base64 串(读文件全错)。
-	return provider.DecodeFileContent(provider.PlatformGitee, deref(contents[0].Encoding), deref(contents[0].Content))
+	return provider.DecodeFileContent(model.PlatformGitee, deref(contents[0].Encoding), deref(contents[0].Content))
 }
 
 // CreateFile implements provider.FileManager.
-func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	createOpts := &gitee.CreateContentOptions{
 		Content: gitee.String(opts.Content),
 		Message: gitee.String(opts.Message),
@@ -45,9 +46,9 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.CreateFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateFile", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateFile", err)
 	}
-	result := &provider.FileResult{}
+	result := &model.FileResult{}
 	if cc.Content != nil {
 		result.SHA = deref(cc.Content.Sha)
 	}
@@ -58,7 +59,7 @@ func (p *Provider) CreateFile(ctx context.Context, owner, repo string, opts prov
 }
 
 // UpdateFile implements provider.FileManager.
-func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*provider.FileResult, error) {
+func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	updateOpts := &gitee.UpdateContentOptions{
 		Content: gitee.String(opts.Content),
 		Message: gitee.String(opts.Message),
@@ -77,9 +78,9 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.UpdateFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateFile", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateFile", err)
 	}
-	result := &provider.FileResult{}
+	result := &model.FileResult{}
 	if cc.Content != nil {
 		result.SHA = deref(cc.Content.Sha)
 	}
@@ -90,7 +91,7 @@ func (p *Provider) UpdateFile(ctx context.Context, owner, repo string, opts prov
 }
 
 // DeleteFile implements provider.FileManager.
-func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts provider.FileDeleteOptions) (*provider.FileResult, error) {
+func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts provider.FileDeleteOptions) (*model.FileResult, error) {
 	deleteOpts := &gitee.DeleteContentOptions{
 		Message: gitee.String(opts.Message),
 	}
@@ -108,9 +109,9 @@ func (p *Provider) DeleteFile(ctx context.Context, owner, repo string, opts prov
 	}
 	cc, _, err := p.client.Repositories.DeleteFile(ctx, backendutil.Esc(owner), backendutil.Esc(repo), escPath(opts.Path), deleteOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "DeleteFile", err)
+		return nil, provider.Wrap(model.PlatformGitee, "DeleteFile", err)
 	}
-	result := &provider.FileResult{}
+	result := &model.FileResult{}
 	if cc.Commit != nil {
 		result.CommitSHA = deref(cc.Commit.Sha)
 	}

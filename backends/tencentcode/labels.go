@@ -7,6 +7,7 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -22,7 +23,7 @@ import (
 //     is added outbound and stripped inbound.
 //
 // The gongfeng Label model carries no id field (name/color/description
-// plus issue/merge-request counts only), so provider.Label.ID stays zero
+// plus issue/merge-request counts only), so model.Label.ID stays zero
 // on this platform; labels are name-addressed end to end, so the ID plays
 // no addressing role.
 
@@ -31,7 +32,7 @@ import (
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*provider.Label, error) {
+func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts provider.ListLabelsOptions) ([]*model.Label, error) {
 	buildOpts := func(page, perPage int) *gongfeng.ListLabelsOptions {
 		return &gongfeng.ListLabelsOptions{
 			ListOptions: gongfeng.ListOptions{Page: page, PerPage: perPage},
@@ -44,9 +45,9 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 			return list, err
 		})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListLabels", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListLabels", err)
 	}
-	result := make([]*provider.Label, 0, len(labels))
+	result := make([]*model.Label, 0, len(labels))
 	for _, l := range labels {
 		result = append(result, convertLabel(l))
 	}
@@ -55,7 +56,7 @@ func (p *Provider) ListLabels(ctx context.Context, owner, repo string, opts prov
 
 // CreateLabel implements provider.LabelManager. 工蜂 requires colors with
 // a leading '#'.
-func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*provider.Label, error) {
+func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts provider.CreateLabelOptions) (*model.Label, error) {
 	createOpts := &gongfeng.CreateLabelOptions{
 		Name:  gongfeng.Ptr(opts.Name),
 		Color: gongfeng.Ptr("#" + opts.Color),
@@ -65,7 +66,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 	}
 	label, _, err := p.client.Labels.CreateLabel(ctx, pid(owner, repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateLabel", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -73,7 +74,7 @@ func (p *Provider) CreateLabel(ctx context.Context, owner, repo string, opts pro
 // UpdateLabel implements provider.LabelManager. The current name travels
 // in the update body as 工蜂's addressing key; nil fields in opts stay
 // absent from the PUT body, leaving the label unchanged.
-func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*provider.Label, error) {
+func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, opts provider.UpdateLabelOptions) (*model.Label, error) {
 	updateOpts := &gongfeng.UpdateLabelOptions{
 		Name: gongfeng.Ptr(name),
 	}
@@ -88,7 +89,7 @@ func (p *Provider) UpdateLabel(ctx context.Context, owner, repo, name string, op
 	}
 	label, _, err := p.client.Labels.UpdateLabel(ctx, pid(owner, repo), updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "UpdateLabel", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "UpdateLabel", err)
 	}
 	return convertLabel(label), nil
 }
@@ -99,19 +100,19 @@ func (p *Provider) DeleteLabel(ctx context.Context, owner, repo, name string) er
 	if _, err := p.client.Labels.DeleteLabel(ctx, pid(owner, repo), &gongfeng.DeleteLabelOptions{
 		Name: gongfeng.Ptr(name),
 	}); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteLabel", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteLabel", err)
 	}
 	return nil
 }
 
-// convertLabel maps a gongfeng.Label to a provider.Label. 工蜂 colors
+// convertLabel maps a gongfeng.Label to a model.Label. 工蜂 colors
 // carry a leading '#', which is stripped for the SDK's canonical form; the
 // gongfeng model has no id field, so ID stays zero.
-func convertLabel(l *gongfeng.Label) *provider.Label {
+func convertLabel(l *gongfeng.Label) *model.Label {
 	if l == nil {
 		return nil
 	}
-	return &provider.Label{
+	return &model.Label{
 		Name:        l.Name,
 		Color:       strings.TrimPrefix(l.Color, "#"),
 		Description: l.Description,

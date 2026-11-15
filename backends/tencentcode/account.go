@@ -8,6 +8,7 @@ import (
 
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -31,7 +32,7 @@ type TencentCodeAccountExtras interface {
 	GetUserDetail(ctx context.Context, userID int) (*UserDetailInfo, error)
 	// ListWatchedProjects lists the projects the token's user watches
 	// (0 = all pages, budget-capped), as PlatformRepo summaries.
-	ListWatchedProjects(ctx context.Context, page, perPage int) ([]*provider.PlatformRepo, error)
+	ListWatchedProjects(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error)
 
 	// ListSSHKeys lists the account's registered SSH keys.
 	ListSSHKeys(ctx context.Context) ([]*SSHKeyInfo, error)
@@ -53,15 +54,15 @@ type TencentCodeAccountExtras interface {
 
 	// ListUsers walks the platform user directory (0 = all pages,
 	// budget-capped); Search narrows by username/name.
-	ListUsers(ctx context.Context, opts ListUsersOptions) ([]*provider.CRUser, error)
+	ListUsers(ctx context.Context, opts ListUsersOptions) ([]*model.CRUser, error)
 	// GetUserByEmail resolves one user by registered email address.
-	GetUserByEmail(ctx context.Context, email string) (*provider.CRUser, error)
+	GetUserByEmail(ctx context.Context, email string) (*model.CRUser, error)
 
 	// --- Projects owned by the token's user ---
 
 	// ListOwnedProjects walks the projects the token's user owns
 	// (0 = all pages, budget-capped), as PlatformRepo summaries.
-	ListOwnedProjects(ctx context.Context, page, perPage int) ([]*provider.PlatformRepo, error)
+	ListOwnedProjects(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error)
 }
 
 // ListUsersOptions are the ListUsers knobs.
@@ -118,7 +119,7 @@ func (p *Provider) GetSession(ctx context.Context, login, password string) (*Ses
 		Password: gongfeng.Ptr(password),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetSession", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetSession", err)
 	}
 	return &SessionInfo{
 		ID:           s.ID,
@@ -134,7 +135,7 @@ func (p *Provider) GetSession(ctx context.Context, login, password string) (*Ses
 func (p *Provider) GetCurrentUser(ctx context.Context) (*UserDetailInfo, error) {
 	u, _, err := p.client.Users.GetCurrentUser(ctx)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetCurrentUser", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetCurrentUser", err)
 	}
 	return convertUserDetail(u), nil
 }
@@ -143,22 +144,22 @@ func (p *Provider) GetCurrentUser(ctx context.Context) (*UserDetailInfo, error) 
 func (p *Provider) GetUserDetail(ctx context.Context, userID int) (*UserDetailInfo, error) {
 	u, _, err := p.client.Users.GetUser(ctx, userID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetUserDetail", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetUserDetail", err)
 	}
 	return convertUserDetail(u), nil
 }
 
 // ListWatchedProjects implements TencentCodeAccountExtras.
-func (p *Provider) ListWatchedProjects(ctx context.Context, page, perPage int) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListWatchedProjects(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error) {
 	projects, err := walkOrgPages(page, func(page int) ([]*gongfeng.Project, error) {
 		list, _, err := p.client.Users.ListWatchedProjects(ctx,
 			&gongfeng.ListWatchedProjectsOptions{ListOptions: listOptions(page, perPage)})
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListWatchedProjects", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListWatchedProjects", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(projects))
+	result := make([]*model.PlatformRepo, 0, len(projects))
 	for _, pr := range projects {
 		result = append(result, convertProject(pr))
 	}
@@ -169,7 +170,7 @@ func (p *Provider) ListWatchedProjects(ctx context.Context, page, perPage int) (
 func (p *Provider) GetSSHKey(ctx context.Context, keyID int) (*SSHKeyInfo, error) {
 	k, _, err := p.client.Users.GetSSHKey(ctx, keyID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetSSHKey", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetSSHKey", err)
 	}
 	return &SSHKeyInfo{ID: k.ID, Title: k.Title, Key: k.Key, CreatedAt: k.CreatedAt.Time}, nil
 }
@@ -178,13 +179,13 @@ func (p *Provider) GetSSHKey(ctx context.Context, keyID int) (*SSHKeyInfo, error
 func (p *Provider) GetEmail(ctx context.Context, emailID int) (*EmailInfo, error) {
 	e, _, err := p.client.Users.GetEmail(ctx, emailID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetEmail", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetEmail", err)
 	}
 	return &EmailInfo{ID: e.ID, Email: e.Email}, nil
 }
 
 // ListUsers implements TencentCodeAccountExtras.
-func (p *Provider) ListUsers(ctx context.Context, opts ListUsersOptions) ([]*provider.CRUser, error) {
+func (p *Provider) ListUsers(ctx context.Context, opts ListUsersOptions) ([]*model.CRUser, error) {
 	users, err := walkOrgPages(opts.Page, func(page int) ([]*gongfeng.User, error) {
 		list, _, err := p.client.Users.ListUsers(ctx, &gongfeng.ListUsersOptions{
 			ListOptions: listOptions(page, opts.PerPage),
@@ -193,9 +194,9 @@ func (p *Provider) ListUsers(ctx context.Context, opts ListUsersOptions) ([]*pro
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListUsers", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListUsers", err)
 	}
-	result := make([]*provider.CRUser, 0, len(users))
+	result := make([]*model.CRUser, 0, len(users))
 	for _, u := range users {
 		converted := convertUserBasic(u)
 		if converted != nil {
@@ -206,13 +207,13 @@ func (p *Provider) ListUsers(ctx context.Context, opts ListUsersOptions) ([]*pro
 }
 
 // GetUserByEmail implements TencentCodeAccountExtras.
-func (p *Provider) GetUserByEmail(ctx context.Context, email string) (*provider.CRUser, error) {
+func (p *Provider) GetUserByEmail(ctx context.Context, email string) (*model.CRUser, error) {
 	u, _, err := p.client.Users.GetUserByEmail(ctx, &gongfeng.GetUserByEmailOptions{Email: gongfeng.Ptr(email)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "GetUserByEmail", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "GetUserByEmail", err)
 	}
 	if u == nil || u.ID == 0 {
-		return nil, provider.New(provider.PlatformTencentCode, "GetUserByEmail", http.StatusNotFound,
+		return nil, provider.New(model.PlatformTencentCode, "GetUserByEmail", http.StatusNotFound,
 			"user with email "+strconv.Quote(email)+" not found")
 	}
 	return convertUserBasic(u), nil
@@ -220,11 +221,11 @@ func (p *Provider) GetUserByEmail(ctx context.Context, email string) (*provider.
 
 // convertUserBasic maps a gongfeng.User to the provider shape; nil for an
 // absent user.
-func convertUserBasic(u *gongfeng.User) *provider.CRUser {
+func convertUserBasic(u *gongfeng.User) *model.CRUser {
 	if u == nil {
 		return nil
 	}
-	return &provider.CRUser{
+	return &model.CRUser{
 		ID:        int64(u.ID),
 		Username:  u.Username,
 		Name:      u.Name,
@@ -233,16 +234,16 @@ func convertUserBasic(u *gongfeng.User) *provider.CRUser {
 }
 
 // ListOwnedProjects implements TencentCodeAccountExtras.
-func (p *Provider) ListOwnedProjects(ctx context.Context, page, perPage int) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListOwnedProjects(ctx context.Context, page, perPage int) ([]*model.PlatformRepo, error) {
 	projects, err := walkOrgPages(page, func(page int) ([]*gongfeng.Project, error) {
 		list, _, err := p.client.Projects.ListOwnedProjects(ctx,
 			&gongfeng.ListProjectsOptions{ListOptions: listOptions(page, perPage)})
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListOwnedProjects", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListOwnedProjects", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(projects))
+	result := make([]*model.PlatformRepo, 0, len(projects))
 	for _, pr := range projects {
 		result = append(result, convertProject(pr))
 	}
@@ -253,7 +254,7 @@ func (p *Provider) ListOwnedProjects(ctx context.Context, page, perPage int) ([]
 func (p *Provider) ListSSHKeys(ctx context.Context) ([]*SSHKeyInfo, error) {
 	keys, _, err := p.client.Users.ListSSHKeys(ctx)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListSSHKeys", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListSSHKeys", err)
 	}
 	result := make([]*SSHKeyInfo, 0, len(keys))
 	for _, k := range keys {
@@ -274,7 +275,7 @@ func (p *Provider) CreateSSHKey(ctx context.Context, title, key string) (*SSHKey
 		Key:   gongfeng.Ptr(key),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateSSHKey", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateSSHKey", err)
 	}
 	return &SSHKeyInfo{ID: k.ID, Title: k.Title, Key: k.Key, CreatedAt: k.CreatedAt.Time}, nil
 }
@@ -282,7 +283,7 @@ func (p *Provider) CreateSSHKey(ctx context.Context, title, key string) (*SSHKey
 // DeleteSSHKey implements TencentCodeAccountExtras.
 func (p *Provider) DeleteSSHKey(ctx context.Context, keyID int) error {
 	if _, err := p.client.Users.DeleteSSHKey(ctx, keyID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteSSHKey", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteSSHKey", err)
 	}
 	return nil
 }
@@ -291,7 +292,7 @@ func (p *Provider) DeleteSSHKey(ctx context.Context, keyID int) error {
 func (p *Provider) ListEmails(ctx context.Context) ([]*EmailInfo, error) {
 	emails, _, err := p.client.Users.ListEmails(ctx)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListEmails", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListEmails", err)
 	}
 	result := make([]*EmailInfo, 0, len(emails))
 	for _, e := range emails {
@@ -304,7 +305,7 @@ func (p *Provider) ListEmails(ctx context.Context) ([]*EmailInfo, error) {
 func (p *Provider) CreateEmail(ctx context.Context, email string) (*EmailInfo, error) {
 	e, _, err := p.client.Users.CreateEmail(ctx, &gongfeng.CreateEmailOptions{Email: gongfeng.Ptr(email)})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "CreateEmail", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "CreateEmail", err)
 	}
 	return &EmailInfo{ID: e.ID, Email: e.Email}, nil
 }
@@ -312,7 +313,7 @@ func (p *Provider) CreateEmail(ctx context.Context, email string) (*EmailInfo, e
 // DeleteEmail implements TencentCodeAccountExtras.
 func (p *Provider) DeleteEmail(ctx context.Context, emailID int) error {
 	if _, err := p.client.Users.DeleteEmail(ctx, emailID); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "DeleteEmail", err)
+		return provider.Wrap(model.PlatformTencentCode, "DeleteEmail", err)
 	}
 	return nil
 }

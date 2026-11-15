@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -28,7 +29,7 @@ var corpusUpdate = flag.Bool("corpus-update", false, "rewrite webhook corpus gol
 // the driver usable with zero-value backend structs (the parse path only
 // needs Platform()).
 type WebhookParser interface {
-	ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error)
+	ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error)
 }
 
 // RunWebhookCorpus runs the golden-file webhook corpus under dir: every
@@ -49,7 +50,7 @@ type WebhookParser interface {
 //
 // The driver signs requests with the platform's registered validator and
 // corpusSecret, so signature validation runs end to end.
-func RunWebhookCorpus(t *testing.T, platform provider.Platform, parser WebhookParser, dir string) {
+func RunWebhookCorpus(t *testing.T, platform model.Platform, parser WebhookParser, dir string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -127,7 +128,7 @@ func runCorpusFixture(t *testing.T, v provider.WebhookValidator, parser WebhookP
 	}
 }
 
-func normalizeForGolden(t *testing.T, ev *provider.NormalizedEvent) []byte {
+func normalizeForGolden(t *testing.T, ev *model.NormalizedEvent) []byte {
 	t.Helper()
 	ev.ID = ""
 	ev.Timestamp = time.Time{}

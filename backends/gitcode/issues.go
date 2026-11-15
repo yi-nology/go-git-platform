@@ -6,9 +6,11 @@ import (
 
 	oekiterrors "github.com/oekit/pkg/errors"
 
-	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
-	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
+
+	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListIssues implements provider.IssueManager.
@@ -17,7 +19,7 @@ import (
 // opts.Page == 0 serves the platform's first page in exactly one request;
 // opts.Page > 0 returns exactly that caller-driven page. The int return is
 // len(result), the served rows' count.
-func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*provider.Issue, int, error) {
+func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptions) ([]*model.Issue, int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := gitcode.ListIssuesOptions{
 		ListOptions: gitcode.ListOptions{Page: page, PerPage: perPage},
@@ -33,9 +35,9 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 	}
 	issues, err := p.client.ListIssues(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitCode, "ListIssues", err)
+		return nil, 0, provider.Wrap(model.PlatformGitCode, "ListIssues", err)
 	}
-	result := make([]*provider.Issue, 0, len(issues))
+	result := make([]*model.Issue, 0, len(issues))
 	for _, i := range issues {
 		result = append(result, convertIssue(i))
 	}
@@ -43,20 +45,20 @@ func (p *Provider) ListIssues(ctx context.Context, opts provider.ListIssuesOptio
 }
 
 // GetIssue implements provider.IssueManager.
-func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "GetIssue", number)
+func (p *Provider) GetIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "GetIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, err := p.client.GetIssue(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "GetIssue", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "GetIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // CreateIssue implements provider.IssueManager.
-func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*provider.Issue, error) {
+func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOptions) (*model.Issue, error) {
 	createOpts := gitcode.CreateIssueOptions{
 		Title:     opts.Title,
 		Body:      opts.Body,
@@ -64,7 +66,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 		Labels:    opts.Labels,
 	}
 	if opts.Milestone != "" {
-		m, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "CreateIssue", opts.Milestone)
+		m, err := backendutil.ParseMilestoneNumber(model.PlatformGitCode, "CreateIssue", opts.Milestone)
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +74,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	}
 	issue, err := p.client.CreateIssue(ctx, opts.Owner, opts.Repo, createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateIssue", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -88,8 +90,8 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 // 顺序裁定（brief Step 2）：先发主 update（携带全部置值字段），再发侧
 // 端点清空——混合 set+clear 的一次调用两个请求都会到，且侧端点是最后
 // 一条请求（harness dispatchClear 按「最后一条」断言侧端点形态）。
-func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "UpdateIssue", number)
+func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, opts provider.UpdateIssueOptions) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "UpdateIssue", number)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +102,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 	// 顺序裁定：主 update 先（携带全部置值字段），侧端点清空后。
 	issue, err := p.client.UpdateIssue(ctx, owner, repo, n, plan.update)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateIssue", err)
 	}
 	if err := p.applyIssueClears(ctx, owner, repo, n, plan); err != nil {
 		return nil, err
@@ -149,7 +151,7 @@ func planIssueUpdate(opts provider.UpdateIssueOptions) (issueUpdatePlan, error) 
 			return plan, oekiterrors.Wrap(provider.ErrClearNotSupported, "clear milestone",
 				"platform", "gitcode", "field", "milestone")
 		}
-		m64, err := backendutil.ParseMilestoneNumber(provider.PlatformGitCode, "UpdateIssue", m)
+		m64, err := backendutil.ParseMilestoneNumber(model.PlatformGitCode, "UpdateIssue", m)
 		if err != nil {
 			return plan, err
 		}
@@ -175,40 +177,40 @@ func (p *Provider) applyIssueClears(ctx context.Context, owner, repo string, n i
 		// nil 空集：规范化的 [] 而非 null（patch 传 &nil 切片时
 		// Resolve 返回 nil）。
 		if err := p.client.ReplaceIssueLabels(ctx, owner, repo, n, []string{}); err != nil {
-			return provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
+			return provider.Wrap(model.PlatformGitCode, "UpdateIssue", err)
 		}
 	}
 	if plan.clearAssignees {
 		// A：侧端点 DELETE {"assignees":[]}（删光当前指派人）。
 		if _, err := p.client.RemoveIssueAssignees(ctx, owner, repo, n, []string{}); err != nil {
-			return provider.Wrap(provider.PlatformGitCode, "UpdateIssue", err)
+			return provider.Wrap(model.PlatformGitCode, "UpdateIssue", err)
 		}
 	}
 	return nil
 }
 
 // CloseIssue implements provider.IssueManager.
-func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "CloseIssue", number)
+func (p *Provider) CloseIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "CloseIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, err := p.client.CloseIssue(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CloseIssue", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CloseIssue", err)
 	}
 	return convertIssue(issue), nil
 }
 
 // ReopenIssue implements provider.IssueManager.
-func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*provider.Issue, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "ReopenIssue", number)
+func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) (*model.Issue, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "ReopenIssue", number)
 	if err != nil {
 		return nil, err
 	}
 	issue, err := p.client.ReopenIssue(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ReopenIssue", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ReopenIssue", err)
 	}
 	return convertIssue(issue), nil
 }
@@ -217,8 +219,8 @@ func (p *Provider) ReopenIssue(ctx context.Context, owner, repo, number string) 
 //
 // go-gitcode v0.8.0 exposes the documented page/per_page/order/since query
 // on the issue-comment list endpoint, so the walk runs through the SDK.
-func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "ListIssueComments", number)
+func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number string) ([]*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "ListIssueComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +230,9 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 		})
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueComments", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListIssueComments", err)
 	}
-	result := make([]*provider.IssueComment, 0, len(comments))
+	result := make([]*model.IssueComment, 0, len(comments))
 	for _, c := range comments {
 		result = append(result, convertIssueComment(c))
 	}
@@ -238,14 +240,14 @@ func (p *Provider) ListIssueComments(ctx context.Context, owner, repo, number st
 }
 
 // CreateIssueComment implements provider.IssueManager.
-func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*provider.IssueComment, error) {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "CreateIssueComment", number)
+func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, body string) (*model.IssueComment, error) {
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "CreateIssueComment", number)
 	if err != nil {
 		return nil, err
 	}
 	comment, err := p.client.CreateIssueComment(ctx, owner, repo, n, body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "CreateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "CreateIssueComment", err)
 	}
 	return convertIssueComment(comment), nil
 }
@@ -253,10 +255,10 @@ func (p *Provider) CreateIssueComment(ctx context.Context, owner, repo, number, 
 // UpdateIssueComment implements provider.IssueManager. The edit endpoint
 // addresses the comment directly, so number is unused. The platform only
 // lets the comment's author perform the edit.
-func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*provider.IssueComment, error) {
+func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number string, commentID int64, body string) (*model.IssueComment, error) {
 	comment, err := p.client.UpdateIssueComment(ctx, owner, repo, commentID, body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "UpdateIssueComment", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "UpdateIssueComment", err)
 	}
 	return convertIssueComment(comment), nil
 }
@@ -266,7 +268,7 @@ func (p *Provider) UpdateIssueComment(ctx context.Context, owner, repo, number s
 // permanent; the platform only lets the comment's author perform it.
 func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number string, commentID int64) error {
 	if err := p.client.DeleteIssueComment(ctx, owner, repo, commentID); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "DeleteIssueComment", err)
+		return provider.Wrap(model.PlatformGitCode, "DeleteIssueComment", err)
 	}
 	return nil
 }
@@ -274,7 +276,7 @@ func (p *Provider) DeleteIssueComment(ctx context.Context, owner, repo, number s
 // ListIssueLabels implements provider.IssueManager. go-gitcode v0.8.0
 // exposes the documented page/per_page query on the label-list endpoint,
 // so the walk runs through the SDK (server default is 100 per page).
-func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*provider.IssueLabel, error) {
+func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*model.IssueLabel, error) {
 	var labels []*gitcode.Label
 	labels, err := backendutil.AllPages(func(page int) ([]*gitcode.Label, error) {
 		return p.client.ListIssueLabelsWithOptions(ctx, owner, repo, gitcode.ListOptions{
@@ -282,11 +284,11 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 		})
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListIssueLabels", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListIssueLabels", err)
 	}
-	result := make([]*provider.IssueLabel, 0, len(labels))
+	result := make([]*model.IssueLabel, 0, len(labels))
 	for _, l := range labels {
-		result = append(result, &provider.IssueLabel{
+		result = append(result, &model.IssueLabel{
 			ID:   l.ID,
 			Name: l.Name,
 			// Same canonicalization as convertLabel in labels.go: GitCode
@@ -300,24 +302,24 @@ func (p *Provider) ListIssueLabels(ctx context.Context, owner, repo string) ([]*
 
 // AddIssueLabels implements provider.IssueManager.
 func (p *Provider) AddIssueLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "AddIssueLabels", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "AddIssueLabels", number)
 	if err != nil {
 		return err
 	}
 	if err := p.client.AddIssueLabels(ctx, owner, repo, n, labels); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "AddIssueLabels", err)
+		return provider.Wrap(model.PlatformGitCode, "AddIssueLabels", err)
 	}
 	return nil
 }
 
 // RemoveIssueLabel implements provider.IssueManager.
 func (p *Provider) RemoveIssueLabel(ctx context.Context, owner, repo, number, name string) error {
-	n, err := backendutil.ParseIssueNumber(provider.PlatformGitCode, "RemoveIssueLabel", number)
+	n, err := backendutil.ParseIssueNumber(model.PlatformGitCode, "RemoveIssueLabel", number)
 	if err != nil {
 		return err
 	}
 	if err := p.client.RemoveIssueLabel(ctx, owner, repo, n, name); err != nil {
-		return provider.Wrap(provider.PlatformGitCode, "RemoveIssueLabel", err)
+		return provider.Wrap(model.PlatformGitCode, "RemoveIssueLabel", err)
 	}
 	return nil
 }

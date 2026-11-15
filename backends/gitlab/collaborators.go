@@ -7,13 +7,14 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListCollaborators implements provider.CollaboratorManager over GitLab's
 // project-members API. The endpoint has no caller-facing pagination knobs,
 // so every page is fetched via AllPages (GitLab's page-size ceiling is 100).
-func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
+func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error) {
 	members, err := backendutil.AllPages(func(page int) ([]*gitlab.ProjectMember, error) {
 		list, _, err := p.client.ProjectMembers.ListProjectMembers(pidOf(owner, repo),
 			&gitlab.ListProjectMembersOptions{ListOptions: gitlab.ListOptions{Page: int64(page), PerPage: 100}},
@@ -21,9 +22,9 @@ func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListCollaborators", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListCollaborators", err)
 	}
-	result := make([]*provider.Collaborator, 0, len(members))
+	result := make([]*model.Collaborator, 0, len(members))
 	for _, m := range members {
 		result = append(result, convertMember(m))
 	}
@@ -46,7 +47,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 		},
 		gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "AddCollaborator", err)
+		return provider.Wrap(model.PlatformGitLab, "AddCollaborator", err)
 	}
 	return nil
 }
@@ -60,7 +61,7 @@ func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username
 	}
 	_, err = p.client.ProjectMembers.DeleteProjectMember(pidOf(owner, repo), ids[0], gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "RemoveCollaborator", err)
+		return provider.Wrap(model.PlatformGitLab, "RemoveCollaborator", err)
 	}
 	return nil
 }
@@ -104,15 +105,15 @@ func accessLevelName(level gitlab.AccessLevelValue) string {
 // convertMember maps a gitlab.ProjectMember to the provider collaborator
 // shape; User stays nil (the member payload already carries the flattened
 // user fields).
-func convertMember(m *gitlab.ProjectMember) *provider.Collaborator {
+func convertMember(m *gitlab.ProjectMember) *model.Collaborator {
 	if m == nil {
 		return nil
 	}
-	return &provider.Collaborator{
+	return &model.Collaborator{
 		ID:         m.ID,
 		Username:   m.Username,
 		Permission: accessLevelName(m.AccessLevel),
-		User: &provider.CRUser{
+		User: &model.CRUser{
 			ID:        m.ID,
 			Username:  m.Username,
 			Name:      m.Name,

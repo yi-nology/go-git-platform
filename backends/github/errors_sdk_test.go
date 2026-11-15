@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -22,7 +23,7 @@ func TestWrapSDKRateLimitErrorClassifiesRateLimited(t *testing.T) {
 		Response: &http.Response{StatusCode: http.StatusForbidden},
 		Rate:     github.Rate{Remaining: 0, Reset: github.Timestamp{Time: reset}},
 	}
-	err := provider.Wrap(provider.PlatformGitHub, "ListRepos", rl)
+	err := provider.Wrap(model.PlatformGitHub, "ListRepos", rl)
 	if !provider.IsRateLimited(err) {
 		t.Fatalf("*github.RateLimitError 必须归类 ErrRateLimited, got %v", err)
 	}
@@ -49,7 +50,7 @@ func TestWrapSDKAbuseRateLimitErrorClassifiesRateLimited(t *testing.T) {
 		Response:   &http.Response{StatusCode: http.StatusForbidden},
 		RetryAfter: &retryAfter,
 	}
-	err := provider.Wrap(provider.PlatformGitHub, "CreateIssue", ab)
+	err := provider.Wrap(model.PlatformGitHub, "CreateIssue", ab)
 	if !provider.IsRateLimited(err) {
 		t.Fatalf("*github.AbuseRateLimitError 必须归类 ErrRateLimited, got %v", err)
 	}
@@ -65,7 +66,7 @@ func TestWrapSDKPlainForbiddenStaysForbidden(t *testing.T) {
 		Response: &http.Response{StatusCode: http.StatusForbidden},
 		Message:  "Resource not accessible by integration",
 	}
-	err := provider.Wrap(provider.PlatformGitHub, "ListRepos", er)
+	err := provider.Wrap(model.PlatformGitHub, "ListRepos", er)
 	if !errors.Is(err, provider.ErrForbidden) {
 		t.Fatalf("普通 SDK 403 保持 ErrForbidden, got %v", err)
 	}

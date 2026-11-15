@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	"github.com/oekit/pkg/slicex"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // MutationOutcome 是统一变更结果（2B spec 2026-11-14-phase2b）：自动化按
@@ -85,7 +87,7 @@ const (
 //     CreateWebhook's platform-side default.
 //
 // Multiple existing hooks with the same URL are all replaced by one.
-func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOptions) (EnsureAction, *PlatformWebhook, error) {
+func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOptions) (EnsureAction, *model.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
@@ -97,7 +99,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 		return "", nil, err
 	}
 
-	matches := slicex.Filter(existing, func(h *PlatformWebhook) bool {
+	matches := slicex.Filter(existing, func(h *model.PlatformWebhook) bool {
 		return h != nil && h.URL == opts.URL
 	})
 
@@ -126,7 +128,7 @@ func EnsureWebhook(ctx context.Context, p WebhookManager, opts CreateWebhookOpti
 	})
 	if err != nil {
 		if IsConflict(err) {
-			var prior *PlatformWebhook
+			var prior *model.PlatformWebhook
 			if len(matches) > 0 {
 				prior = matches[0]
 			}
@@ -191,7 +193,7 @@ func equalEvents(a, sortedB []string) bool {
 // WebhookConfigManager (keeps the platform ID, one API round-trip). A
 // manager without the config surface is an error — silently keeping a
 // possibly-stale secret would defeat the mode.
-func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebhookOptions, hook *PlatformWebhook) (EnsureAction, *PlatformWebhook, error) {
+func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebhookOptions, hook *model.PlatformWebhook) (EnsureAction, *model.PlatformWebhook, error) {
 	wcm, ok := p.(WebhookConfigManager)
 	if !ok {
 		return "", nil, errors.New("provider: EnsureSecretAlwaysUpdate requires the manager to also implement WebhookConfigManager")
@@ -214,7 +216,7 @@ func ensureWebhookSecret(ctx context.Context, p WebhookManager, opts CreateWebho
 // Provider (type-assert it at the call site) or test double.
 // 契约防御：Get 违约返回 (nil, nil)（iface 契约禁止）时视为缺席走 Create
 // 而非 Update——见 iface_branch_protection.go Get 的契约注释。
-func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, owner, repo string, opts CreateBranchProtectionOptions) (EnsureAction, *BranchProtection, error) {
+func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, owner, repo string, opts CreateBranchProtectionOptions) (EnsureAction, *model.BranchProtection, error) {
 	cur, err := bpm.GetBranchProtection(ctx, owner, repo, opts.BranchName)
 	if err == nil && cur != nil {
 		if cur.RequiredApprovingReviews == opts.RequiredApprovingReviews &&
@@ -258,7 +260,7 @@ func EnsureBranchProtection(ctx context.Context, bpm BranchProtectionManager, ow
 // Existing keys are matched by title; a title collision with different
 // key material or read-only flag replaces the key (the manager interface
 // has no update: delete + re-add), which changes its platform ID.
-func EnsureDeployKey(ctx context.Context, dkm DeploymentKeyManager, owner, repo string, opts AddDeployKeyOptions) (EnsureAction, *DeployKey, error) {
+func EnsureDeployKey(ctx context.Context, dkm DeploymentKeyManager, owner, repo string, opts AddDeployKeyOptions) (EnsureAction, *model.DeployKey, error) {
 	existing, err := dkm.ListDeployKeys(ctx, owner, repo)
 	if err != nil {
 		return "", nil, err

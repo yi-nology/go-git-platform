@@ -33,9 +33,9 @@ var ErrPageBudgetExceeded = oekiterrors.New("page budget exceeded before an empt
 // page options (and should set an explicit PerPage so page sizes stay
 // stable across the walk):
 //
-//	err := provider.Each(ctx, func(ctx context.Context, page int) ([]provider.PlatformRepo, error) {
+//	err := provider.Each(ctx, func(ctx context.Context, page int) ([]model.PlatformRepo, error) {
 //	    return p.ListRepos(ctx, provider.ListRepoOptions{Owner: "org", Page: page, PerPage: 100})
-//	}, func(r provider.PlatformRepo) error {
+//	}, func(r model.PlatformRepo) error {
 //	    fmt.Println(r.FullName)
 //	    return nil
 //	})

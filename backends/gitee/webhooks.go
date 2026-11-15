@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	gitee "github.com/next-bin/go-gitee/gitee"
 
@@ -27,7 +28,7 @@ var giteeHookEventFlags = map[string]string{
 }
 
 // CreateWebhook implements provider.WebhookManager.
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
@@ -52,16 +53,16 @@ func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhoo
 	}
 	hook, _, err := p.client.Webhooks.Create(ctx, backendutil.Esc(opts.Owner), backendutil.Esc(opts.Repo), createOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CreateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CreateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	hook, _, err := p.client.Webhooks.Get(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -70,7 +71,7 @@ func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID
 // endpoint is boolean-flag based: omitted flags mean "unchanged", so a
 // non-nil Events slice sets every flag of giteeHookEventFlags explicitly
 // (true for members, false for the rest) to express removal.
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	em := map[string]bool{}
 	for _, e := range opts.Events {
 		em[e] = true
@@ -91,7 +92,7 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 	}
 	hook, _, err := p.client.Webhooks.Edit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID, updateOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "UpdateWebhook", err)
+		return nil, provider.Wrap(model.PlatformGitee, "UpdateWebhook", err)
 	}
 	return convertHook(hook), nil
 }
@@ -100,18 +101,18 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhookID int64) error {
 	_, err := p.client.Webhooks.Delete(ctx, backendutil.Esc(owner), backendutil.Esc(repo), webhookID)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitee, "DeleteWebhook", err)
+		return provider.Wrap(model.PlatformGitee, "DeleteWebhook", err)
 	}
 	return nil
 }
 
 // ListWebhooks implements provider.WebhookManager.
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	hooks, _, err := p.client.Webhooks.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &gitee.ListOptions{})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListWebhooks", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
 		result = append(result, convertHook(h))
 	}
@@ -123,8 +124,8 @@ func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*pro
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitee, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformGitee, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitee, r, secret); err != nil {
+		return provider.Wrap(model.PlatformGitee, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
@@ -132,7 +133,7 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 // ParseWebhookEvent implements provider.WebhookManager.
 // giteeEnvelope is Gitee's webhook dialect for the shared envelope steps.
 var giteeEnvelope = provider.WebhookEnvelope{
-	Platform:     provider.PlatformGitee,
+	Platform:     model.PlatformGitee,
 	EventHeaders: []string{"X-Gitee-Event"},
 	IDPrefix:     "ge",
 	// 投递 ID(重投时值不变)⇒ 真幂等键;没有该头时回落到本地合成的 ID。
@@ -163,7 +164,7 @@ func normalizeGiteeEventType(raw string) string {
 	}
 }
 
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	eventType, body, err := giteeEnvelope.Read(r, secret)
 	if err != nil {
 		return nil, err
@@ -212,11 +213,11 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		} `json:"issue"`
 	}
 	if err := json.Unmarshal(body, &pl); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ParseWebhookEvent", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ParseWebhookEvent", err)
 	}
 
 	er := provider.BuildEventRepo(pl.Repository.FullName)
-	actor := &provider.CRUser{ID: int64(pl.User.ID), Username: pl.User.Login, Name: pl.User.Name}
+	actor := &model.CRUser{ID: int64(pl.User.ID), Username: pl.User.Login, Name: pl.User.Name}
 
 	event := giteeEnvelope.NewEventWithID(r, int64(pl.Number), body)
 	event.Actor = actor
@@ -227,7 +228,7 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		action := provider.NormalizeCRAction(pl.Action, pl.State == "merged")
 		event.Type = provider.EventTypeCR + action
 		event.Action = action
-		event.CR = &provider.ChangeRequest{
+		event.CR = &model.ChangeRequest{
 			Number:       strconv.Itoa(pl.Number),
 			Title:        pl.Title,
 			Description:  pl.Body,
@@ -270,14 +271,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 	case "note", "comment":
 		event.Type = provider.EventTypeComment + provider.CommentActionCreated
 		event.Action = provider.CommentActionCreated
-		event.Comment = &provider.IssueComment{Body: pl.Note, Author: actor}
+		event.Comment = &model.IssueComment{Body: pl.Note, Author: actor}
 		if pl.NoteableType == "PullRequest" && pl.Number != 0 {
-			event.CR = &provider.ChangeRequest{Number: strconv.Itoa(pl.Number)}
+			event.CR = &model.ChangeRequest{Number: strconv.Itoa(pl.Number)}
 		}
 		if pl.Issue != nil {
-			event.Issue = &provider.Issue{
+			event.Issue = &model.Issue{
 				Number: pl.Issue.Number, Title: pl.Issue.Title, Body: pl.Issue.Body,
-				Author: &provider.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
+				Author: &model.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
 				WebURL: pl.Issue.HTMLURL, CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
 			}
 		}
@@ -286,14 +287,14 @@ func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.
 		event.Type = provider.EventTypeIssue + action
 		event.Action = action
 		if pl.Issue != nil {
-			state := provider.IssueStateOpen
+			state := model.IssueStateOpen
 			if strings.HasPrefix(pl.Issue.State, "closed") || strings.HasPrefix(pl.Issue.State, "reject") {
-				state = provider.IssueStateClosed
+				state = model.IssueStateClosed
 			}
-			event.Issue = &provider.Issue{
+			event.Issue = &model.Issue{
 				Number: pl.Issue.Number, Title: pl.Issue.Title, Body: pl.Issue.Body,
 				State:  state,
-				Author: &provider.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
+				Author: &model.CRUser{ID: int64(pl.Issue.User.ID), Username: pl.Issue.User.Login},
 				WebURL: pl.Issue.HTMLURL, CreatedAt: pl.Issue.CreatedAt, UpdatedAt: pl.Issue.UpdatedAt,
 			}
 		}

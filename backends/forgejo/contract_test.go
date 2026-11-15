@@ -7,13 +7,14 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	"github.com/yi-nology/go-git-platform/backends/forgejo"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestForgejo_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "Forgejo",
-		Platform: provider.PlatformForgejo,
+		Platform: model.PlatformForgejo,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			wrapper := contracttest.VersionProxy(cfg.BaseURL, `{"version":"8.0.0"}`)
 			t.Cleanup(wrapper.Close)
@@ -163,5 +164,5 @@ func TestForgejo_WebhookCorpus(t *testing.T) {
 	// (platform, event header), so the corpus runs against a real provider
 	// rather than a zero-value struct.
 	p := newTestProvider(t, httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})))
-	contracttest.RunWebhookCorpus(t, provider.PlatformForgejo, p, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformForgejo, p, "testdata/webhooks")
 }

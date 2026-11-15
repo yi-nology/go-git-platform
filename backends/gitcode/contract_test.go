@@ -11,13 +11,14 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	gitcode "github.com/yi-nology/go-git-platform/backends/gitcode"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitCode_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "GitCode",
-		Platform: provider.PlatformGitCode,
+		Platform: model.PlatformGitCode,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			p, err := provider.NewProvider(cfg)
 			if err != nil {
@@ -174,7 +175,7 @@ func TestGitCode_WebhookCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gitcode.New: %v", err)
 	}
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitCode, p, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformGitCode, p, "testdata/webhooks")
 }
 
 // TestGitCode_TriStateSideEndpointWire 钉侧端点清空的真实 wire 形态——补
@@ -207,7 +208,7 @@ func TestGitCode_TriStateSideEndpointWire(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	p, err := provider.NewProvider(provider.Config{Platform: provider.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
+	p, err := provider.NewProvider(provider.Config{Platform: model.PlatformGitCode, BaseURL: srv.URL, Token: "t"})
 	if err != nil {
 		t.Fatalf("NewProvider: %v", err)
 	}

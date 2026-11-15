@@ -7,6 +7,7 @@ import (
 
 	sdkgithub "github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -14,7 +15,7 @@ import (
 // deployments API is the only wire with a manual create + status state
 // machine; GitLab's deployment records are CI-produced without a manual
 // status wire, so absence is expressed by not declaring).
-func (p *Provider) CreateDeployment(ctx context.Context, owner, repo, ref, environment string, opts provider.CreateDeploymentOptions) (*provider.Deployment, error) {
+func (p *Provider) CreateDeployment(ctx context.Context, owner, repo, ref, environment string, opts provider.CreateDeploymentOptions) (*model.Deployment, error) {
 	var payload any
 	if len(opts.Payload) > 0 {
 		payload = opts.Payload
@@ -32,7 +33,7 @@ func (p *Provider) CreateDeployment(ctx context.Context, owner, repo, ref, envir
 	}
 	dep, _, err := p.client.Repositories.CreateDeployment(ctx, owner, repo, body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateDeployment", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateDeployment", err)
 	}
 	return convertDeployment(dep), nil
 }
@@ -43,16 +44,16 @@ func (p *Provider) CreateDeployment(ctx context.Context, owner, repo, ref, envir
 // total, and Response.LastPage is a page number (0 on single-page
 // responses), not an item count — using it here fed callers 0 or a page
 // index instead of a count.
-func (p *Provider) ListDeployments(ctx context.Context, owner, repo, environment string, page, perPage int) ([]*provider.Deployment, int, error) {
+func (p *Provider) ListDeployments(ctx context.Context, owner, repo, environment string, page, perPage int) ([]*model.Deployment, int, error) {
 	opts := &sdkgithub.DeploymentsListOptions{
 		Environment: environment,
 		ListOptions: sdkgithub.ListOptions{Page: page, PerPage: perPage},
 	}
 	deps, _, err := p.client.Repositories.ListDeployments(ctx, owner, repo, opts)
 	if err != nil {
-		return nil, 0, provider.Wrap(provider.PlatformGitHub, "ListDeployments", err)
+		return nil, 0, provider.Wrap(model.PlatformGitHub, "ListDeployments", err)
 	}
-	out := make([]*provider.Deployment, 0, len(deps))
+	out := make([]*model.Deployment, 0, len(deps))
 	for _, d := range deps {
 		if d != nil {
 			out = append(out, convertDeployment(d))
@@ -64,7 +65,7 @@ func (p *Provider) ListDeployments(ctx context.Context, owner, repo, environment
 // CreateDeploymentStatus implements provider.DeploymentManager.
 func (p *Provider) CreateDeploymentStatus(ctx context.Context, owner, repo string, deploymentID int64, opts provider.DeploymentStatusOptions) error {
 	if !isValidDeploymentState(opts.State) {
-		return provider.New(provider.PlatformGitHub, "CreateDeploymentStatus", http.StatusUnprocessableEntity,
+		return provider.New(model.PlatformGitHub, "CreateDeploymentStatus", http.StatusUnprocessableEntity,
 			fmt.Sprintf("invalid state %q (pending|in_progress|queued|success|failure|error|canceled|inactive)", opts.State))
 	}
 	body := sdkgithub.DeploymentStatusRequest{
@@ -75,7 +76,7 @@ func (p *Provider) CreateDeploymentStatus(ctx context.Context, owner, repo strin
 		AutoInactive:   opts.AutoInactive,
 	}
 	if _, _, err := p.client.Repositories.CreateDeploymentStatus(ctx, owner, repo, deploymentID, body); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "CreateDeploymentStatus", err)
+		return provider.Wrap(model.PlatformGitHub, "CreateDeploymentStatus", err)
 	}
 	return nil
 }
@@ -92,11 +93,11 @@ func isValidDeploymentState(s string) bool {
 }
 
 // convertDeployment maps the SDK deployment onto the unified shape.
-func convertDeployment(d *sdkgithub.Deployment) *provider.Deployment {
+func convertDeployment(d *sdkgithub.Deployment) *model.Deployment {
 	if d == nil {
 		return nil
 	}
-	return &provider.Deployment{
+	return &model.Deployment{
 		ID:          d.GetID(),
 		SHA:         d.GetSHA(),
 		Ref:         d.GetRef(),

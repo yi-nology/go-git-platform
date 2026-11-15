@@ -6,7 +6,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/yi-nology/go-git-platform/pkg/projection"
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/model/projection"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -18,7 +19,7 @@ type ownerRepo struct {
 }
 
 type getRepoOut struct {
-	Repo *provider.PlatformRepo `json:"repo"`
+	Repo *model.PlatformRepo `json:"repo"`
 }
 
 type listReposIn struct {
@@ -42,7 +43,7 @@ type getFileOut struct {
 type listBranchesIn ownerRepo
 
 type listBranchesOut struct {
-	Branches []*provider.PlatformBranch `json:"branches"`
+	Branches []*model.PlatformBranch `json:"branches"`
 }
 
 type listCRsIn struct {
@@ -58,8 +59,8 @@ type listCRsIn struct {
 }
 
 type listCRsOut struct {
-	Total int                       `json:"total"`
-	CRs   []*provider.ChangeRequest `json:"crs,omitempty"`
+	Total int                    `json:"total"`
+	CRs   []*model.ChangeRequest `json:"crs,omitempty"`
 	// Projected carries the trimmed documents when fields was given.
 	Projected []map[string]any `json:"projected,omitempty"`
 }
@@ -99,7 +100,7 @@ func registerCore(s *mcp.Server, st *state) {
 		return getRepoOut{Repo: repo}, err
 	})
 
-	add(s, st, "list_repos", "List repositories", "List the repositories owned by an account.", false, func(ctx context.Context, in listReposIn) ([]*provider.PlatformRepo, error) {
+	add(s, st, "list_repos", "List repositories", "List the repositories owned by an account.", false, func(ctx context.Context, in listReposIn) ([]*model.PlatformRepo, error) {
 		return st.p.ListRepos(ctx, provider.ListRepoOptions{Owner: in.Owner, Page: in.Page, PerPage: perPage(in.PerPage)})
 	})
 
@@ -119,7 +120,7 @@ func registerCore(s *mcp.Server, st *state) {
 		}
 		opts := provider.ListCROptions{Owner: in.Owner, Repo: in.Repo, Page: in.Page, PerPage: perPage(in.PerPage)}
 		if in.State != "" {
-			opts.State = provider.CRState(in.State)
+			opts.State = model.CRState(in.State)
 		}
 		crs, total, err := st.p.ListCRs(ctx, opts)
 		if err != nil {
@@ -142,19 +143,19 @@ func registerCore(s *mcp.Server, st *state) {
 		return listCRsOut{Total: totalCount, Projected: trimmed}, nil
 	})
 
-	add(s, st, "get_cr", "Get change request", "Fetch one pull/merge request with its full metadata.", false, func(ctx context.Context, in getCRIn) (*provider.ChangeRequest, error) {
+	add(s, st, "get_cr", "Get change request", "Fetch one pull/merge request with its full metadata.", false, func(ctx context.Context, in getCRIn) (*model.ChangeRequest, error) {
 		return st.p.GetCR(ctx, in.Owner, in.Repo, in.Number)
 	})
 
-	add(s, st, "get_cr_files", "Get change request files", "List the files changed by a pull/merge request with patch text.", false, func(ctx context.Context, in getCRIn) ([]*provider.ChangedFile, error) {
+	add(s, st, "get_cr_files", "Get change request files", "List the files changed by a pull/merge request with patch text.", false, func(ctx context.Context, in getCRIn) ([]*model.ChangedFile, error) {
 		return st.p.GetCRFiles(ctx, in.Owner, in.Repo, in.Number)
 	})
 
-	add(s, st, "get_commit", "Get commit", "Fetch one commit's metadata, message, and files.", false, func(ctx context.Context, in getCommitIn) (*provider.CommitInfo, error) {
+	add(s, st, "get_commit", "Get commit", "Fetch one commit's metadata, message, and files.", false, func(ctx context.Context, in getCommitIn) (*model.CommitInfo, error) {
 		return st.p.GetCommit(ctx, in.Owner, in.Repo, in.SHA)
 	})
 
-	add(s, st, "list_commits", "List commits", "List a repository's commits (newest first), optionally on one branch.", false, func(ctx context.Context, in listCommitsIn) ([]*provider.CommitInfo, error) {
+	add(s, st, "list_commits", "List commits", "List a repository's commits (newest first), optionally on one branch.", false, func(ctx context.Context, in listCommitsIn) ([]*model.CommitInfo, error) {
 		return st.p.ListCommits(ctx, in.Owner, in.Repo, provider.ListCommitsOptions{Branch: in.Branch, Page: in.Page, PerPage: perPage(in.PerPage)})
 	})
 }

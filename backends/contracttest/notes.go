@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -57,7 +58,7 @@ func testNotesSuite(t *testing.T, h Harness) {
 // NotesHarness bundles inputs for the CR-note suite.
 type NotesHarness struct {
 	Name           string
-	Platform       provider.Platform
+	Platform       model.Platform
 	NewProvider    func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse   string
 	MutateResponse string

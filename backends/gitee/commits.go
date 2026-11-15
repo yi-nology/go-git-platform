@@ -6,14 +6,15 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // GetCommit implements provider.CommitManager.
-func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*provider.CommitInfo, error) {
+func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*model.CommitInfo, error) {
 	commit, _, err := p.client.Repositories.GetCommit(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(sha))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "GetCommit", err)
+		return nil, provider.Wrap(model.PlatformGitee, "GetCommit", err)
 	}
 	return convertRepoCommitWithFiles(commit), nil
 }
@@ -27,15 +28,15 @@ func (p *Provider) GetCommit(ctx context.Context, owner, repo, sha string) (*pro
 // empty page — so every matching commit is returned. In full-fetch mode
 // opts.PerPage only sizes the underlying requests and defaults to Gitee's
 // per_page maximum of 100.
-func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*provider.CommitInfo, error) {
+func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts provider.ListCommitsOptions) ([]*model.CommitInfo, error) {
 	// 裸串透传平台前先经共享解析器校验（issue #52）：时间戳选项的接受/
 	// 拒绝面必须全后端一致——RFC3339 之外的值在这里报 ErrInvalidInput，
 	// 与解析型后端同判，而不是把「平台自己报什么」交给 wire。
 	if _, err := provider.ParseTimestamp("Since", opts.Since); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 	}
 	if _, err := provider.ParseTimestamp("Until", opts.Until); err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 	}
 	baseOpts := gitee.CommitListOptions{}
 	if opts.Branch != "" {
@@ -55,7 +56,7 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 		baseOpts.PerPage = gitee.Int(perPage)
 		list, _, err := p.client.Repositories.ListCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), &baseOpts)
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 		}
 		commits = list
 	} else {
@@ -68,10 +69,10 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 			return list, err
 		})
 		if err != nil {
-			return nil, provider.Wrap(provider.PlatformGitee, "ListCommits", err)
+			return nil, provider.Wrap(model.PlatformGitee, "ListCommits", err)
 		}
 	}
-	result := make([]*provider.CommitInfo, 0, len(commits))
+	result := make([]*model.CommitInfo, 0, len(commits))
 	for _, c := range commits {
 		result = append(result, convertRepoCommit(c))
 	}
@@ -79,12 +80,12 @@ func (p *Provider) ListCommits(ctx context.Context, owner, repo string, opts pro
 }
 
 // CompareCommits implements provider.CommitManager.
-func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*provider.CompareResult, error) {
+func (p *Provider) CompareCommits(ctx context.Context, owner, repo, base, head string) (*model.CompareResult, error) {
 	cmp, _, err := p.client.Repositories.CompareCommits(ctx, backendutil.Esc(owner), backendutil.Esc(repo), backendutil.Esc(base), backendutil.Esc(head), nil)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "CompareCommits", err)
+		return nil, provider.Wrap(model.PlatformGitee, "CompareCommits", err)
 	}
-	result := &provider.CompareResult{}
+	result := &model.CompareResult{}
 	if cmp.Commits != nil {
 		result.TotalCommits = len(*cmp.Commits)
 		for _, c := range *cmp.Commits {

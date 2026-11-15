@@ -11,6 +11,7 @@ import (
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -23,14 +24,14 @@ import (
 // username, State: approved}, taken from rules[].approved_by. There is no
 // per-approval ID on the wire, so every synthesized review shares the MR IID
 // as its ID, and an approver listed under several rules yields one review.
-func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]provider.Review, error) {
-	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "ListReviews", number)
+func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) ([]model.Review, error) {
+	iid, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "ListReviews", number)
 	if err != nil {
 		return nil, err
 	}
 	state, _, err := p.client.MergeRequestApprovals.GetApprovalState(pidOf(owner, repo), iid, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListReviews", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListReviews", err)
 	}
 	return approvalStateReviews(state, iid), nil
 }
@@ -41,18 +42,18 @@ func (p *Provider) ListReviews(ctx context.Context, owner, repo, number string) 
 // ListReviews. GitLab approvals expose no per-review IDs, so reviewID cannot
 // be matched; this returns the first synthesized approver review as an
 // approximation. When nobody has approved yet the call reports NotFound.
-func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*provider.Review, error) {
-	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "GetReview", number)
+func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, reviewID int64) (*model.Review, error) {
+	iid, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "GetReview", number)
 	if err != nil {
 		return nil, err
 	}
 	state, _, err := p.client.MergeRequestApprovals.GetApprovalState(pidOf(owner, repo), iid, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetReview", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetReview", err)
 	}
 	reviews := approvalStateReviews(state, iid)
 	if len(reviews) == 0 {
-		return nil, provider.New(provider.PlatformGitLab, "GetReview", http.StatusNotFound, "no approvals")
+		return nil, provider.New(model.PlatformGitLab, "GetReview", http.StatusNotFound, "no approvals")
 	}
 	return &reviews[0], nil
 }
@@ -72,8 +73,8 @@ func (p *Provider) GetReview(ctx context.Context, owner, repo, number string, re
 // 后端从未生效。position 用 MR diff_refs 三 SHA + new_path/new_line（模型给
 // 的是新文件行号）；单条 discussion 失败（行号不在 diff hunk 内等 422）按条
 // 跳过不整单失败；总结 note 照发保留评审事件语义。
-func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
-	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "CreateReview", number)
+func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
+	iid, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "CreateReview", number)
 	if err != nil {
 		return nil, err
 	}
@@ -87,16 +88,16 @@ func (p *Provider) CreateReview(ctx context.Context, owner, repo, number string,
 }
 
 // createReviewWithComments 逐条建 position discussion + 总结 note。
-func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+func (p *Provider) createReviewWithComments(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
 	mr, _, err := p.client.MergeRequests.GetMergeRequest(pidOf(owner, repo), iid, nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateReview", err)
 	}
 	refs := mr.DiffRefs
 	if refs.HeadSha == "" || refs.BaseSha == "" {
 		p.logger.Warn("gitlab.CreateReview: diff_refs 缺失，行内评论降级纯评论",
 			"base", refs.BaseSha, "head", refs.HeadSha, "start", refs.StartSha)
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview",
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateReview",
 			errors.New("mr diff_refs 缺失，无法定位行内评论"))
 	}
 	p.logger.Info("gitlab.CreateReview: inline comments path", "comments", len(opts.Comments))
@@ -220,11 +221,11 @@ func parseDiffHunk(diff string) mrDiffHunk {
 }
 
 // createNoteReview 纯评论评审（无行内时的原路径）。
-func (p *Provider) createNoteReview(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*provider.ReviewResult, error) {
+func (p *Provider) createNoteReview(ctx context.Context, owner, repo string, iid int64, opts provider.CreateReviewOptions) (*model.ReviewResult, error) {
 	note, _, err := p.client.Notes.CreateMergeRequestNote(pidOf(owner, repo), iid,
 		&gitlab.CreateMergeRequestNoteOptions{Body: new(opts.Body)}, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateReview", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateReview", err)
 	}
 	return convertNoteReviewResult(note), nil
 }
@@ -233,7 +234,7 @@ func (p *Provider) createNoteReview(ctx context.Context, owner, repo string, iid
 // are resolved to user IDs via the Users API (cached) and written through
 // UpdateMergeRequest's reviewer_ids.
 func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number string, reviewers []string) error {
-	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "RequestReviewers", number)
+	iid, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "RequestReviewers", number)
 	if err != nil {
 		return err
 	}
@@ -246,7 +247,7 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 	}
 	if _, _, err := p.client.MergeRequests.UpdateMergeRequest(pidOf(owner, repo), iid,
 		&gitlab.UpdateMergeRequestOptions{ReviewerIDs: &ids}, gitlab.WithContext(ctx)); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "RequestReviewers", err)
+		return provider.Wrap(model.PlatformGitLab, "RequestReviewers", err)
 	}
 	return nil
 }
@@ -258,12 +259,12 @@ func (p *Provider) RequestReviewers(ctx context.Context, owner, repo, number str
 // individual review objects, so reviewID is not addressable and the
 // dismissal message has no GitLab equivalent (ignored).
 func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string, reviewID int64, message string) error {
-	iid, err := backendutil.ParsePRNumber64(provider.PlatformGitLab, "DismissReview", number)
+	iid, err := backendutil.ParsePRNumber64(model.PlatformGitLab, "DismissReview", number)
 	if err != nil {
 		return err
 	}
 	if _, err := p.client.MergeRequestApprovals.UnapproveMergeRequest(pidOf(owner, repo), iid, gitlab.WithContext(ctx)); err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DismissReview", err)
+		return provider.Wrap(model.PlatformGitLab, "DismissReview", err)
 	}
 	return nil
 }
@@ -272,8 +273,8 @@ func (p *Provider) DismissReview(ctx context.Context, owner, repo, number string
 // state: one approved review per distinct approver listed in
 // rules[].approved_by, each keyed by the MR IID because GitLab approvals
 // carry no per-approval IDs.
-func approvalStateReviews(state *gitlab.MergeRequestApprovalState, mrIID int64) []provider.Review {
-	reviews := make([]provider.Review, 0)
+func approvalStateReviews(state *gitlab.MergeRequestApprovalState, mrIID int64) []model.Review {
+	reviews := make([]model.Review, 0)
 	if state == nil {
 		return reviews
 	}
@@ -287,10 +288,10 @@ func approvalStateReviews(state *gitlab.MergeRequestApprovalState, mrIID int64) 
 				continue
 			}
 			seen[approver.Username] = true
-			reviews = append(reviews, provider.Review{
+			reviews = append(reviews, model.Review{
 				ID:    mrIID,
 				User:  approver.Username,
-				State: provider.ReviewStateApproved,
+				State: model.ReviewStateApproved,
 			})
 		}
 	}
@@ -298,12 +299,12 @@ func approvalStateReviews(state *gitlab.MergeRequestApprovalState, mrIID int64) 
 }
 
 // convertNoteReviewResult maps the merge-request note backing a comment-style
-// review to a provider.ReviewResult (ID = note ID).
-func convertNoteReviewResult(note *gitlab.Note) *provider.ReviewResult {
+// review to a model.ReviewResult (ID = note ID).
+func convertNoteReviewResult(note *gitlab.Note) *model.ReviewResult {
 	if note == nil {
 		return nil
 	}
-	return &provider.ReviewResult{
+	return &model.ReviewResult{
 		ID:   strconv.FormatInt(note.ID, 10),
 		Body: note.Body,
 		User: convertNoteAuthor(note.Author),

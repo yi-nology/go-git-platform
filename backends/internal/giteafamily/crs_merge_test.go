@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -37,7 +38,7 @@ func (f *fakePRPort) ListPullRequestCommits(context.Context, string, string, int
 func TestMergeCR_Non2xxWithoutErrorIsFailure(t *testing.T) {
 	// go-gitea 对空 diff PR 的 405 不置 err——若只看 err 会把"未合并"当成功，
 	// 上层状态机谎报 MERGED（实测 bug）。非 2xx 必须转错误。
-	fam := &Family{Platform: provider.PlatformGitea}
+	fam := &Family{Platform: model.PlatformGitea}
 	port := &fakePRPort{
 		mergeStatus: 405,
 		mergeErr:    nil,
@@ -50,7 +51,7 @@ func TestMergeCR_Non2xxWithoutErrorIsFailure(t *testing.T) {
 }
 
 func TestMergeCR_405AlreadyMergedRecovers(t *testing.T) {
-	fam := &Family{Platform: provider.PlatformGitea}
+	fam := &Family{Platform: model.PlatformGitea}
 	port := &fakePRPort{
 		mergeStatus: 405,
 		mergeErr:    nil,
@@ -66,7 +67,7 @@ func TestMergeCR_405AlreadyMergedRecovers(t *testing.T) {
 }
 
 func TestMergeCR_2xxSucceeds(t *testing.T) {
-	fam := &Family{Platform: provider.PlatformGitea}
+	fam := &Family{Platform: model.PlatformGitea}
 	port := &fakePRPort{
 		mergeStatus: 200,
 		pr:          &FamilyPullRequest{Index: 1, State: "closed", HasMerged: true},
@@ -81,7 +82,7 @@ func TestMergeCR_2xxSucceeds(t *testing.T) {
 // empty/nil case must not reach the port at all (UpdateCROptions semantics:
 // empty = unchanged).
 func TestUpdateCR_AssigneesPassThrough(t *testing.T) {
-	fam := &Family{Platform: provider.PlatformGitea}
+	fam := &Family{Platform: model.PlatformGitea}
 	port := &fakePRPort{pr: &FamilyPullRequest{Index: 1, State: "open"}}
 
 	if _, err := UpdateCR(context.Background(), *fam, port, "o", "r", "1",

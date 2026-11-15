@@ -5,13 +5,14 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	gitee "github.com/yi-nology/go-git-platform/backends/gitee"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func TestGitee_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "Gitee",
-		Platform: provider.PlatformGitee,
+		Platform: model.PlatformGitee,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			p, err := provider.NewProvider(cfg)
 			if err != nil {
@@ -143,5 +144,5 @@ func TestGitee_Contract(t *testing.T) {
 }
 
 func TestGitee_WebhookCorpus(t *testing.T) {
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitee, &gitee.Provider{}, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformGitee, &gitee.Provider{}, "testdata/webhooks")
 }

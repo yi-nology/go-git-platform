@@ -22,6 +22,7 @@ import (
 	"time"
 
 	_ "github.com/yi-nology/go-git-platform/backends/all" // register every platform
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -30,9 +31,9 @@ func main() {
 	if token == "" {
 		log.Fatal("set PLATFORM_TOKEN to run this example")
 	}
-	platform := provider.Platform(os.Getenv("PLATFORM"))
+	platform := model.Platform(os.Getenv("PLATFORM"))
 	if platform == "" {
-		platform = provider.PlatformGitHub
+		platform = model.PlatformGitHub
 	}
 	owner := os.Getenv("PLATFORM_OWNER")
 	if owner == "" {
@@ -54,10 +55,10 @@ func main() {
 	// callback sees items as they arrive, and a platform that ignores the
 	// page parameter trips ErrPageBudgetExceeded instead of spinning.
 	var count, pages int
-	err = provider.Each(ctx, func(ctx context.Context, page int) ([]*provider.PlatformRepo, error) {
+	err = provider.Each(ctx, func(ctx context.Context, page int) ([]*model.PlatformRepo, error) {
 		pages++
 		return p.ListRepos(ctx, provider.ListRepoOptions{Owner: owner, Page: page, PerPage: 100})
-	}, func(r *provider.PlatformRepo) error {
+	}, func(r *model.PlatformRepo) error {
 		count++
 		if count <= 3 {
 			fmt.Printf("  %s (stars=%d archived=%v)\n", r.FullName, r.Stars, r.Archived)

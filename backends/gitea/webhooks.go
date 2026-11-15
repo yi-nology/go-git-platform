@@ -5,11 +5,12 @@ import (
 	"net/http"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateWebhook implements provider.WebhookManager.
-func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) CreateWebhook(ctx context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	return giteafamily.CreateWebhook(ctx, p.family, p.ports, opts)
 }
 
@@ -19,17 +20,17 @@ func (p *Provider) DeleteWebhook(ctx context.Context, owner, repo string, webhoo
 }
 
 // ListWebhooks implements provider.WebhookManager.
-func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func (p *Provider) ListWebhooks(ctx context.Context, owner, repo string) ([]*model.PlatformWebhook, error) {
 	return giteafamily.ListWebhooks(ctx, p.family, p.ports, owner, repo)
 }
 
 // GetWebhook implements provider.WebhookConfigManager.
-func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func (p *Provider) GetWebhook(ctx context.Context, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	return giteafamily.GetWebhook(ctx, p.family, p.ports, owner, repo, webhookID)
 }
 
 // UpdateWebhook implements provider.WebhookConfigManager.
-func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	return giteafamily.UpdateWebhook(ctx, p.family, p.ports, owner, repo, webhookID, opts)
 }
 
@@ -38,14 +39,14 @@ func (p *Provider) UpdateWebhook(ctx context.Context, owner, repo string, webhoo
 // scheme has exactly one implementation (shared with contracttest);
 // notably an empty secret is rejected rather than silently accepted.
 func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) error {
-	if err := provider.ValidateWebhookWithRegistry(provider.PlatformGitea, r, secret); err != nil {
-		return provider.Wrap(provider.PlatformGitea, "ValidateWebhookSignature", err)
+	if err := provider.ValidateWebhookWithRegistry(model.PlatformGitea, r, secret); err != nil {
+		return provider.Wrap(model.PlatformGitea, "ValidateWebhookSignature", err)
 	}
 	return nil
 }
 
 // ParseWebhookEvent implements provider.WebhookManager.
-func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func (p *Provider) ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	return giteafamily.ParseWebhookEvent(p.family, r, secret)
 }
 

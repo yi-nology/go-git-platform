@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -38,11 +40,11 @@ func registerProtection(s *mcp.Server, st *state) {
 	add(s, st, "list_branch_protections", "List branch protections", "List the branch protection rules of a repository.", false, func(ctx context.Context, in struct {
 		Owner string `json:"owner"`
 		Repo  string `json:"repo"`
-	}) ([]*provider.BranchProtection, error) {
+	}) ([]*model.BranchProtection, error) {
 		return bpm.ListBranchProtections(ctx, in.Owner, in.Repo)
 	})
 
-	add(s, st, "get_branch_protection", "Get branch protection", "Fetch the protection rule of one branch (missing rule = empty result, not an error).", false, func(ctx context.Context, in branchNameIn) (*provider.BranchProtection, error) {
+	add(s, st, "get_branch_protection", "Get branch protection", "Fetch the protection rule of one branch (missing rule = empty result, not an error).", false, func(ctx context.Context, in branchNameIn) (*model.BranchProtection, error) {
 		bp, err := bpm.GetBranchProtection(ctx, in.Owner, in.Repo, in.Branch)
 		if err != nil && provider.IsNotFound(err) {
 			return nil, nil

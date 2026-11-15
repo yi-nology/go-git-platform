@@ -9,6 +9,7 @@ import (
 	gitcode "github.com/yi-nology/go-gitcode"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -18,26 +19,26 @@ import (
 // 记）：SDK 只返回单条最新命中 run——同 SHA 其他 workflow 的 run 不归因
 // （GitHub/Gitea 是每 workflow 取最新）；job status 词表为大写（夹具实证
 // COMPLETED/RUNNING），失败判定大小写不敏感、live 词表待实证。
-func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]provider.JobLog, error) {
+func (p *Provider) ListFailedJobLogs(ctx context.Context, owner, repo, sha string) ([]model.JobLog, error) {
 	run, err := p.client.FindActionRunByHeadSHA(ctx, owner, repo, sha, gitcode.ListWorkflowRunsOptions{})
 	if errors.Is(err, gitcode.ErrActionRunNotFound) {
 		// 无 run（绿提交或无 CI）→ 空切片而非错误（接口契约）。
 		return nil, nil
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListFailedJobLogs", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListFailedJobLogs", err)
 	}
 	jobs, err := p.client.ListActionRunJobs(ctx, owner, repo, run.WorkflowRunID)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitCode, "ListFailedJobLogs", err)
+		return nil, provider.Wrap(model.PlatformGitCode, "ListFailedJobLogs", err)
 	}
-	out := make([]provider.JobLog, 0, 4)
+	out := make([]model.JobLog, 0, 4)
 	for _, job := range jobs.Jobs {
 		if !isFailedGitCodeStatus(job.Status) {
 			continue
 		}
 		tail, truncated := p.jobLogTail(ctx, owner, repo, run.WorkflowRunID, job.ID)
-		out = append(out, provider.JobLog{
+		out = append(out, model.JobLog{
 			Name:      job.Name,
 			Stage:     run.WorkflowName,
 			WebURL:    "", // wire 无 job 级 web URL 字段

@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/go-github/v93/github"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -13,7 +14,7 @@ import (
 // which is an empty 200), so a 404 falls back to the user-namespace
 // listing — both namespace kinds are listable without the caller knowing
 // which one the login is (issue #80; registered divergence).
-func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.RepositoryListOptions{
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
@@ -24,7 +25,7 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		repos, _, err = p.client.Repositories.ListByOrg(ctx, opts.Owner, &github.RepositoryListByOrgOptions{
 			ListOptions: listOpts.ListOptions,
 		})
-		if provider.IsNotFound(provider.Wrap(provider.PlatformGitHub, "ListRepos", err)) {
+		if provider.IsNotFound(provider.Wrap(model.PlatformGitHub, "ListRepos", err)) {
 			repos, _, err = p.client.Repositories.ListByUser(ctx, opts.Owner, &github.RepositoryListByUserOptions{
 				ListOptions: listOpts.ListOptions,
 			})
@@ -37,9 +38,9 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		})
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListRepos", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListRepos", err)
 	}
-	result := make([]*provider.PlatformRepo, 0, len(repos))
+	result := make([]*model.PlatformRepo, 0, len(repos))
 	for _, r := range repos {
 		result = append(result, convertRepo(r))
 	}
@@ -47,16 +48,16 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 }
 
 // GetRepo implements provider.RepoManager.
-func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
 	r, _, err := p.client.Repositories.Get(ctx, owner, repo)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetRepo", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetRepo", err)
 	}
 	return convertRepo(r), nil
 }
 
 // CreateRepo implements provider.RepoManager.
-func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	// go-github v93 moved repo creation onto a dedicated request type
 	// (CreateRepositoryRequest); only the fields provider.CreateRepoOptions
 	// carries are populated.
@@ -68,20 +69,20 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 	}
 	result, _, err := p.client.Repositories.Create(ctx, owner, body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateRepo", err)
 	}
 	return convertRepo(result), nil
 }
 
 // ForkRepo implements provider.RepoManager.
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	body := github.CreateForkRequest{
 		Organization: new(opts.Organization),
 		Name:         new(opts.Name),
 	}
 	r, _, err := p.client.Repositories.CreateFork(ctx, owner, repo, body)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ForkRepo", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ForkRepo", err)
 	}
 	return convertRepo(r), nil
 }
@@ -90,13 +91,13 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	_, err := p.client.Repositories.Delete(ctx, owner, repo)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DeleteRepo", err)
+		return provider.Wrap(model.PlatformGitHub, "DeleteRepo", err)
 	}
 	return nil
 }
 
 // UpdateRepo implements provider.RepoManager.
-func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	r := &github.Repository{}
 	if opts.Name != "" {
 		r.Name = new(opts.Name)
@@ -112,7 +113,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	}
 	result, _, err := p.client.Repositories.Edit(ctx, owner, repo, r)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateRepo", err)
 	}
 	return convertRepo(result), nil
 }

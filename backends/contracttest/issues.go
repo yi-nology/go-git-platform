@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -67,7 +68,7 @@ type IssuesHarnessConfig struct {
 // builds it from the enclosing Harness plus IssuesHarnessConfig.
 type IssuesHarness struct {
 	Name        string
-	Platform    provider.Platform
+	Platform    model.Platform
 	NewProvider func(t *testing.T, cfg provider.Config) provider.Provider
 	IssuesHarnessConfig
 }
@@ -200,7 +201,7 @@ func assertIssueListNormalized(t *testing.T, im provider.IssueManager) {
 	if len(issues) == 0 || issues[0].Title != "bug" {
 		t.Fatalf("expected first issue titled bug, got %+v", issues)
 	}
-	if issues[0].State != provider.IssueStateOpen {
+	if issues[0].State != model.IssueStateOpen {
 		t.Errorf("expected state open, got %q", issues[0].State)
 	}
 	if issues[0].Milestone == nil || issues[0].Milestone.Number != "1" || issues[0].Milestone.Title != "v1" {

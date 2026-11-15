@@ -7,6 +7,7 @@ import (
 	gitee "github.com/next-bin/go-gitee/gitee"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -29,20 +30,20 @@ func (p *Provider) CreateCommitStatus(ctx context.Context, owner, repo, sha stri
 			Summary: gitee.String(opts.Description),
 		},
 	}
-	if provider.CommitStatusState(strings.ToLower(strings.TrimSpace(opts.State))).Terminal() {
+	if model.CommitStatusState(strings.ToLower(strings.TrimSpace(opts.State))).Terminal() {
 		check.Status = gitee.String("completed")
 		check.Conclusion = gitee.String(mapCommitStatus(opts.State))
 	} else {
 		check.Status = gitee.String("in_progress")
 	}
 	_, _, err := p.client.Checks.Create(ctx, backendutil.Esc(owner), backendutil.Esc(repo), check)
-	return provider.Wrap(provider.PlatformGitee, "CreateCommitStatus", err)
+	return provider.Wrap(model.PlatformGitee, "CreateCommitStatus", err)
 }
 
 // ListCommitStatuses implements provider.CommitStatusManager.
 // Gitee's public REST API has no commit-status endpoint; statuses read back
 // through the Checks API as the check runs attached to the head SHA.
-func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]provider.CommitStatus, error) {
+func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha string) ([]model.CommitStatus, error) {
 	runs, err := backendutil.AllPages(func(page int) ([]*gitee.CheckRun, error) {
 		pageNo, perPage := page, 100
 		list, _, err := p.client.Checks.List(ctx, backendutil.Esc(owner), backendutil.Esc(repo), sha,
@@ -56,7 +57,7 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 		return *list.CheckRuns, nil
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitee, "ListCommitStatuses", err)
+		return nil, provider.Wrap(model.PlatformGitee, "ListCommitStatuses", err)
 	}
 	return convertCommitStatuses(runs), nil
 }
@@ -66,8 +67,8 @@ func (p *Provider) ListCommitStatuses(ctx context.Context, owner, repo, sha stri
 // from Conclusion once the run is completed and from the in-flight Status
 // verb otherwise, both normalized via the shared vocabulary. Description is
 // dropped: Output is a free-form interface{} with no stable wire shape.
-func convertCommitStatuses(runs []*gitee.CheckRun) []provider.CommitStatus {
-	result := make([]provider.CommitStatus, 0, len(runs))
+func convertCommitStatuses(runs []*gitee.CheckRun) []model.CommitStatus {
+	result := make([]model.CommitStatus, 0, len(runs))
 	for _, run := range runs {
 		if run == nil {
 			continue
@@ -84,8 +85,8 @@ func convertCommitStatuses(runs []*gitee.CheckRun) []provider.CommitStatus {
 		if run.DetailsURL != nil {
 			targetURL = *run.DetailsURL
 		}
-		result = append(result, provider.CommitStatus{
-			State:     provider.NormalizeCommitStatusState(state),
+		result = append(result, model.CommitStatus{
+			State:     model.NormalizeCommitStatusState(state),
 			Context:   name,
 			TargetURL: targetURL,
 		})

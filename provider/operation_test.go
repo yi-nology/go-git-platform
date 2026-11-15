@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // --- fakes ---
@@ -281,7 +283,7 @@ func TestErrPermissionDeniedIsMatchable(t *testing.T) {
 	})
 
 	t.Run("provider.Wrap keeps Is", func(t *testing.T) {
-		err := Wrap(PlatformGitHub, "UpdateWebhook", ErrPermissionDenied)
+		err := Wrap(model.PlatformGitHub, "UpdateWebhook", ErrPermissionDenied)
 		if !errors.Is(err, ErrPermissionDenied) {
 			t.Errorf("errors.Is(ProviderError, ErrPermissionDenied) = false, want true")
 		}

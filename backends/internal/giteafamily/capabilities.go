@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -43,7 +44,7 @@ type DeployKeyPort interface {
 // ListDeployKeys returns every deploy key. The provider surface carries no
 // pagination parameters, so the full key list is fetched by exhausting the
 // endpoint's pagination (backendutil.AllPages).
-func ListDeployKeys(ctx context.Context, f Family, c DeployKeyPort, owner, repo string) ([]*provider.DeployKey, error) {
+func ListDeployKeys(ctx context.Context, f Family, c DeployKeyPort, owner, repo string) ([]*model.DeployKey, error) {
 	keys, err := backendutil.AllPages(func(page int) ([]*DeployKey, error) {
 		return c.ListDeployKeys(ctx, owner, repo, ListDeployKeysOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -52,7 +53,7 @@ func ListDeployKeys(ctx context.Context, f Family, c DeployKeyPort, owner, repo 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListDeployKeys", err)
 	}
-	result := make([]*provider.DeployKey, 0, len(keys))
+	result := make([]*model.DeployKey, 0, len(keys))
 	for _, k := range keys {
 		result = append(result, convertDeployKey(k))
 	}
@@ -60,7 +61,7 @@ func ListDeployKeys(ctx context.Context, f Family, c DeployKeyPort, owner, repo 
 }
 
 // AddDeployKey creates a deploy key.
-func AddDeployKey(ctx context.Context, f Family, c DeployKeyPort, owner, repo string, opts provider.AddDeployKeyOptions) (*provider.DeployKey, error) {
+func AddDeployKey(ctx context.Context, f Family, c DeployKeyPort, owner, repo string, opts provider.AddDeployKeyOptions) (*model.DeployKey, error) {
 	key, err := c.CreateDeployKey(ctx, owner, repo, CreateKeyOption{
 		Title:    opts.Title,
 		Key:      opts.Key,
@@ -81,11 +82,11 @@ func DeleteDeployKey(ctx context.Context, f Family, c DeployKeyPort, owner, repo
 }
 
 // convertDeployKey projects a family DeployKey onto the provider shape.
-func convertDeployKey(k *DeployKey) *provider.DeployKey {
+func convertDeployKey(k *DeployKey) *model.DeployKey {
 	if k == nil {
 		return nil
 	}
-	return &provider.DeployKey{
+	return &model.DeployKey{
 		ID:       k.ID,
 		Title:    k.Title,
 		Key:      k.Key,
@@ -148,7 +149,7 @@ type MilestonePort interface {
 // Dual-mode pagination is handled by backendutil.PageList:
 // opts.Page == 0 walks every page (budget-capped, fails loud);
 // opts.Page > 0 returns exactly that single caller-driven page.
-func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.ListMilestonesOptions) ([]provider.Milestone, error) {
+func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.ListMilestonesOptions) ([]model.Milestone, error) {
 	// State contract (issue #61): empty State sends the family's explicit
 	// "all" — the family's own default (open) silently dropped closed
 	// milestones, which the unified contract forbids.
@@ -165,7 +166,7 @@ func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo 
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListMilestones", err)
 	}
-	result := make([]provider.Milestone, 0, len(milestones))
+	result := make([]model.Milestone, 0, len(milestones))
 	for _, m := range milestones {
 		result = append(result, convertMilestone(m))
 	}
@@ -173,7 +174,7 @@ func ListMilestones(ctx context.Context, f Family, c MilestonePort, owner, repo 
 }
 
 // GetMilestone fetches one milestone by ID.
-func GetMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string) (*provider.Milestone, error) {
+func GetMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string) (*model.Milestone, error) {
 	id, err := backendutil.ParseMilestoneNumber(f.Platform, "GetMilestone", number)
 	if err != nil {
 		return nil, err
@@ -187,7 +188,7 @@ func GetMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, n
 }
 
 // CreateMilestone creates a milestone.
-func CreateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.CreateMilestoneOptions) (*provider.Milestone, error) {
+func CreateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo string, opts provider.CreateMilestoneOptions) (*model.Milestone, error) {
 	m, err := c.CreateMilestone(ctx, owner, repo, CreateMilestoneOption{
 		Title:       opts.Title,
 		Description: opts.Description,
@@ -202,7 +203,7 @@ func CreateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo
 
 // UpdateMilestone edits a milestone; see EditMilestoneOption for the
 // nil-means-unchanged edit semantics.
-func UpdateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*provider.Milestone, error) {
+func UpdateMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo, number string, opts provider.UpdateMilestoneOptions) (*model.Milestone, error) {
 	id, err := backendutil.ParseMilestoneNumber(f.Platform, "UpdateMilestone", number)
 	if err != nil {
 		return nil, err
@@ -242,16 +243,16 @@ func DeleteMilestone(ctx context.Context, f Family, c MilestonePort, owner, repo
 }
 
 // convertMilestone projects a family Milestone onto the provider shape.
-func convertMilestone(m *Milestone) provider.Milestone {
-	var ms provider.Milestone
+func convertMilestone(m *Milestone) model.Milestone {
+	var ms model.Milestone
 	if m == nil {
 		return ms
 	}
-	ms = provider.Milestone{
+	ms = model.Milestone{
 		Number:      strconv.FormatInt(m.ID, 10),
 		Title:       m.Title,
 		Description: m.Description,
-		State:       provider.MilestoneState(m.State),
+		State:       model.MilestoneState(m.State),
 		DueOn:       m.Deadline,
 	}
 	return ms

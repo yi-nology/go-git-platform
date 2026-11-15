@@ -5,13 +5,14 @@ import (
 
 	gitlab "gitlab.com/gitlab-org/api/client-go/v3"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 func pidOf(owner, repo string) string { return owner + "/" + repo }
 
 // ListRepos implements provider.RepoManager.
-func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*provider.PlatformRepo, error) {
+func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions) ([]*model.PlatformRepo, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	page64, perPage64 := int64(page), int64(perPage)
 	var projects []*gitlab.Project
@@ -29,9 +30,9 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 		}, gitlab.WithContext(ctx))
 	}
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ListRepos", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ListRepos", err)
 	}
-	repos := make([]*provider.PlatformRepo, 0, len(projects))
+	repos := make([]*model.PlatformRepo, 0, len(projects))
 	for _, proj := range projects {
 		repos = append(repos, convertProject(proj))
 	}
@@ -39,16 +40,16 @@ func (p *Provider) ListRepos(ctx context.Context, opts provider.ListRepoOptions)
 }
 
 // GetRepo implements provider.RepoManager.
-func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*provider.PlatformRepo, error) {
+func (p *Provider) GetRepo(ctx context.Context, owner, repo string) (*model.PlatformRepo, error) {
 	proj, _, err := p.client.Projects.GetProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "GetRepo", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "GetRepo", err)
 	}
 	return convertProject(proj), nil
 }
 
 // CreateRepo implements provider.RepoManager.
-func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.CreateRepoOptions) (*model.PlatformRepo, error) {
 	createOpts := &gitlab.CreateProjectOptions{
 		Name:                 new(opts.Name),
 		Description:          new(opts.Description),
@@ -75,13 +76,13 @@ func (p *Provider) CreateRepo(ctx context.Context, owner string, opts provider.C
 	}
 	proj, _, err := p.client.Projects.CreateProject(createOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "CreateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "CreateRepo", err)
 	}
 	return convertProject(proj), nil
 }
 
 // ForkRepo implements provider.RepoManager.
-func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provider.ForkRepoOptions) (*model.PlatformRepo, error) {
 	forkOpts := &gitlab.ForkProjectOptions{}
 	if opts.Organization != "" {
 		forkOpts.NamespacePath = new(opts.Organization)
@@ -91,7 +92,7 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 	}
 	proj, _, err := p.client.Projects.ForkProject(pidOf(owner, repo), forkOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "ForkRepo", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "ForkRepo", err)
 	}
 	return convertProject(proj), nil
 }
@@ -100,13 +101,13 @@ func (p *Provider) ForkRepo(ctx context.Context, owner, repo string, opts provid
 func (p *Provider) DeleteRepo(ctx context.Context, owner, repo string) error {
 	_, err := p.client.Projects.DeleteProject(pidOf(owner, repo), nil, gitlab.WithContext(ctx))
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitLab, "DeleteRepo", err)
+		return provider.Wrap(model.PlatformGitLab, "DeleteRepo", err)
 	}
 	return nil
 }
 
 // UpdateRepo implements provider.RepoManager.
-func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*provider.PlatformRepo, error) {
+func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts provider.UpdateRepoOptions) (*model.PlatformRepo, error) {
 	updateOpts := &gitlab.EditProjectOptions{}
 	if opts.Name != "" {
 		updateOpts.Name = new(opts.Name)
@@ -126,7 +127,7 @@ func (p *Provider) UpdateRepo(ctx context.Context, owner, repo string, opts prov
 	}
 	proj, _, err := p.client.Projects.EditProject(pidOf(owner, repo), updateOpts, gitlab.WithContext(ctx))
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitLab, "UpdateRepo", err)
+		return nil, provider.Wrap(model.PlatformGitLab, "UpdateRepo", err)
 	}
 	return convertProject(proj), nil
 }

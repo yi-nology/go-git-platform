@@ -8,6 +8,8 @@ import (
 
 	"github.com/oekit/concurrency/retry"
 	oekiterrors "github.com/oekit/pkg/errors"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 // Default polling parameters for WaitForCommitStatus.
@@ -58,7 +60,7 @@ var ErrWaitTimedOut = oekiterrors.New("commit status did not reach a terminal st
 // named contexts are folded; contexts that have not reported yet are
 // simply absent, so the wait continues until each named context lands a
 // terminal state.
-func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha string, opts WaitOptions) (CommitStatusState, error) {
+func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha string, opts WaitOptions) (model.CommitStatusState, error) {
 	csm, ok := p.(CommitStatusManager)
 	if !ok {
 		// no p.Platform() here: callers may pass a partially-implemented
@@ -95,7 +97,7 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 	}
 
 	var last CombinedCommitStatus
-	var final CommitStatusState
+	var final model.CommitStatusState
 	err := retry.Poll(ctx, interval, remaining, func() (bool, error) {
 		statuses, err := csm.ListCommitStatuses(ctx, owner, repo, sha)
 		if err != nil {
@@ -131,9 +133,9 @@ func WaitForCommitStatus(ctx context.Context, p Provider, owner, repo, sha strin
 // CombinedCommitStatus is the fold of a commit's statuses with a snapshot
 // of the per-context states it was derived from.
 type CombinedCommitStatus struct {
-	State CommitStatusState `json:"state"`
+	State model.CommitStatusState `json:"state"`
 	// Contexts maps each contributing context to its latest state.
-	Contexts map[string]CommitStatusState `json:"contexts,omitempty"`
+	Contexts map[string]model.CommitStatusState `json:"contexts,omitempty"`
 }
 
 func (c CombinedCommitStatus) String() string {
@@ -151,9 +153,9 @@ func (c CombinedCommitStatus) String() string {
 // of that context — the same entry GitHub's combined status would use.
 // CI re-runs append history instead of replacing it, so folding the raw
 // list would let a stale failure (or pending) outvote the latest result.
-func LatestCommitStatuses(statuses []CommitStatus) []CommitStatus {
+func LatestCommitStatuses(statuses []model.CommitStatus) []model.CommitStatus {
 	seen := make(map[string]bool, len(statuses))
-	out := make([]CommitStatus, 0, len(statuses))
+	out := make([]model.CommitStatus, 0, len(statuses))
 	for _, s := range statuses {
 		if seen[s.Context] {
 			continue
@@ -202,10 +204,10 @@ func initWait(opts WaitOptions) (interval time.Duration, budget <-chan time.Time
 // is final. A wanted context that has not reported at all keeps the fold
 // pending — absence of a report must never be voted in by a duplicate of
 // another context.
-func foldTerminalStates(statuses []CommitStatus, want map[string]bool) (CombinedCommitStatus, bool) {
+func foldTerminalStates(statuses []model.CommitStatus, want map[string]bool) (CombinedCommitStatus, bool) {
 	latest := LatestCommitStatuses(statuses)
-	contexts := make(map[string]CommitStatusState, len(latest))
-	states := make([]CommitStatusState, 0, len(latest))
+	contexts := make(map[string]model.CommitStatusState, len(latest))
+	states := make([]model.CommitStatusState, 0, len(latest))
 	reported := 0
 	for _, s := range latest {
 		if len(want) > 0 {
@@ -218,8 +220,8 @@ func foldTerminalStates(statuses []CommitStatus, want map[string]bool) (Combined
 		states = append(states, s.State)
 	}
 	if len(want) > 0 && reported < len(want) {
-		return CombinedCommitStatus{State: CommitStatusPending}, false
+		return CombinedCommitStatus{State: model.CommitStatusPending}, false
 	}
-	combined := CombineCommitStatusStates(states)
+	combined := model.CombineCommitStatusStates(states)
 	return CombinedCommitStatus{State: combined, Contexts: contexts}, combined.Terminal()
 }

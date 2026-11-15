@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -16,7 +17,7 @@ import (
 type GistsHarnessConfig struct {
 	// ListResponse is the JSON array the mock returns for GET /gists. Its
 	// first element must have a non-empty id and description — the suite
-	// asserts both parse into provider.Gist.
+	// asserts both parse into model.Gist.
 	ListResponse string
 }
 
@@ -43,7 +44,7 @@ func testGistsSuite(t *testing.T, h Harness) {
 // GistsHarness bundles inputs for the gist-list suite.
 type GistsHarness struct {
 	Name         string
-	Platform     provider.Platform
+	Platform     model.Platform
 	NewProvider  func(t *testing.T, cfg provider.Config) provider.Provider
 	ListResponse string
 }
@@ -75,7 +76,7 @@ func (w *gistsWire) last() (path, page, perPage string, n int) {
 
 // RunGistsSuite tests the gist-manager wire contract: GET /gists (the token
 // user's own list, never the users/{login}/gists public route) parses into
-// provider.Gist, and page/perPage land in the query after normalization.
+// model.Gist, and page/perPage land in the query after normalization.
 func RunGistsSuite(t *testing.T, h GistsHarness) {
 	newGM := func(t *testing.T, rec *gistsWire) provider.GistManager {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -114,10 +115,10 @@ func RunGistsSuite(t *testing.T, h GistsHarness) {
 		}
 		g := gists[0]
 		if g.ID == "" {
-			t.Error("provider.Gist.ID must be non-empty")
+			t.Error("model.Gist.ID must be non-empty")
 		}
 		if g.Description == "" {
-			t.Error("provider.Gist.Description must be non-empty")
+			t.Error("model.Gist.Description must be non-empty")
 		}
 	})
 

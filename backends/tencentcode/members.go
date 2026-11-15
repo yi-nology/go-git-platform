@@ -7,13 +7,14 @@ import (
 	gongfeng "github.com/yi-nology/go-gongfeng"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListCollaborators implements provider.CollaboratorManager over 工蜂's
 // project-members API. The endpoint has no caller-facing pagination knobs,
 // so every page is fetched via AllPages (工蜂's page-size ceiling is 100).
-func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
+func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error) {
 	pid := owner + "/" + repo
 	members, err := backendutil.AllPages(func(page int) ([]*gongfeng.Member, error) {
 		list, _, err := p.client.Projects.ListProjectMembers(ctx, pid,
@@ -21,9 +22,9 @@ func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformTencentCode, "ListCollaborators", err)
+		return nil, provider.Wrap(model.PlatformTencentCode, "ListCollaborators", err)
 	}
-	result := make([]*provider.Collaborator, 0, len(members))
+	result := make([]*model.Collaborator, 0, len(members))
 	for _, m := range members {
 		result = append(result, convertMember(m))
 	}
@@ -44,7 +45,7 @@ func (p *Provider) AddCollaborator(ctx context.Context, owner, repo, username st
 		addOpts.AccessLevel = gongfeng.Ptr(level)
 	}
 	if _, _, err := p.client.Projects.AddProjectMember(ctx, pid(owner, repo), addOpts); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "AddCollaborator", err)
+		return provider.Wrap(model.PlatformTencentCode, "AddCollaborator", err)
 	}
 	return nil
 }
@@ -57,7 +58,7 @@ func (p *Provider) RemoveCollaborator(ctx context.Context, owner, repo, username
 		return err
 	}
 	if _, err := p.client.Projects.DeleteProjectMember(ctx, pid(owner, repo), ids[0]); err != nil {
-		return provider.Wrap(provider.PlatformTencentCode, "RemoveCollaborator", err)
+		return provider.Wrap(model.PlatformTencentCode, "RemoveCollaborator", err)
 	}
 	return nil
 }
@@ -102,15 +103,15 @@ func accessLevelName(level gongfeng.AccessLevelValue) string {
 // convertMember maps a gongfeng.Member (project or group member) to the
 // provider collaborator shape; User stays nil (the member payload already
 // carries the flattened user fields).
-func convertMember(m *gongfeng.Member) *provider.Collaborator {
+func convertMember(m *gongfeng.Member) *model.Collaborator {
 	if m == nil {
 		return nil
 	}
-	return &provider.Collaborator{
+	return &model.Collaborator{
 		ID:         int64(m.ID),
 		Username:   m.Username,
 		Permission: accessLevelName(m.AccessLevel),
-		User: &provider.CRUser{
+		User: &model.CRUser{
 			ID:        int64(m.ID),
 			Username:  m.Username,
 			Name:      m.Name,

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -53,7 +54,7 @@ func testEnsureIssueSuite(t *testing.T, h Harness) {
 
 // ensureIssueSnapshot 在一次性桩上读现状（夹具静态，四子测共用）并兼作
 // IssueManager 守卫：缺能力整套 Skip（同 errorclass.go）。
-func ensureIssueSnapshot(t *testing.T, h Harness, ih IssuesHarness) *provider.Issue {
+func ensureIssueSnapshot(t *testing.T, h Harness, ih IssuesHarness) *model.Issue {
 	t.Helper()
 	srv, _ := issueStubServer(ih)
 	t.Cleanup(srv.Close)
@@ -80,7 +81,7 @@ func ensureIssueStub(t *testing.T, h Harness, ih IssuesHarness) (provider.Provid
 
 // assertEnsureStateUnchanged 钉 State 收敛的 Unchanged 面：want == 现状
 // → OutcomeUnchanged、零写请求、且确实先读了现状（GET ≥ 1）。
-func assertEnsureStateUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *provider.Issue) {
+func assertEnsureStateUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *model.Issue) {
 	t.Helper()
 	ctx := context.Background()
 	p, requests := ensureIssueStub(t, h, ih)
@@ -104,14 +105,14 @@ func assertEnsureStateUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *
 
 // assertEnsureStateUpdated 钉 State 收敛的 Updated 面：want == 相反态 →
 // OutcomeUpdated、恰 1 个写请求（Close/Reopen 单次写）、先读后写。
-func assertEnsureStateUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *provider.Issue) {
+func assertEnsureStateUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *model.Issue) {
 	t.Helper()
-	if cur.State != provider.IssueStateOpen && cur.State != provider.IssueStateClosed {
+	if cur.State != model.IssueStateOpen && cur.State != model.IssueStateClosed {
 		t.Fatalf("fixture state %q is neither open nor closed", cur.State)
 	}
-	want := provider.IssueStateClosed
-	if cur.State == provider.IssueStateClosed {
-		want = provider.IssueStateOpen
+	want := model.IssueStateClosed
+	if cur.State == model.IssueStateClosed {
+		want = model.IssueStateOpen
 	}
 	ctx := context.Background()
 	p, requests := ensureIssueStub(t, h, ih)
@@ -135,7 +136,7 @@ func assertEnsureStateUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *pr
 
 // assertEnsureLabelsUnchanged 钉 Labels 收敛的 Unchanged 面：want == 现状
 // 集合 → OutcomeUnchanged、零写请求、返回集合与 want 相等、先读现状。
-func assertEnsureLabelsUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *provider.Issue) {
+func assertEnsureLabelsUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur *model.Issue) {
 	t.Helper()
 	ctx := context.Background()
 	want := append([]string(nil), cur.Labels...)
@@ -161,7 +162,7 @@ func assertEnsureLabelsUnchanged(t *testing.T, h Harness, ih IssuesHarness, cur 
 // assertEnsureLabelsUpdated 钉 Labels 收敛的 Updated 面：差集目标 →
 // OutcomeUpdated、恰 1 个写请求、返回目标与 want 集合相等、先读后写。
 // 目标挑法（updatedLabelsWant）保证加/删两条 wire 路径都被 7 后端覆盖到。
-func assertEnsureLabelsUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *provider.Issue, repoNames []string) {
+func assertEnsureLabelsUpdated(t *testing.T, h Harness, ih IssuesHarness, cur *model.Issue, repoNames []string) {
 	t.Helper()
 	want := updatedLabelsWant(cur.Labels, repoNames)
 	if sameLabelSet(want, cur.Labels) {

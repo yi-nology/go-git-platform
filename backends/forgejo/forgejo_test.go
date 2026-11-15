@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
+	"github.com/yi-nology/go-git-platform/model"
 
 	forgejosdk "codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3"
 
@@ -34,7 +35,7 @@ func newTestProvider(t *testing.T, srv *httptest.Server) *forgejo.Provider {
 		srv.Config.Handler.ServeHTTP(w, r)
 	}))
 	pp, err := forgejo.New(provider.Config{
-		Platform: provider.PlatformForgejo,
+		Platform: model.PlatformForgejo,
 		BaseURL:  versionSrv.URL,
 		Token:    "test-token",
 	})
@@ -64,7 +65,7 @@ func TestListRepos(t *testing.T) {
 	if len(repos) != 2 {
 		t.Fatalf("expected 2, got %d", len(repos))
 	}
-	if repos[0].Platform != provider.PlatformForgejo {
+	if repos[0].Platform != model.PlatformForgejo {
 		t.Errorf("expected Gitea, got %s", repos[0].Platform)
 	}
 }
@@ -125,7 +126,7 @@ func TestListCRs_MergedDetected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if crs[1].State != provider.CRStateMerged {
+	if crs[1].State != model.CRStateMerged {
 		t.Errorf("expected merged, got %s", crs[1].State)
 	}
 }
@@ -280,7 +281,7 @@ func TestRetry_TriggersOn5xx(t *testing.T) {
 	}))
 	defer srv.Close()
 	p, err := forgejo.New(provider.Config{
-		Platform:    provider.PlatformForgejo,
+		Platform:    model.PlatformForgejo,
 		BaseURL:     srv.URL,
 		Token:       "test",
 		RetryConfig: &provider.RetryConfig{MaxRetries: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond},

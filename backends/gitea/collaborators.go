@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/giteafamily"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // ListCollaborators implements provider.CollaboratorManager.
-func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*provider.Collaborator, error) {
+func (p *Provider) ListCollaborators(ctx context.Context, owner, repo string) ([]*model.Collaborator, error) {
 	return giteafamily.ListCollaborators(ctx, p.family, p.ports, owner, repo)
 }
 

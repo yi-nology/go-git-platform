@@ -3,8 +3,10 @@ package gitcode
 import (
 	"errors"
 
-	"github.com/yi-nology/go-git-platform/provider"
 	gitcode "github.com/yi-nology/go-gitcode"
+
+	"github.com/yi-nology/go-git-platform/model"
+	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // init registers GitCode's SDK error extractor. go-gitcode's *APIError
@@ -14,7 +16,7 @@ import (
 // wrapper type individually (the status field is promoted from the embedded
 // pointer, nil-guarded here).
 func init() {
-	provider.RegisterStatusExtractor(provider.PlatformGitCode, func(err error) (int, bool) {
+	provider.RegisterStatusExtractor(model.PlatformGitCode, func(err error) (int, bool) {
 		var nf *gitcode.NotFoundError
 		if errors.As(err, &nf) && nf.APIError != nil {
 			return nf.APIError.StatusCode, true

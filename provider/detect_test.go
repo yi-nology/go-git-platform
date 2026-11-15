@@ -2,6 +2,8 @@ package provider
 
 import (
 	"testing"
+
+	"github.com/yi-nology/go-git-platform/model"
 )
 
 func TestDetectPlatform_SSH_GitHub(t *testing.T) {
@@ -9,7 +11,7 @@ func TestDetectPlatform_SSH_GitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitHub {
+	if r.Platform != model.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", r.Platform)
 	}
 	if r.Owner != "owner" {
@@ -28,7 +30,7 @@ func TestDetectPlatform_SSH_GitLab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitLab {
+	if r.Platform != model.PlatformGitLab {
 		t.Errorf("expected GitLab, got %s", r.Platform)
 	}
 	if r.Owner != "org" || r.Repo != "project" {
@@ -41,7 +43,7 @@ func TestDetectPlatform_SSH_Gitea(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitea {
+	if r.Platform != model.PlatformGitea {
 		t.Errorf("expected Gitea, got %s", r.Platform)
 	}
 }
@@ -71,7 +73,7 @@ func TestDetectPlatform_HTTPS_GitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitHub {
+	if r.Platform != model.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", r.Platform)
 	}
 	if r.Owner != "owner" || r.Repo != "repo" {
@@ -84,7 +86,7 @@ func TestDetectPlatform_HTTPS_GitLab(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitLab {
+	if r.Platform != model.PlatformGitLab {
 		t.Errorf("expected GitLab, got %s", r.Platform)
 	}
 }
@@ -156,7 +158,7 @@ func TestDetectPlatform_SSHProtocol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitHub {
+	if r.Platform != model.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", r.Platform)
 	}
 	if r.Owner != "owner" || r.Repo != "repo" {
@@ -233,18 +235,18 @@ func TestClassifyHost_SelfHostedDomainsNotMisrouted(t *testing.T) {
 func TestClassifyHost_KnownHostsExactAndSubdomain(t *testing.T) {
 	tests := []struct {
 		host     string
-		platform Platform
+		platform model.Platform
 		baseURL  string
 	}{
-		{"github.com", PlatformGitHub, "https://api.github.com"},
-		{"www.github.com", PlatformGitHub, "https://api.github.com"},
-		{"gitlab.com", PlatformGitLab, "https://gitlab.com/api/v4"},
-		{"code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
-		{"git.code.tencent.com", PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
-		{"codeberg.org", PlatformForgejo, "https://codeberg.org"},
-		{"gitea.com", PlatformGitea, "https://gitea.com/api/v1"},
-		{"gitee.com", PlatformGitee, "https://gitee.com/api/v5"},
-		{"gitcode.com", PlatformGitCode, "https://api.gitcode.com/api/v5"},
+		{"github.com", model.PlatformGitHub, "https://api.github.com"},
+		{"www.github.com", model.PlatformGitHub, "https://api.github.com"},
+		{"gitlab.com", model.PlatformGitLab, "https://gitlab.com/api/v4"},
+		{"code.tencent.com", model.PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+		{"git.code.tencent.com", model.PlatformTencentCode, "https://git.code.tencent.com/api/v3"},
+		{"codeberg.org", model.PlatformForgejo, "https://codeberg.org"},
+		{"gitea.com", model.PlatformGitea, "https://gitea.com/api/v1"},
+		{"gitee.com", model.PlatformGitee, "https://gitee.com/api/v5"},
+		{"gitcode.com", model.PlatformGitCode, "https://api.gitcode.com/api/v5"},
 	}
 	for _, tc := range tests {
 		platform, baseURL, err := classifyHost(tc.host)
@@ -261,11 +263,11 @@ func TestClassifyHost_KnownHostsExactAndSubdomain(t *testing.T) {
 func TestClassifyHost_PortIsStripped(t *testing.T) {
 	tests := []struct {
 		host     string
-		platform Platform
+		platform model.Platform
 	}{
-		{"github.com:8443", PlatformGitHub},
-		{"gitlab.com:8443", PlatformGitLab},
-		{"gitee.com:8080", PlatformGitee},
+		{"github.com:8443", model.PlatformGitHub},
+		{"gitlab.com:8443", model.PlatformGitLab},
+		{"gitee.com:8080", model.PlatformGitee},
 	}
 	for _, tc := range tests {
 		platform, _, err := classifyHost(tc.host)
@@ -299,7 +301,7 @@ func TestDetectPlatform_HTTPS_WithPort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Platform != PlatformGitHub {
+	if r.Platform != model.PlatformGitHub {
 		t.Errorf("expected GitHub, got %s", r.Platform)
 	}
 	if r.Owner != "owner" || r.Repo != "repo" {
@@ -321,14 +323,14 @@ func TestDetectPlatform_SSH_SelfHosted_Unrecognized(t *testing.T) {
 // registered at init time classifies like a built-in host, and duplicate
 // registration panics (same convention as Register).
 func TestRegisterHostAlias(t *testing.T) {
-	RegisterHostAlias("git.company.internal", PlatformGitLab, "https://git.company.internal/api/v4")
+	RegisterHostAlias("git.company.internal", model.PlatformGitLab, "https://git.company.internal/api/v4")
 	defer hostAliases.Clear()
 
 	res, err := DetectPlatform("git@git.company.internal:team/proj.git")
 	if err != nil {
 		t.Fatalf("alias host should classify: %v", err)
 	}
-	if res.Platform != PlatformGitLab || res.BaseURL != "https://git.company.internal/api/v4" {
+	if res.Platform != model.PlatformGitLab || res.BaseURL != "https://git.company.internal/api/v4" {
 		t.Errorf("unexpected classification: %+v", res)
 	}
 	// Subdomains of the alias classify too.
@@ -341,5 +343,5 @@ func TestRegisterHostAlias(t *testing.T) {
 			t.Error("expected duplicate registration to panic")
 		}
 	}()
-	RegisterHostAlias("git.company.internal", PlatformGitea, "https://elsewhere")
+	RegisterHostAlias("git.company.internal", model.PlatformGitea, "https://elsewhere")
 }

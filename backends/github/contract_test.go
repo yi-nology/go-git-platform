@@ -11,6 +11,7 @@ import (
 
 	"github.com/yi-nology/go-git-platform/backends/contracttest"
 	ghbackend "github.com/yi-nology/go-git-platform/backends/github"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -19,7 +20,7 @@ import (
 func TestGitHub_Contract(t *testing.T) {
 	contracttest.Run(t, contracttest.Harness{
 		Name:     "GitHub",
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		NewProvider: func(t *testing.T, cfg provider.Config) provider.Provider {
 			cfg.BaseURL = cfg.BaseURL + "/api/v3"
 			p, err := provider.NewProvider(cfg)
@@ -206,7 +207,7 @@ func TestGitHub_UpdateIssueStateWire(t *testing.T) {
 	defer srv.Close()
 
 	p, err := provider.NewProvider(provider.Config{
-		Platform: provider.PlatformGitHub,
+		Platform: model.PlatformGitHub,
 		BaseURL:  srv.URL + "/api/v3",
 		Token:    "test",
 	})
@@ -218,7 +219,7 @@ func TestGitHub_UpdateIssueStateWire(t *testing.T) {
 		t.Fatal("provider does not implement provider.IssueManager")
 	}
 	if _, err := im.UpdateIssue(context.Background(), "owner", "repo", "1", provider.UpdateIssueOptions{
-		State: provider.IssueStateClosed,
+		State: model.IssueStateClosed,
 	}); err != nil {
 		t.Fatalf("UpdateIssue(State): %v", err)
 	}
@@ -244,5 +245,5 @@ func githubNonEmptyList() string {
 }
 
 func TestGitHub_WebhookCorpus(t *testing.T) {
-	contracttest.RunWebhookCorpus(t, provider.PlatformGitHub, &ghbackend.Provider{}, "testdata/webhooks")
+	contracttest.RunWebhookCorpus(t, model.PlatformGitHub, &ghbackend.Provider{}, "testdata/webhooks")
 }

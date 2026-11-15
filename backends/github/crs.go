@@ -7,12 +7,13 @@ import (
 	"github.com/google/go-github/v93/github"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
 // CreateCR implements provider.ChangeRequestManager.
-func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*provider.ChangeRequest, error) {
+func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) (*model.ChangeRequest, error) {
 	newPR := &github.CreatePullRequest{
 		Title: new(opts.Title),
 		Body:  new(opts.Description),
@@ -25,20 +26,20 @@ func (p *Provider) CreateCR(ctx context.Context, opts provider.CreateCROptions) 
 	}
 	pr, _, err := p.client.PullRequests.Create(ctx, opts.Owner, opts.Repo, *newPR)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CreateCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CreateCR", err)
 	}
 	return convertPR(pr), nil
 }
 
 // GetCR implements provider.ChangeRequestManager.
-func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "GetCR", number)
+func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "GetCR", number)
 	if err != nil {
 		return nil, err
 	}
 	pr, _, err := p.client.PullRequests.Get(ctx, owner, repo, n)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "GetCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "GetCR", err)
 	}
 	return convertPR(pr), nil
 }
@@ -54,7 +55,7 @@ func (p *Provider) GetCR(ctx context.Context, owner, repo, number string) (*prov
 //     SourceBranch(head.ref,与命名空间无关)客户端后过滤——fork 同名
 //     分支同样命中,与 GitLab 的服务端纯分支名过滤同果(后过滤与
 //     GitLab 服务端过滤的分页语义差异登记 divergence)。
-func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*provider.ChangeRequest, *int, error) {
+func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]*model.ChangeRequest, *int, error) {
 	page, perPage := provider.NormalizePageOpts(opts.Page, opts.PerPage)
 	listOpts := &github.PullRequestListOptions{
 		ListOptions: github.ListOptions{Page: page, PerPage: perPage},
@@ -76,9 +77,9 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 	}
 	prs, resp, err := p.client.PullRequests.List(ctx, opts.Owner, opts.Repo, listOpts)
 	if err != nil {
-		return nil, nil, provider.Wrap(provider.PlatformGitHub, "ListCRs", err)
+		return nil, nil, provider.Wrap(model.PlatformGitHub, "ListCRs", err)
 	}
-	crs := make([]*provider.ChangeRequest, 0, len(prs))
+	crs := make([]*model.ChangeRequest, 0, len(prs))
 	for _, pr := range prs {
 		cr := convertPR(pr)
 		if clientSideBranchFilter != "" && cr.SourceBranch != clientSideBranchFilter {
@@ -100,8 +101,8 @@ func (p *Provider) ListCRs(ctx context.Context, opts provider.ListCROptions) ([]
 }
 
 // MergeCR implements provider.ChangeRequestManager.
-func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "MergeCR", number)
+func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts provider.MergeCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "MergeCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -111,14 +112,14 @@ func (p *Provider) MergeCR(ctx context.Context, owner, repo, number string, opts
 	}
 	_, _, err = p.client.PullRequests.Merge(ctx, owner, repo, n, opts.MergeCommitMessage, mergeOpts)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "MergeCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "MergeCR", err)
 	}
 	return p.GetCR(ctx, owner, repo, number)
 }
 
 // CloseCR implements provider.ChangeRequestManager.
-func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "CloseCR", number)
+func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "CloseCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +127,14 @@ func (p *Provider) CloseCR(ctx context.Context, owner, repo, number string) (*pr
 		State: new("closed"),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "CloseCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "CloseCR", err)
 	}
 	return convertPR(pr), nil
 }
 
 // ReopenCR implements provider.ChangeRequestManager.
-func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ReopenCR", number)
+func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "ReopenCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -141,14 +142,14 @@ func (p *Provider) ReopenCR(ctx context.Context, owner, repo, number string) (*p
 		State: new("open"),
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ReopenCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ReopenCR", err)
 	}
 	return convertPR(result), nil
 }
 
 // UpdateCR implements provider.ChangeRequestManager.
-func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*provider.ChangeRequest, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "UpdateCR", number)
+func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opts provider.UpdateCROptions) (*model.ChangeRequest, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "UpdateCR", number)
 	if err != nil {
 		return nil, err
 	}
@@ -170,25 +171,25 @@ func (p *Provider) UpdateCR(ctx context.Context, owner, repo, number string, opt
 	if as, ok := opts.ResolveAssignees(); ok {
 		issue := github.UpdateIssueRequest{Assignees: as}
 		if _, _, err := p.client.Issues.Update(ctx, owner, repo, n, issue); err != nil {
-			return nil, provider.Wrap(provider.PlatformGitHub, "UpdateCR", err)
+			return nil, provider.Wrap(model.PlatformGitHub, "UpdateCR", err)
 		}
 	}
 	result, _, err := p.client.PullRequests.Edit(ctx, owner, repo, n, pr)
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "UpdateCR", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "UpdateCR", err)
 	}
 	return convertPR(result), nil
 }
 
 // UpdateCRLabels implements provider.ChangeRequestManager.
 func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number string, labels []string) error {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "UpdateCRLabels", number)
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "UpdateCRLabels", number)
 	if err != nil {
 		return err
 	}
 	_, _, err = p.client.Issues.AddLabelsToIssue(ctx, owner, repo, n, labels)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "UpdateCRLabels", err)
+		return provider.Wrap(model.PlatformGitHub, "UpdateCRLabels", err)
 	}
 	return nil
 }
@@ -196,8 +197,8 @@ func (p *Provider) UpdateCRLabels(ctx context.Context, owner, repo, number strin
 // ListCRComments implements provider.ChangeRequestManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*provider.CRComment, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListCRComments", number)
+func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number string) ([]*model.CRComment, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "ListCRComments", number)
 	if err != nil {
 		return nil, err
 	}
@@ -208,11 +209,11 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRComments", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCRComments", err)
 	}
-	result := make([]*provider.CRComment, 0, len(comments))
+	result := make([]*model.CRComment, 0, len(comments))
 	for _, c := range comments {
-		cc := &provider.CRComment{
+		cc := &model.CRComment{
 			ID:        c.GetID(),
 			Body:      c.GetBody(),
 			CreatedAt: tsOrZero(c.GetCreatedAt()),
@@ -229,8 +230,8 @@ func (p *Provider) ListCRComments(ctx context.Context, owner, repo, number strin
 // ListCRCommits implements provider.ChangeRequestManager. The provider
 // interface exposes no paging parameters, so pagination is exhausted via
 // backendutil.AllPages (100 per page until an empty page).
-func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*provider.CRCommit, error) {
-	n, err := backendutil.ParsePRNumber(provider.PlatformGitHub, "ListCRCommits", number)
+func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string) ([]*model.CRCommit, error) {
+	n, err := backendutil.ParsePRNumber(model.PlatformGitHub, "ListCRCommits", number)
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +242,11 @@ func (p *Provider) ListCRCommits(ctx context.Context, owner, repo, number string
 		return list, err
 	})
 	if err != nil {
-		return nil, provider.Wrap(provider.PlatformGitHub, "ListCRCommits", err)
+		return nil, provider.Wrap(model.PlatformGitHub, "ListCRCommits", err)
 	}
-	result := make([]*provider.CRCommit, 0, len(commits))
+	result := make([]*model.CRCommit, 0, len(commits))
 	for _, c := range commits {
-		cc := &provider.CRCommit{
+		cc := &model.CRCommit{
 			SHA:       c.GetSHA(),
 			Message:   c.GetCommit().GetMessage(),
 			CreatedAt: c.GetCommit().GetAuthor().GetDate().Time,

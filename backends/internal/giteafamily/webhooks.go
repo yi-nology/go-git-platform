@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/yi-nology/go-git-platform/backends/internal/backendutil"
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -36,8 +37,8 @@ import (
 // diverge. Fields must be set by the backend constructor; the engine reads
 // them, never branches on the platform name.
 type Family struct {
-	// Platform identifies the backend (provider.PlatformGitea / Forgejo).
-	Platform provider.Platform
+	// Platform identifies the backend (model.PlatformGitea / Forgejo).
+	Platform model.Platform
 	// EventIDPrefix prefixes generated webhook event IDs ("gt-" for both
 	// platforms today, kept explicit so the dialect stays declarative).
 	EventIDPrefix string
@@ -125,7 +126,7 @@ type HookPort interface {
 
 // CreateWebhook creates a family webhook, defaulting the event list to
 // push+pull_request when unset.
-func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.CreateWebhookOptions) (*provider.PlatformWebhook, error) {
+func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
 	events := opts.Events
 	if len(events) == 0 {
 		events = []string{"push", "pull_request"}
@@ -145,7 +146,7 @@ func CreateWebhook(ctx context.Context, f Family, c HookPort, opts provider.Crea
 // GetWebhook returns one family webhook. The int port return carries the
 // response's HTTP status for IsNotFound classification (the family's error
 // type flattens it away — same reason as FilePort.GetFile).
-func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) (*provider.PlatformWebhook, error) {
+func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64) (*model.PlatformWebhook, error) {
 	hook, status, err := c.GetRepoHook(ctx, owner, repo, webhookID)
 	if err != nil {
 		return nil, familyError(f, "GetWebhook", status, err)
@@ -156,7 +157,7 @@ func GetWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, w
 // UpdateWebhook patches one family webhook. The family PATCH semantics
 // merge the provided config keys server-side, so URL and Secret updates
 // touch only their own key; Events replaces the full event set.
-func UpdateWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*provider.PlatformWebhook, error) {
+func UpdateWebhook(ctx context.Context, f Family, c HookPort, owner, repo string, webhookID int64, opts provider.UpdateWebhookOptions) (*model.PlatformWebhook, error) {
 	opt := EditHookOption{}
 	if opts.URL != nil || opts.Secret != nil {
 		opt.Config = map[string]string{}
@@ -197,7 +198,7 @@ func DeleteWebhook(ctx context.Context, f Family, c HookPort, owner, repo string
 // ListWebhooks returns every family webhook. The provider surface carries no
 // pagination parameters, so the full hook list is fetched by exhausting the
 // endpoint's pagination (backendutil.AllPages).
-func ListWebhooks(ctx context.Context, f Family, c HookPort, owner, repo string) ([]*provider.PlatformWebhook, error) {
+func ListWebhooks(ctx context.Context, f Family, c HookPort, owner, repo string) ([]*model.PlatformWebhook, error) {
 	hooks, err := backendutil.AllPages(func(page int) ([]*Hook, error) {
 		return c.ListRepoHooks(ctx, owner, repo, ListHooksOptions{
 			ListOptions: ListOptions{Page: page, PageSize: f.PageSize},
@@ -206,7 +207,7 @@ func ListWebhooks(ctx context.Context, f Family, c HookPort, owner, repo string)
 	if err != nil {
 		return nil, provider.Wrap(f.Platform, "ListWebhooks", err)
 	}
-	result := make([]*provider.PlatformWebhook, 0, len(hooks))
+	result := make([]*model.PlatformWebhook, 0, len(hooks))
 	for _, h := range hooks {
 		result = append(result, convertHook(h))
 	}
@@ -214,11 +215,11 @@ func ListWebhooks(ctx context.Context, f Family, c HookPort, owner, repo string)
 }
 
 // convertHook projects a family Hook onto the provider webhook shape.
-func convertHook(h *Hook) *provider.PlatformWebhook {
+func convertHook(h *Hook) *model.PlatformWebhook {
 	if h == nil {
 		return nil
 	}
-	return &provider.PlatformWebhook{
+	return &model.PlatformWebhook{
 		ID:     h.ID,
 		URL:    h.Config["url"],
 		Events: h.Events,
@@ -230,7 +231,7 @@ func convertHook(h *Hook) *provider.PlatformWebhook {
 // ParseWebhookEvent validates the signature via the platform's registered
 // validator and maps the (byte-identical across the family) Gitea-style
 // payload onto a NormalizedEvent.
-func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.NormalizedEvent, error) {
+func ParseWebhookEvent(f Family, r *http.Request, secret string) (*model.NormalizedEvent, error) {
 	env := provider.WebhookEnvelope{
 		Platform:     f.Platform,
 		EventHeaders: f.EventHeaders,
@@ -296,7 +297,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 
 	er := provider.BuildEventRepo(pl.Repository.FullName)
 	er.ID = pl.Repository.ID
-	actor := &provider.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
+	actor := &model.CRUser{ID: int64(pl.Sender.ID), Username: pl.Sender.Login}
 
 	event := env.NewEventWithID(r, int64(pl.Number), body)
 	event.Actor = actor
@@ -312,7 +313,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 			// ID 用 payload 的平台全局 id（issue #96，对齐 API 流 crs.go 的
 			// ID: pr.ID）——旧实现塞 Number，事件流与 API 流对同一 CR 给出
 			// 两个不同 ID，按 ID 关联/去重的消费方错配，跨仓还撞号。
-			event.CR = &provider.ChangeRequest{
+			event.CR = &model.ChangeRequest{
 				ID:           int64(pl.PullRequest.ID),
 				Number:       strconv.Itoa(pl.PullRequest.Number),
 				Title:        pl.PullRequest.Title,
@@ -327,7 +328,7 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 				// target tip.
 				StartSHA:  pl.PullRequest.Base.SHA,
 				WebURL:    pl.PullRequest.HTMLURL,
-				Author:    &provider.CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
+				Author:    &model.CRUser{ID: int64(pl.PullRequest.User.ID), Username: pl.PullRequest.User.Login},
 				CreatedAt: pl.PullRequest.CreatedAt,
 				UpdatedAt: pl.PullRequest.UpdatedAt,
 			}
@@ -392,11 +393,11 @@ func ParseWebhookEvent(f Family, r *http.Request, secret string) (*provider.Norm
 		event.Type = provider.EventTypeComment + action
 		event.Action = action
 		if pl.Comment != nil {
-			author := &provider.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
+			author := &model.CRUser{ID: int64(pl.Comment.User.ID), Username: pl.Comment.User.Login}
 			if author.ID == 0 && author.Username == "" {
 				author = actor
 			}
-			event.Comment = &provider.IssueComment{
+			event.Comment = &model.IssueComment{
 				ID:        pl.Comment.ID,
 				Body:      pl.Comment.Body,
 				Author:    author,
@@ -444,15 +445,15 @@ type webhookCommentPayload struct {
 
 // attachWebhookIssue populates event.Issue (and, for PR-shaped issues,
 // event.CR) from a hook's issue payload.
-func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayload) {
+func attachWebhookIssue(event *model.NormalizedEvent, issue *webhookIssuePayload) {
 	if issue == nil {
 		return
 	}
-	state := provider.IssueStateOpen
+	state := model.IssueStateOpen
 	if issue.State == "closed" {
-		state = provider.IssueStateClosed
+		state = model.IssueStateClosed
 	}
-	event.Issue = &provider.Issue{
+	event.Issue = &model.Issue{
 		// 全局 id 上 ID、number 上 Number（issue #96）：解析到的平台全局
 		// id 此前被丢弃、Number 顶替 ID——与 API 流（issues.go ID: i.ID）
 		// 语义分叉。
@@ -461,13 +462,13 @@ func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayl
 		Title:     issue.Title,
 		Body:      issue.Body,
 		State:     state,
-		Author:    &provider.CRUser{ID: int64(issue.User.ID), Username: issue.User.Login},
+		Author:    &model.CRUser{ID: int64(issue.User.ID), Username: issue.User.Login},
 		WebURL:    issue.HTMLURL,
 		CreatedAt: issue.CreatedAt,
 		UpdatedAt: issue.UpdatedAt,
 	}
 	if issue.PullRequest != nil {
-		event.CR = &provider.ChangeRequest{
+		event.CR = &model.ChangeRequest{
 			ID: issue.ID, Number: strconv.Itoa(issue.Number), Title: issue.Title,
 		}
 	}
@@ -475,7 +476,7 @@ func attachWebhookIssue(event *provider.NormalizedEvent, issue *webhookIssuePayl
 
 // MapState maps a family issue/PR state string onto the provider CR state;
 // exported because the family backends' converters share it.
-func MapState(state string, merged bool) provider.CRState {
+func MapState(state string, merged bool) model.CRState {
 	return provider.MapBoolStateToCR(state, merged)
 }
 

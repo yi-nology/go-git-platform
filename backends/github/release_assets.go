@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
 )
 
@@ -20,17 +21,17 @@ import (
 func (p *Provider) DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error {
 	rc, redirectURL, err := p.client.Repositories.DownloadReleaseAsset(ctx, owner, repo, assetID, p.followClient)
 	if err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", err)
+		return provider.Wrap(model.PlatformGitHub, "DownloadReleaseAsset", err)
 	}
 	// followRedirectsClient 非 nil 时 SDK 不会回传 redirectURL;rc 为空即
 	// 既无字节流也无重定向(无 body),按契约报错而非静默成功。
 	if rc == nil {
-		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset",
+		return provider.Wrap(model.PlatformGitHub, "DownloadReleaseAsset",
 			fmt.Errorf("empty asset response: no body (redirect %q)", redirectURL))
 	}
 	defer func() { _ = rc.Close() }()
 	if _, err := io.Copy(w, rc); err != nil {
-		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", err)
+		return provider.Wrap(model.PlatformGitHub, "DownloadReleaseAsset", err)
 	}
 	return nil
 }
