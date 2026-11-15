@@ -66,7 +66,7 @@ func (p *Provider) CreateIssue(ctx context.Context, opts provider.CreateIssueOpt
 	if opts.Milestone != "" {
 		m, err := strconv.Atoi(opts.Milestone)
 		if err != nil {
-			return nil, provider.Wrapf(provider.PlatformGitee, "CreateIssue", "invalid milestone number %q", opts.Milestone)
+			return nil, provider.Wrapf(provider.PlatformGitee, "CreateIssue", "invalid milestone number %q: %w", opts.Milestone, provider.ErrInvalidInput)
 		}
 		createOpts.Milestone = gitee.Int(m)
 	}
@@ -111,7 +111,7 @@ func (p *Provider) UpdateIssue(ctx context.Context, owner, repo, number string, 
 		} else {
 			mi, err := strconv.Atoi(m)
 			if err != nil {
-				return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q", m)
+				return nil, provider.Wrapf(provider.PlatformGitee, "UpdateIssue", "invalid milestone number %q: %w", m, provider.ErrInvalidInput)
 			}
 			updateOpts.Milestone = gitee.Int(mi)
 		}

@@ -3,6 +3,7 @@ package contracttest
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -91,12 +92,13 @@ func (w *releaseAssetsWire) snapshot() []assetHop {
 
 // RunReleaseAssetsSuite tests the release-asset download contract: bytes
 // reach w verbatim on both wire forms (direct 200 and 302 → token-less
-// followClient hop), a zero-length body writes nothing, and a 404 lands in
-// the provider NotFound chain with no bytes written.
+// followClient hop), a zero-length body is an error classified as
+// ErrEmptyResponse with nothing written, and a 404 lands in the provider
+// NotFound chain with no bytes written.
 func RunReleaseAssetsSuite(t *testing.T, h ReleaseAssetsHarness) {
 	t.Run("DownloadReleaseAsset_DirectBytes", func(t *testing.T) { testAssetDirect(t, h) })
 	t.Run("DownloadReleaseAsset_RedirectFollowed", func(t *testing.T) { testAssetRedirect(t, h) })
-	t.Run("DownloadReleaseAsset_EmptyBody_WritesNothing", func(t *testing.T) { testAssetEmptyBody(t, h) })
+	t.Run("DownloadReleaseAsset_EmptyBody_Errors", func(t *testing.T) { testAssetEmptyBody(t, h) })
 	t.Run("DownloadReleaseAsset_404NotFound", func(t *testing.T) { testAsset404(t, h) })
 }
 
@@ -227,26 +229,26 @@ func testAssetRedirect(t *testing.T, h ReleaseAssetsHarness) {
 }
 
 // testAssetEmptyBody pins the zero-length-body face: a 200 with no bytes
-// must deliver nothing to w.
+// must fail with ErrEmptyResponse and deliver nothing to w (issue #164).
 //
-// Site-verified (2C T2): the error branch the provider documents
-// (release_assets.go's rc==nil "empty asset response") is UNREACHABLE under
+// The rc==nil guard the provider originally documented is unreachable under
 // go-github v93 — the SDK returns a nil rc only when followRedirectsClient
 // is nil, and this provider always passes a non-nil followClient; a
 // zero-length 200 therefore hands back a non-nil rc over a zero-length
-// reader. Actual wire behavior: nil error, zero bytes written. That
-// contradicts the iface_releases.go doc ("非 2xx 响应或无响应体时返回错误");
-// the gap is reported for a separate fix ticket (zero production changes in
-// this plan) and this subtest pins the CURRENT wire reality — if the fix
-// lands, flip this assertion together with the doc.
+// reader. The provider therefore checks the copied byte count and returns
+// ErrEmptyResponse, making the iface_releases.go "无响应体时返回错误"
+// promise real instead of silently succeeding with zero bytes.
 func testAssetEmptyBody(t *testing.T, h ReleaseAssetsHarness) {
 	t.Helper()
 	rec := &releaseAssetsWire{}
 	rm := newAssetManager(t, h, assetEmptyHandler(rec))
 	var buf bytes.Buffer
 	err := rm.DownloadReleaseAsset(context.Background(), "owner", "repo", 99, &buf)
-	if err != nil {
-		t.Errorf("current wire reality: 200-with-empty-body returns nil error (rc==nil guard unreachable under go-github v93), got %v — deliberate contract fix? flip this subtest together with the iface_releases.go doc", err)
+	if err == nil {
+		t.Fatal("200-with-empty-body must fail (issue #164: zero bytes is not a successful download)")
+	}
+	if !errors.Is(err, provider.ErrEmptyResponse) {
+		t.Errorf("err = %v, want errors.Is(err, provider.ErrEmptyResponse)", err)
 	}
 	if buf.Len() != 0 {
 		t.Errorf("empty body must write 0 bytes to w, got %d (%q)", buf.Len(), buf.String())

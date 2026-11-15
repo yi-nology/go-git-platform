@@ -16,21 +16,28 @@ import (
 // http.Client(其 CheckRedirect 被禁用)也不该带上 API Bearer。跟随用
 // p.followClient —— 同 SkipTLS 策略,GHES 自签场景第二跳不再 x509。
 // 跟随后的响应体经 CheckResponse 校验,非 2xx 直接报错;rc 即字节流,
-// io.Copy 流式写入 w,不整读内存。
+// io.Copy 流式写入 w,不整读内存。go-github v93 在本路径恒回非 nil rc
+// (followClient 恒非 nil,空体表现为 200 + 0 字节),因此对复制计数做
+// 显式空体检查,把「无响应体时返回错误」的契约落到实处(issue #164)。
 func (p *Provider) DownloadReleaseAsset(ctx context.Context, owner, repo string, assetID int64, w io.Writer) error {
 	rc, redirectURL, err := p.client.Repositories.DownloadReleaseAsset(ctx, owner, repo, assetID, p.followClient)
 	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", err)
 	}
 	// followRedirectsClient 非 nil 时 SDK 不会回传 redirectURL;rc 为空即
-	// 既无字节流也无重定向(无 body),按契约报错而非静默成功。
+	// 既无字节流也无重定向(无 body),按契约报错而非静默成功。生产路径下
+	// 该分支不可达(见上),保留为防御性 fail-closed。
 	if rc == nil {
 		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset",
-			fmt.Errorf("empty asset response: no body (redirect %q)", redirectURL))
+			fmt.Errorf("empty asset response: no body (redirect %q): %w", redirectURL, provider.ErrEmptyResponse))
 	}
 	defer func() { _ = rc.Close() }()
-	if _, err := io.Copy(w, rc); err != nil {
+	n, err := io.Copy(w, rc)
+	if err != nil {
 		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", err)
+	}
+	if n == 0 {
+		return provider.Wrap(provider.PlatformGitHub, "DownloadReleaseAsset", provider.ErrEmptyResponse)
 	}
 	return nil
 }
