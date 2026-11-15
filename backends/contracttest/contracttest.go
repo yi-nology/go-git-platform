@@ -99,6 +99,12 @@ type Harness struct {
 	CILogs *CILogsHarnessConfig
 	// RepoTemplates, when non-nil, auto-mounts the template-repo suite.
 	RepoTemplates *RepoTemplatesHarnessConfig
+	// Gists, when non-nil, auto-mounts the gist-list suite inside Run, with
+	// the same bidirectional drift checks as Users.
+	Gists *GistsHarnessConfig
+	// Starred, when non-nil, auto-mounts the starred-repo list suite inside
+	// Run, with the same bidirectional drift checks as Users.
+	Starred *StarredHarnessConfig
 	// Releases auto-mounts the release-management suite inside Run. Unlike
 	// the fields above, ReleaseManager is a core interface composed into
 	// provider.Provider (every backend implements it), so there is no
@@ -158,6 +164,8 @@ func Run(t *testing.T, h Harness) {
 	t.Run("UsersSuite", func(t *testing.T) { testUsersSuite(t, h) })
 	t.Run("CILogsSuite", func(t *testing.T) { testCILogsSuite(t, h) })
 	t.Run("RepoTemplatesSuite", func(t *testing.T) { testRepoTemplatesSuite(t, h) })
+	t.Run("GistsSuite", func(t *testing.T) { testGistsSuite(t, h) })
+	t.Run("StarredSuite", func(t *testing.T) { testStarredSuite(t, h) })
 }
 
 func baseCfg(h Harness, baseURL string) provider.Config {

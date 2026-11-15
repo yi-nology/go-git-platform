@@ -11,12 +11,13 @@ import (
 // "coverage matrix" expectation: the Run() suite list and the manager-family
 // coverage table must agree in both directions — a suite mounted without a
 // table row, or a table row whose suite is not mounted, fails here. The
-// optional-capability families (Gists, Starred, Migrations, ReleaseAssets,
-// Deployments, ForkSync, and — since issue #123 — TeamReviews) carry only
-// CapabilitySet declaration checks today (capabilities.go); they are listed
-// as explicitly uncovered so the gap stays machine-visible instead of
-// silently implied. The third-way check (TestCapabilityFamiliesAllRegistered)
-// pins every CapabilitySet field into one of the two registries.
+// optional-capability families that still carry only CapabilitySet
+// declaration checks (Migrations, ReleaseAssets, Deployments, ForkSync, and
+// — since issue #123 — TeamReviews) are listed as explicitly uncovered so
+// the gap stays machine-visible instead of silently implied; Gists and
+// Starred left that list when their wire suites landed (2C). The third-way
+// check (TestCapabilityFamiliesAllRegistered) pins every CapabilitySet
+// field into one of the two registries.
 // coveredFamilies maps each manager family to the suite that carries its
 // behavior assertions. Core families must all be present here; the
 // optional-capability families with no shared suite yet (see
@@ -46,6 +47,8 @@ var coveredFamilies = map[string]string{
 	"CommitManager":           "CommitSuite",
 	"DiffManager":             "DiffSuite",
 	"FileManager":             "FileSuite",
+	"GistManager":             "GistsSuite",
+	"StarredManager":          "StarredSuite",
 }
 
 func TestRunCoverageMatrix(t *testing.T) {
@@ -63,6 +66,7 @@ func TestRunCoverageMatrix(t *testing.T) {
 		"WebhookConfigSuite", "NotesSuite", "DeployKeysSuite", "RepoStatsSuite",
 		"UsersSuite", "CILogsSuite", "RepoTemplatesSuite",
 		"CRSuite", "BranchSuite", "CommitSuite", "DiffSuite", "FileSuite",
+		"GistsSuite", "StarredSuite",
 	} {
 		mountedSuites[sub] = true
 	}
@@ -95,15 +99,15 @@ func TestRunCoverageMatrix(t *testing.T) {
 // uncoveredFamilies records the optional-capability families whose behavior
 // currently lives only in the CapabilitySet declaration checks
 // (capabilities.go) — the machine-visible "explicitly uncovered" registry of
-// issue #63. TeamReviewManager joined as the seventh family (issue #123):
-// its single method is write-only, its behavior is pinned per-backend in
-// team_reviewers_wire_test.go, and no shared contract suite exists yet.
+// issue #63. Gists/Starred moved out to coveredFamilies when their wire
+// suites landed (2C T1). TeamReviewManager joined as the seventh family
+// (issue #123): its single method is write-only, its behavior is pinned
+// per-backend in team_reviewers_wire_test.go, and no shared contract suite
+// exists yet.
 // Adding behavior assertions for any family here means adding a suite to
 // Run(), a Harness config, and a row to coveredFamilies — the third-way
 // check (TestCapabilityFamiliesAllRegistered) fails until the move lands.
 var uncoveredFamilies = map[string]string{
-	"GistManager":         "GistsSuite",
-	"StarredManager":      "StarredSuite",
 	"MigrationManager":    "MigrationsSuite",
 	"ReleaseAssetManager": "ReleaseAssetsSuite",
 	"DeploymentManager":   "DeploymentsSuite",
@@ -149,7 +153,7 @@ var capFieldToFamily = map[string]string{
 // coveredFamilies — this test fails until the row lands.
 func TestOptionalCapabilityFamiliesUncovered(t *testing.T) {
 	for _, suite := range []string{
-		"GistsSuite", "StarredSuite", "MigrationsSuite", "ReleaseAssetsSuite", "DeploymentsSuite", "ForkSyncSuite", "TeamReviewsSuite",
+		"MigrationsSuite", "ReleaseAssetsSuite", "DeploymentsSuite", "ForkSyncSuite", "TeamReviewsSuite",
 	} {
 		for _, mounted := range coveredFamilies {
 			if mounted == suite {

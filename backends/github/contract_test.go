@@ -68,6 +68,15 @@ func TestGitHub_Contract(t *testing.T) {
 		RepoTemplates: &contracttest.RepoTemplatesHarnessConfig{
 			GenerateResponse: `{"id":7,"name":"new-repo","full_name":"owner/new-repo","private":false}`,
 		},
+		Gists: &contracttest.GistsHarnessConfig{
+			ListResponse: `[{"id":"g1","description":"notes","public":false,"html_url":"https://gist.github.com/g1","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z","files":{"a.txt":{"filename":"a.txt","language":"Text","raw_url":"https://gist.githubusercontent.com/raw","size":5,"content":"hello"}}}]`,
+		},
+		Starred: &contracttest.StarredHarnessConfig{
+			// star+json 包裹形状（ListStarred 的 Accept 请求的形态）。
+			WrappedResponse: `[{"starred_at":"2026-01-01T00:00:00Z","repo":{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}}]`,
+			// 服务端忽略 Accept 时的裸 repo 数组形状（decodeStarredEntry 回退面）。
+			BareResponse: `[{"id":1,"full_name":"octo/hello","name":"hello","owner":{"login":"octo"},"clone_url":"https://github.com/octo/hello.git","description":"demo","private":false,"archived":true,"fork":true,"stargazers_count":42,"language":"Go"}]`,
+		},
 		CILogs: &contracttest.CILogsHarnessConfig{
 			GreenResponse:  `{"total_count":0,"workflow_runs":[]}`,
 			FailedResponse: `{"total_count":1,"workflow_runs":[{"id":1,"name":"ci","workflow_id":11,"head_sha":"abc"}],"jobs":[{"id":9,"name":"build","conclusion":"failure","html_url":"https://x/9"}]}`,
