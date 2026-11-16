@@ -6,7 +6,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Changed（**BREAKING**：文件排布重构，<ver>）
+## [0.141.0] - 2026-11-16
+
+### Changed（**BREAKING**：文件排布重构，v0.141.0）
 
 - **四层分层成形**：`provider` 单包（90+ 文件）拆为 `model`（纯域实体，叶子）
   ← `provider`（契约缝：接口/参数/哨兵）← `runtime`（机器与用户面助手）

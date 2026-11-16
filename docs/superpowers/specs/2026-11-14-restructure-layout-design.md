@@ -6,7 +6,7 @@
 1. **A 档纯布局拆包**——只动包边界与 import 路径，不改任何 API 语义/签名/接口面
    （2B「操作级 Capability + 统一 Mutation Result」保持独立路线，不在本轮范围）；
 2. **`provider` 保留契约缝名**（不改成 `contract/`）；
-3. **版本 v0.136.0**——0.x 破坏性变更按仓规由 minor 承载（不借机发 v1.0，
+3. **版本 v0.141.0**（原定 v0.136.0，按 §7.4 逐次顺延至实际发版号）——0.x 破坏性变更按仓规由 minor 承载（不借机发 v1.0，
    v1.0 属第 4 期）。
 
 ## 1. 诊断
@@ -284,7 +284,7 @@ webhook 验签 / 空导入注册五形态）、stdlib `runtime` 别名指引、�
 
 ### 7.2 原子发布
 
-单分支单 release：全部分期合入 → 全量门（§9）→ tag `v0.136.0` → push main+tag
+单分支单 release：全部分期合入 → 全量门（§9）→ tag `v0.141.0` → push main+tag
 → Release workflow。**不设中间兼容版本**；CHANGELOG `## [0.136.0]` 段以
 「Breaking」开篇并指向 MIGRATION.md（0.x 破坏性 = minor 承载，仓规）。
 
@@ -297,8 +297,8 @@ mcp/go.mod 按版本 require 父模块（Phase 1 起无 replace），窗口必�
    **mcp job 的 Tidy check**（新路径不在 require 的旧版本里）与
    **mcp-install job**（`@sha` 装出的 mcp 要求父模块新路径）。根模块
    Lint/Vuln/Test 三 job 必须全程绿。
-2. **父模块 v0.136.0 发布后立即**：第二步提交——`mcp/go.mod` require 抬到
-   `v0.136.0` + `go mod tidy`（GOWORK=off）+ `make check-mcp`，合入后窗口闭合、
+2. **父模块 v0.141.0 发布后立即**：第二步提交——`mcp/go.mod` require 抬到
+   `v0.141.0` + `go mod tidy`（GOWORK=off）+ `make check-mcp`，合入后窗口闭合、
    CI 全绿。此步记为分期 S8。
 
 窗口是设计承认的状态，不是事故：任何分支 CI 报告若红在且仅在上述两个检查，
@@ -309,8 +309,8 @@ mcp/go.mod 按版本 require 父模块（Phase 1 起无 replace），窗口必�
 - 动工前 `git status` + 文件 mtime 核对（今日已见并行会话的 2B spec 落盘）；
 - 每分期提交按明确文件清单 `git add`；合并/rebase 后**必查 CHANGELOG 段归属**
   （不只看冲突——v0.135.0 曾被自动合并静默错归）；
-- tag `v0.136.0` 推送前查远端 tag，若被并行会话占用则顺延 `v0.137.0` 并同步
-  本 spec 版本号行。
+- tag `v0.141.0` 推送前查远端 tag，若被并行会话占用则顺延下一个 minor 并同步
+  本 spec 版本号行（本次实操：0.136–0.140 连续被占，逐次顺延至 0.141）。
 
 ## 8. 执行分期（SDD 任务预览；每期绿门 = 根 `GOWORK=off go build ./... &&
 go test ./...` + `make check-mcp`）
@@ -324,12 +324,12 @@ go test ./...` + `make check-mcp`）
 | **S5 文档面** | README 代码块、`provider/doc.go`/`model`/`runtime` 包注释、AGENTS.md 路径引用全量更新（结论不改写）、其余 `docs/` 旧路径 | 纯文档/注释，不改行为 |
 | **S6 守卫 + 迁移文档** | `internal/layering` 边表守卫测试；新建 `docs/MIGRATION.md`；CHANGELOG `0.136.0` Breaking 段 | 新增文件 + CHANGELOG |
 | **S7 全量验证 + 发版暂停点** | §9 全部门 → 暂停待用户确认 → tag/push/Release | — |
-| **S8 窗口闭合**（父版发布后） | `mcp/go.mod` require `v0.136.0` + tidy + `make check-mcp` → 合入 → CI 全绿复核 | mcp/go.mod、mcp/go.sum |
+| **S8 窗口闭合**（父版发布后） | `mcp/go.mod` require `v0.141.0` + tidy + `make check-mcp` → 合入 → CI 全绿复核 | mcp/go.mod、mcp/go.sum |
 
 分期顺序不可倒置的约束：S1/S2 的方向（`provider/runtime → model`）先于 S3 的路径
 大挪移，避免同一提交里同时改「符号归属」和「import 路径」两类机械变更、把冲突面
 翻倍。每期一个（或一串）提交，提交信息中文 conventional commits；版本号只在 S7
-出现（`v0.136.0` 标题行）。
+出现（`v0.141.0` 标题行）。
 
 ## 9. 验收标准
 
