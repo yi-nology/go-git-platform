@@ -25,7 +25,7 @@ push 触发 Release workflow（测试 → `gh release create --generate-notes`�
 ## 2. mcp 子模块
 
 - `mcp/` 是**独立 go module**（`github.com/yi-nology/go-git-platform/mcp`），
-  **不发 `mcp/` 前缀 tag**（2026-11-17 实测：179 个 `v*` tag 全部无 `mcp/`
+  **不发 `mcp/` 前缀 tag**（2026-11-17 实测：`v*` tag 全部无 `mcp/`
   前缀——既定实践）。
 - `mcp/go.mod` 对父模块的 require **人工跟随**：父模块发版后由维护者把
   require 抬到新父 tag 并 `GOWORK=off go mod tidy`。
@@ -37,14 +37,15 @@ push 触发 Release workflow（测试 → `gh release create --generate-notes`�
   v1.0 准备落地）。二进制的运行时版本串经 Go 构建信息自动解析（父模块依赖
   版本），无额外注入依赖。
 - 源码安装：`go install github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@latest`
-  ——mcp 无独立 tag，`@latest` 解析为 mcp 目录**最新提交的伪版本**
+  ——mcp 无独立 tag，`@latest` 解析为默认分支**最新提交的伪版本**
   （`v0.0.0-<时间戳>-<hash>`；2026-11-17 对 proxy.golang.org 实测）。需要
   确定性安装时用 `@<commit-sha>`，或直接取父 tag Release 的预构建二进制。
 
 ## 3. v1 金样纪律（API 面冻结）
 
-- 公共 API 冻结面 = `docs/api-surface-v1.txt` 金样（15 包导出符号清单；
-  `internal/` 与 `mcp/` 不进），机器守卫 `internal/apisurface` 挂
+- 公共 API 冻结面 = `docs/api-surface-v1.txt` 金样（按 spec §3.1 清单逐包
+  抽取；根 `internal/` 与 `mcp/` 不进——`adapter/internal` 两包按 spec
+  §3.1 冻结），机器守卫 `internal/apisurface` 挂
   `go test ./...`（即 `make check`）。守卫随第 4 期（v1.0 准备）落地，
   **v1.0 tag 起即为 v1 冻结契约的机器生效边界**。
 - **v1 期任何 API 面变化 = 显式动作**：`go run ./internal/tools/gensurface`

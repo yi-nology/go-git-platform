@@ -74,7 +74,7 @@ branches / diffs / commits / files / releases）+ 23 个可选能力接口（经
 | 沙箱写路径 E2E | `make e2e`（`-tags=e2e ./e2e/...`）；镜像钉死 Makefile 变量 `GITEA_IMAGE ?= gitea/gitea:28.4`、`FORGEJO_IMAGE ?= codeberg.org/forgejo/forgejo:17.0.1`（可覆盖）；本地一次性起容器（无 Docker 跳过并说明），CI 注入 `E2E_GITEA_URL` / `E2E_FORGEJO_URL` + tokens | Gitea / Forgejo 写往返 | `make e2e` / e2e workflow |
 | 巡检（只读探针） | smoke workflow 手动 dispatch，7 平台 × 6 家族（repo / cr / webhook / pagination / errors / connection）；fail-fast=false，单平台红不串扰 | 七平台只读；`GIT_PLATFORM_SMOKE_TOKEN_<PLATFORM>` secrets 未配时 SKIP（待配——无 secrets 的 dispatch 是 no-op） | `.github/workflows/smoke.yml` |
 | 能力声明对账 | README 矩阵 ↔ `Capabilities()` 逐格机检（见 §1） | 七平台声明面 | `go test ./adapter/all/` |
-| 公共面冻结 | 金样 `docs/api-surface-v1.txt` + `internal/apisurface` 守卫 | 15 包导出符号（见 VERSIONING.md §3） | `go test ./...`（第 4 期落地） |
+| 公共面冻结 | 金样 `docs/api-surface-v1.txt` + `internal/apisurface` 守卫 | 按 spec §3.1 清单逐包冻结（见 VERSIONING.md §3） | `go test ./...`（第 4 期落地） |
 
 平台偏离（divergence）登记在各后端 `divergence.go` 并由
 `go generate ./...` 再生成 `docs/divergence-ledger.md`，漂移由机器检查
