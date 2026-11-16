@@ -3,8 +3,21 @@
 # The contract suites run against httptest fakes; this workflow is the
 # manual trigger that points the env-gated smoke test (smoke/) at a LIVE
 # platform so wire drift surfaces as a red run instead of waiting for a
-# human probe round. Strictly read-only probes (GetRepo + one page of
-# ListRepos).
+# human probe round. Strictly read-only probe families (smoke/probes.go):
+# repo | cr | webhook | pagination | errors | connection — no writes ever.
+#
+# Secrets (spec §5 list — the repository currently has NONE configured;
+# until they are added every run SKIPs (env-gated), never fails):
+#   GIT_PLATFORM_SMOKE_TOKEN_GITHUB      patrol token for GitHub
+#   GIT_PLATFORM_SMOKE_TOKEN_GITLAB      patrol token for GitLab
+#   GIT_PLATFORM_SMOKE_TOKEN_GITEA       patrol token for Gitea
+#   GIT_PLATFORM_SMOKE_TOKEN_FORGEJO     patrol token for Forgejo
+#   GIT_PLATFORM_SMOKE_TOKEN_GITEE       patrol token for Gitee
+#   GIT_PLATFORM_SMOKE_TOKEN_GITCODE     patrol token for GitCode
+#   GIT_PLATFORM_SMOKE_TOKEN_TENCENTCODE patrol token for TencentCode
+#   SMOKE_TOKEN                          fallback for any platform
+# Add one with: gh secret set GIT_PLATFORM_SMOKE_TOKEN_GITHUB   (etc.)
+# Dispatch: platform=all + families=all runs the full 7×6 patrol matrix.
 
 name: smoke
 
@@ -12,9 +25,13 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: 'Platform (github|gitlab|gitea|forgejo|gitee|gitcode|tencentcode)'
+        description: 'Platform (github|gitlab|gitea|forgejo|gitee|gitcode|tencentcode, or all for the full matrix)'
         required: false
         default: 'github'
+      families:
+        description: 'Probe families: comma-separated subset of repo|cr|webhook|pagination|errors|connection, or all'
+        required: false
+        default: 'repo'
       owner:
         description: 'Owner (org or user) to probe'
         required: true
@@ -35,9 +52,20 @@ concurrency:
 
 jobs:
   smoke:
-    name: Smoke (${{ github.event.inputs.platform }})
+    name: Smoke (${{ matrix.platform }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      # Patrol semantics: one platform going red must not cancel the rest
+      # of the matrix — every unit reports its own verdict.
+      fail-fast: false
+      matrix:
+        # Single-platform narrowing, shorter than a two-job split: when
+        # platform names one platform the matrix collapses to that one
+        # unit (default 'github' = the historical single run, zero behavior
+        # change for existing dispatchers); '' or 'all' fans out to the
+        # seven-platform matrix.
+        platform: ${{ (github.event.inputs.platform == '' || github.event.inputs.platform == 'all') && fromJSON('["github","gitlab","gitea","forgejo","gitee","gitcode","tencentcode"]') || fromJSON(format('["{0}"]', github.event.inputs.platform)) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,7 +84,8 @@ jobs:
       # SKIP (env-gated), not fail — dispatch without secrets is a no-op.
       - name: Run smoke test
         env:
-          GIT_PLATFORM_SMOKE_PLATFORM: ${{ github.event.inputs.platform }}
+          GIT_PLATFORM_SMOKE_PLATFORM: ${{ matrix.platform }}
+          GIT_PLATFORM_SMOKE_FAMILIES: ${{ github.event.inputs.families }}
           GIT_PLATFORM_SMOKE_OWNER: ${{ github.event.inputs.owner }}
           GIT_PLATFORM_SMOKE_REPO: ${{ github.event.inputs.repo }}
           GIT_PLATFORM_SMOKE_URL: ${{ github.event.inputs.url }}

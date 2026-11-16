@@ -1,10 +1,10 @@
 // Package smoke carries the env-gated real-environment smoke test (issue
 // #119, the v1.0-readiness test-matrix item): contract tests all run against
 // httptest fakes, so real wire drift (route renames, vocabulary changes,
-// auth-scheme shifts) has no regression net. This test runs the smallest
-// read-only round trip against a LIVE platform — but only when credentials
-// are present; without them it skips in milliseconds, so `go test ./...`
-// (and every CI job) stays hermetic.
+// auth-scheme shifts) has no regression net. This test runs strictly
+// read-only probe families against a LIVE platform — but only when
+// credentials are present; without them it skips in milliseconds, so
+// `go test ./...` (and every CI job) stays hermetic.
 //
 // Trigger it locally:
 //
@@ -14,8 +14,11 @@
 //	go test ./smoke/ -v -run TestSmoke
 //
 // Or dispatch the "smoke" GitHub Actions workflow manually (it feeds the
-// variables from workflow inputs + repository secrets). The probes are
-// strictly read-only: one GetRepo and one page of ListRepos.
+// variables from workflow inputs + repository secrets). The probe families
+// live in probes.go (Probes registry): repo | cr | webhook | pagination |
+// errors | connection — selected by GIT_PLATFORM_SMOKE_FAMILIES
+// (comma-separated; empty = "repo" = the historical behavior; "all" = six).
+// Every probe is strictly read-only (spec 3期 §2 red line).
 package smoke_test
 
 import (
@@ -27,9 +30,11 @@ import (
 	_ "github.com/yi-nology/go-git-platform/adapter/all" // register every platform
 	"github.com/yi-nology/go-git-platform/model"
 	"github.com/yi-nology/go-git-platform/provider"
+	"github.com/yi-nology/go-git-platform/smoke"
 )
 
-// TestSmoke_RealEnvironment runs two read-only probes (GetRepo, ListRepos)
+// TestSmoke_RealEnvironment runs the selected read-only probe families
+// (default: repo — GetRepo + one page of ListRepos, the historical shape)
 // against the live platform the env vars name. Env-gated: without
 // GIT_PLATFORM_SMOKE_TOKEN the test skips — a missing secret must look like
 // a skip, never like a failure (CI stays green and hermetic).
@@ -60,26 +65,26 @@ func TestSmoke_RealEnvironment(t *testing.T) {
 		t.Fatalf("new provider for %s: %v", platform, err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	base := smoke.Options{
+		Owner: owner,
+		Repo:  repo,
+		URL:   os.Getenv("GIT_PLATFORM_SMOKE_URL"),
+		Token: token,
+	}
 
-	// 探针 1:GetRepo——单仓读路径、鉴权、错误分类全走一遍。
-	got, err := p.GetRepo(ctx, owner, repo)
-	if err != nil {
-		t.Fatalf("GetRepo(%s/%s) against live %s: %v (wire drift? route/auth/vocabulary changes surface here first)", owner, repo, platform, err)
+	for _, fam := range smoke.ParseFamilies(os.Getenv("GIT_PLATFORM_SMOKE_FAMILIES")) {
+		probe, ok := smoke.Probes[fam]
+		if !ok {
+			t.Fatalf("unknown smoke family %q in GIT_PLATFORM_SMOKE_FAMILIES (known: repo, cr, webhook, pagination, errors, connection, or all)", fam)
+		}
+		t.Run(fam, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			opts := base
+			opts.Logf = t.Logf
+			if err := probe(ctx, p, opts); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
-	if got == nil || got.Name == "" {
-		t.Fatalf("GetRepo returned an empty repo payload: %+v", got)
-	}
-	t.Logf("GetRepo ok: %s/%s (default branch %q)", got.Owner, got.Name, got.DefaultBranch)
-
-	// 探针 2:ListRepos 一页——列表路径与分页词表。
-	repos, err := p.ListRepos(ctx, provider.ListRepoOptions{Owner: owner, Page: 1, PerPage: 5})
-	if err != nil {
-		t.Fatalf("ListRepos(%s) against live %s: %v", owner, platform, err)
-	}
-	if len(repos) == 0 {
-		t.Fatalf("ListRepos returned zero repos for %s — wire shape drift?", owner)
-	}
-	t.Logf("ListRepos ok: %d repo(s) on page 1", len(repos))
 }
