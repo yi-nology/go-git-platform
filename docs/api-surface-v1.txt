@@ -9,13 +9,16 @@
 #   （spec §3.1 金样纪律）。
 #
 # 形态：go list -json + go/parser（stdlib，零新依赖）逐包抽取导出符号，
-#   go/printer 规范渲染，一行一符号，包内 sort.Strings 排序；含类型块全字段、
-#   不含未导出符号与任何注释（spec §2 红线）。落选形态 go doc -all 文本协议
-#   的落选原因见 internal/tools/gensurface/surface.go 头注。
-# 包清单（18，spec §3.1）：provider model runtime adapter/{github,gitlab,gitea,
-#   forgejo,gitee,gitcode,tencentcode} adapter/internal/{giteafamily,backendutil}
-#   adapter/all contracttest auth/{githubapp,credential} filter/branchfilter
-#   model/projection —— 根 internal/ 与 mcp/ 不进金样。
+#   go/printer 规范渲染，一行一符号，包内 sort.Strings 排序；类型块渲染导出
+#   字段/方法（未导出成员是内部状态非 API，T2 评审裁定剥离——内部重构不出
+#   守卫噪音）、不含未导出符号与任何注释（spec §2 红线）。落选形态 go doc
+#   -all 文本协议的落选原因见 internal/tools/gensurface/surface.go 头注。
+# 包清单（22，spec §3.1 + T2 评审勘误）：provider model runtime
+#   adapter/{github,gitlab,gitea,forgejo,gitee,gitcode,tencentcode}
+#   adapter/internal/{giteafamily,backendutil} adapter/all contracttest
+#   auth/{githubapp,credential} filter/branchfilter model/projection
+#   transport transport/metrics gitbackend smoke —— 根 internal/ 与 mcp/
+#   不进金样。
 # --- 冻结面开始（包 section 头 + 每行一个导出符号）---
 
 # package github.com/yi-nology/go-git-platform/provider
@@ -1297,11 +1300,6 @@ type HmacValidator struct {
 	Prefix		string
 }
 type Manager struct {
-	cache	*ttlCache[provider.Provider]
-	ttl	time.Duration
-	hasher	func(token string) string
-
-	jan	janitor
 }
 type ManagerOption func(*Manager)
 type MutationOutcome string
@@ -1342,7 +1340,6 @@ type WebhookValidator interface {
 	Validate(r *http.Request, body []byte, secret string) error
 }
 type WebhookValidatorRegistry struct {
-	validators *container.SafeMap[model.Platform, WebhookValidator]
 }
 var ErrPageBudgetExceeded = oekiterrors.New("page budget exceeded before an empty page")
 var ErrStopIteration = oekiterrors.New("iteration stopped")
@@ -1475,10 +1472,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client	*github.Client
-	logger	provider.Logger
-
-	followClient	*http.Client
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/gitlab
@@ -1601,10 +1594,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client		*gitlab.Client
-	logger		provider.Logger
-	labelIDs	*backendutil.IDCache
-	userIDs		*backendutil.IDCache
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/gitea
@@ -1725,12 +1714,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client		*gitea.Client
-	logger		provider.Logger
-	labelIDs	*backendutil.IDCache
-
-	family	giteafamily.Family
-	ports	sdkPorts
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/forgejo
@@ -1849,12 +1832,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client		*forgejo.Client
-	logger		provider.Logger
-	labelIDs	*backendutil.IDCache
-
-	family	giteafamily.Family
-	ports	sdkPorts
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/gitee
@@ -1957,11 +1934,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client	*gitee.Client
-	baseURL	string
-
-	httpClient	*http.Client
-	logger		provider.Logger
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/gitcode
@@ -2060,8 +2032,6 @@ func (p *Provider) ValidateWebhookSignature(r *http.Request, secret string) erro
 func Divergences() []provider.Divergence
 func New(cfg provider.Config) (provider.Provider, error)
 type Provider struct {
-	client	*gitcode.Client
-	logger	provider.Logger
 }
 
 # package github.com/yi-nology/go-git-platform/adapter/tencentcode
@@ -2453,10 +2423,6 @@ type ProtectedBranchMemberOptions struct {
 	AccessLevel	int
 }
 type Provider struct {
-	client		*gongfeng.Client
-	transport	*transport.Client
-	logger		provider.Logger
-	userIDs		*backendutil.IDCache
 }
 type ReviewerEvent string
 type SSHKeyInfo struct {
@@ -3380,7 +3346,6 @@ func SDKHTTPClient(tc *transport.Client, skipTLS bool) *http.Client
 func TailOfReader(r io.Reader, budget int) (string, bool, error)
 func ToTransportLogger(l provider.Logger) transport.Logger
 type IDCache struct {
-	cache *cache.LocalCache[int64]
 }
 type LabelPageFunc func(page, perPage int) ([]LabelRef, error)
 type LabelRef struct {
@@ -3910,10 +3875,6 @@ type InstallationTokenSource struct {
 	RefreshMargin	time.Duration
 
 	FallbackTTL	time.Duration
-
-	mu		sync.Mutex
-	token		*secretx.SecureString
-	expiresAt	time.Time
 }
 
 # package github.com/yi-nology/go-git-platform/auth/credential
@@ -3940,8 +3901,6 @@ func NewCryptoManagerFromKey(key string) *CryptoManager
 func NewManager() *Manager
 func NewSSHKeyHelper() *SSHKeyHelper
 type CryptoManager struct {
-	mu		sync.RWMutex
-	material	[]byte
 }
 type DeployKey struct {
 	PrivateKeyPEM	string
@@ -3952,7 +3911,6 @@ type DeployKey struct {
 }
 type Manager struct{}
 type SSHKeyHelper struct {
-	hostKeys *container.SafeMap[string, ssh.PublicKey]
 }
 
 # package github.com/yi-nology/go-git-platform/filter/branchfilter
@@ -3963,9 +3921,738 @@ func (f *BranchFilter) Patterns() []string
 func New(filterStr string) (*BranchFilter, error)
 func NewPatterns(patterns []string) (*BranchFilter, error)
 type BranchFilter struct {
-	patterns []string
 }
 
 # package github.com/yi-nology/go-git-platform/model/projection
 func Project(v any, fields ...string) (map[string]any, error)
 func ProjectList[T any](items []T, fields ...string) ([]map[string]any, error)
+
+# package github.com/yi-nology/go-git-platform/transport
+const AuthStyleBearer = "bearer"
+const AuthStylePrivate = "private"
+const AuthStyleToken = "token"
+const DefaultETagEntries = 128
+const DefaultMaxBodySize = 10 * 1024 * 1024
+const DefaultMaxCachedBodySize = 1024 * 1024
+const DefaultTimeout = 30 * time.Second
+func (None) Apply(*http.Request) error
+func (a TokenSourceAuth) Apply(req *http.Request) error
+func (a TokenSourceAuth) ApplyContext(ctx context.Context, req *http.Request) error
+func (b BearerToken) Apply(req *http.Request) error
+func (c *Client) Do(ctx context.Context, req *Request) (*Response, error)
+func (c *Client) DoJSON(ctx context.Context, req *Request) (*Response, error)
+func (c *Client) DoRaw(ctx context.Context, req *Request) ([]byte, error)
+func (c *Client) Hooks() *Hooks
+func (c *Client) NewRetryingRoundTripper() http.RoundTripper
+func (c *Client) RoundTripper() http.RoundTripper
+func (c *ETagCache) Len() int
+func (e *Error) Error() string
+func (e *Error) Is(target error) bool
+func (e *Error) IsClientError() bool
+func (e *Error) IsRateLimited() bool
+func (e *Error) IsServerError() bool
+func (e *Error) IsStatus(code int) bool
+func (e *Error) IsStatusClass(lo int) bool
+func (e *Error) RateLimitInfo() (retryAfter time.Duration, resetAt time.Time)
+func (e *Error) StatusCode() int
+func (e *Error) Unwrap() error
+func (f AuthFunc) Apply(req *http.Request) error
+func (h *Hooks) AddRequest(hook RequestHook)
+func (h *Hooks) AddResponse(hook ResponseHook)
+func (h *Hooks) ExecuteRequest(ctx context.Context, req *http.Request) error
+func (h *Hooks) ExecuteResponse(ctx context.Context, req *http.Request, resp *http.Response, duration time.Duration, err error)
+func (l LoggerFunc) Debug(msg string, kv ...any)
+func (l LoggerFunc) Error(msg string, kv ...any)
+func (l LoggerFunc) Info(msg string, kv ...any)
+func (l LoggerFunc) Warn(msg string, kv ...any)
+func (l SlogLogger) Debug(msg string, kv ...any)
+func (l SlogLogger) Enabled(level logx.Level) bool
+func (l SlogLogger) Error(msg string, kv ...any)
+func (l SlogLogger) Info(msg string, kv ...any)
+func (l SlogLogger) Warn(msg string, kv ...any)
+func (p PrivateToken) Apply(req *http.Request) error
+func (rc *RetryConfig) Backoff(attempt int, resp *http.Response) time.Duration
+func (rc *RetryConfig) Do(ctx context.Context, client *http.Client, req *http.Request, logger Logger, maxBodySize int64) (*http.Response, []byte, error)
+func (rc *RetryConfig) ShouldRetry(status int) bool
+func (rl *RateLimiter) Remaining() int
+func (rl *RateLimiter) ResetAt() time.Time
+func (rl *RateLimiter) UpdateFromResponse(resp *http.Response)
+func (rl *RateLimiter) Wait()
+func (rl *RateLimiter) WaitContext(ctx context.Context) error
+func (s StaticAuth) Apply(req *http.Request) error
+func (t TokenHeader) Apply(req *http.Request) error
+func CrossHostRedirect(req *http.Request) bool
+func DebugEnabled(l Logger) bool
+func DefaultRetryConfig() RetryConfig
+func NewClient(baseURL string, auth AuthStrategy, opts ...ClientOption) *Client
+func NewDebugLogger() Logger
+func NewETagCache(maxEntries int) *ETagCache
+func NewLogxLogger(component string) Logger
+func NewRateLimiter(opts ...RateLimiterOption) *RateLimiter
+func NewStatusError(method, path string, status int, body []byte) error
+func NewStatusErrorWithHeaders(method, path string, status int, body []byte, header http.Header) error
+func NoopLogger() Logger
+func OriginRedirectHost(req *http.Request) string
+func StaticTokenSource(token string) TokenSource
+func StripSensitiveCredentials(req *http.Request)
+func StripSensitiveHeaders(req *http.Request)
+func StripSensitiveQueryParams(req *http.Request)
+func WithETag(cache *ETagCache) ClientOption
+func WithHooks(h *Hooks) ClientOption
+func WithLimiter(rl *RateLimiter) ClientOption
+func WithLogger(l Logger) ClientOption
+func WithMaxBodySize(n int64) ClientOption
+func WithMinDelay(d time.Duration) RateLimiterOption
+func WithRPS(rps float64) RateLimiterOption
+func WithRetry(cfg *RetryConfig) ClientOption
+func WithThrottleThreshold(n int) RateLimiterOption
+func WithTimeout(d time.Duration) ClientOption
+func WithTransport(rt http.RoundTripper) ClientOption
+type AuthFunc func(req *http.Request)
+type AuthStrategy interface {
+	Apply(req *http.Request) error
+}
+type BearerToken struct{ Token string }
+type Client struct {
+}
+type ClientOption func(*Client)
+type ETagCache struct {
+}
+type Error struct {
+	Method	string
+	Path	string
+
+	Body	[]byte
+	Cause	error
+
+	RetryAfter	time.Duration
+
+	ResetAt	time.Time
+}
+type Hooks struct {
+	Request		[]RequestHook
+	Response	[]ResponseHook
+}
+type Logger interface {
+	Debug(msg string, keysAndValues ...any)
+	Info(msg string, keysAndValues ...any)
+	Warn(msg string, keysAndValues ...any)
+	Error(msg string, keysAndValues ...any)
+}
+type LoggerFunc struct {
+	DebugFunc	func(msg string, kv ...any)
+	InfoFunc	func(msg string, kv ...any)
+	WarnFunc	func(msg string, kv ...any)
+	ErrorFunc	func(msg string, kv ...any)
+}
+type None struct{}
+type PrivateToken struct{ Token string }
+type RateLimiter struct {
+}
+type RateLimiterOption func(*RateLimiter)
+type Request struct {
+	Method	string
+
+	Path	string
+
+	Query	url.Values
+
+	Headers	http.Header
+
+	Body	any
+
+	Result	any
+}
+type RequestHook func(ctx context.Context, req *http.Request) error
+type Response struct {
+	StatusCode	int
+	Header		http.Header
+	Body		[]byte
+}
+type ResponseHook func(ctx context.Context, req *http.Request, resp *http.Response, duration time.Duration, err error)
+type RetryConfig struct {
+	MaxAttempts	int
+
+	BaseDelay	time.Duration
+
+	MaxDelay	time.Duration
+
+	Statuses	[]int
+
+	RetryWrite	bool
+}
+type SlogLogger struct{ Logger *slog.Logger }
+type StaticAuth struct {
+	Header	string
+	Value	string
+}
+type TokenHeader struct{ Token string }
+type TokenSource interface {
+	Token(ctx context.Context) (string, error)
+}
+type TokenSourceAuth struct {
+	Source	TokenSource
+	Style	string
+}
+var ErrETagEntryGone = oekiterrors.New("conditional request answered 304 but the cached entry is gone")
+var ErrEmptyResponse = fmt.Errorf("transport: empty response body")
+
+# package github.com/yi-nology/go-git-platform/transport/metrics
+func (f RecorderFunc) ObserveRequest(method, path string, status int, duration time.Duration, err error)
+func ClassifyPath(path string) string
+func ResponseHook(r Recorder, classify func(*http.Request) string) transport.ResponseHook
+type Recorder interface {
+	ObserveRequest(method, path string, status int, duration time.Duration, err error)
+}
+type RecorderFunc func(method, path string, status int, duration time.Duration, err error)
+
+# package github.com/yi-nology/go-git-platform/gitbackend
+const AuthHTTPBasic AuthType = "http_basic"
+const AuthHTTPToken AuthType = "http_token"
+const AuthNone AuthType = "none"
+const AuthSSH AuthType = "ssh"
+const EncodingBase64 BlobEncoding = "base64"
+const EncodingUTF8 BlobEncoding = "utf-8"
+const StatusAdded StatusCode = 'A'
+const StatusCopied StatusCode = 'C'
+const StatusDeleted StatusCode = 'D'
+const StatusIgnored StatusCode = '!'
+const StatusModified StatusCode = 'M'
+const StatusRenamed StatusCode = 'R'
+const StatusUnmodified StatusCode = ' '
+const StatusUntracked StatusCode = '?'
+const TreeEntryDir TreeEntryType = "dir"
+const TreeEntryFile TreeEntryType = "file"
+func (b *GoGitBackend) Add(ctx context.Context, repoPath string, files []string) error
+func (b *GoGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error
+func (b *GoGitBackend) Checkout(ctx context.Context, repoPath, branch string) error
+func (b *GoGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref string) error
+func (b *GoGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error
+func (b *GoGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error
+func (b *GoGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error
+func (b *GoGitBackend) Clone(ctx context.Context, opts CloneOptions) error
+func (b *GoGitBackend) CommitWithIdentity(ctx context.Context, repoPath, name, email, message string) error
+func (b *GoGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref string) error
+func (b *GoGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string) error
+func (b *GoGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string) error
+func (b *GoGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error
+func (b *GoGitBackend) DeletedFiles(ctx context.Context, repoPath, from, to string) ([]string, error)
+func (b *GoGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptions) (string, error)
+func (b *GoGitBackend) DiffNames(ctx context.Context, repoPath, from, to string) ([]string, error)
+func (b *GoGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error)
+func (b *GoGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error
+func (b *GoGitBackend) GetBlob(ctx context.Context, repoPath, ref, filePath string) (*BlobContent, error)
+func (b *GoGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, upstream string) (int, int, error)
+func (b *GoGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) (*CommitInfo, error)
+func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error)
+func (b *GoGitBackend) GetConfig(ctx context.Context, repoPath, key string) (string, error)
+func (b *GoGitBackend) GetCurrentBranch(ctx context.Context, repoPath string) (string, error)
+func (b *GoGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error)
+func (b *GoGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error)
+func (b *GoGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error)
+func (b *GoGitBackend) GetRemotes(ctx context.Context, repoPath string) ([]string, error)
+func (b *GoGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoStatus, error)
+func (b *GoGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error)
+func (b *GoGitBackend) GetTree(ctx context.Context, repoPath, ref, dirPath string, recursive bool) ([]TreeEntry, error)
+func (b *GoGitBackend) Init(ctx context.Context, repoPath string) error
+func (b *GoGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error)
+func (b *GoGitBackend) ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error)
+func (b *GoGitBackend) ListLocalBranches(ctx context.Context, repoPath string) ([]string, error)
+func (b *GoGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote string) ([]string, error)
+func (b *GoGitBackend) Merge(ctx context.Context, repoPath, branch string, opts MergeOptions) error
+func (b *GoGitBackend) MergeBase(ctx context.Context, repoPath, a, other string) (string, error)
+func (b *GoGitBackend) Pull(ctx context.Context, repoPath, remote, branch string, auth AuthConfig) error
+func (b *GoGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error)
+func (b *GoGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error
+func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error
+func (b *GoGitBackend) RebaseAbort(ctx context.Context, repoPath string) error
+func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) error
+func (b *GoGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) error
+func (b *GoGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error
+func (b *GoGitBackend) RevParse(ctx context.Context, repoPath, ref string) (string, error)
+func (b *GoGitBackend) RunRaw(ctx context.Context, repoPath string, args []string) (string, string, error)
+func (b *GoGitBackend) SetConfig(ctx context.Context, repoPath, key, value string) error
+func (b *GoGitBackend) StashApply(ctx context.Context, repoPath string, stashIdx int) error
+func (b *GoGitBackend) StashClear(ctx context.Context, repoPath string) error
+func (b *GoGitBackend) StashDrop(ctx context.Context, repoPath string, stashIdx int) error
+func (b *GoGitBackend) StashList(ctx context.Context, repoPath string) ([]StashEntry, error)
+func (b *GoGitBackend) StashPop(ctx context.Context, repoPath string, stashIdx int) error
+func (b *GoGitBackend) StashSave(ctx context.Context, repoPath, message string) error
+func (b *GoGitBackend) TestConnection(ctx context.Context, url string, auth AuthConfig) error
+func (b *NativeGitBackend) Add(ctx context.Context, repoPath string, files []string) error
+func (b *NativeGitBackend) AddRemote(ctx context.Context, repoPath, name, url string) error
+func (b *NativeGitBackend) Checkout(ctx context.Context, repoPath, branch string) error
+func (b *NativeGitBackend) CheckoutDetached(ctx context.Context, repoPath, ref string) error
+func (b *NativeGitBackend) CheckoutFiles(ctx context.Context, repoPath, ref string, files []string) error
+func (b *NativeGitBackend) CheckoutRef(ctx context.Context, repoPath, ref string) error
+func (b *NativeGitBackend) CherryPick(ctx context.Context, repoPath, commitHash string) error
+func (b *NativeGitBackend) Clone(ctx context.Context, opts CloneOptions) error
+func (b *NativeGitBackend) CommitWithIdentity(ctx context.Context, repoPath, name, email, message string) error
+func (b *NativeGitBackend) CreateBranch(ctx context.Context, repoPath, branch, ref string) error
+func (b *NativeGitBackend) CreateTag(ctx context.Context, repoPath, name, ref string) error
+func (b *NativeGitBackend) DeleteBranch(ctx context.Context, repoPath, branch string) error
+func (b *NativeGitBackend) DeleteTag(ctx context.Context, repoPath, name string) error
+func (b *NativeGitBackend) DeletedFiles(ctx context.Context, repoPath, from, to string) ([]string, error)
+func (b *NativeGitBackend) Diff(ctx context.Context, repoPath string, opts DiffOptions) (string, error)
+func (b *NativeGitBackend) DiffNames(ctx context.Context, repoPath, from, to string) ([]string, error)
+func (b *NativeGitBackend) Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error)
+func (b *NativeGitBackend) FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error
+func (b *NativeGitBackend) GetBlob(ctx context.Context, repoPath, ref, filePath string) (*BlobContent, error)
+func (b *NativeGitBackend) GetBranchSyncInfo(ctx context.Context, repoPath, branch, upstream string) (int, int, error)
+func (b *NativeGitBackend) GetCommit(ctx context.Context, repoPath, hashStr string) (*CommitInfo, error)
+func (b *NativeGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to string) ([]CommitInfo, error)
+func (b *NativeGitBackend) GetConfig(ctx context.Context, repoPath, key string) (string, error)
+func (b *NativeGitBackend) GetCurrentBranch(ctx context.Context, repoPath string) (string, error)
+func (b *NativeGitBackend) GetFileAtRevision(ctx context.Context, repoPath, path, ref string) ([]byte, error)
+func (b *NativeGitBackend) GetFileHistory(ctx context.Context, repoPath, path string, limit int) ([]CommitInfo, error)
+func (b *NativeGitBackend) GetRemoteURL(ctx context.Context, repoPath, name string) (string, error)
+func (b *NativeGitBackend) GetRemotes(ctx context.Context, repoPath string) ([]string, error)
+func (b *NativeGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoStatus, error)
+func (b *NativeGitBackend) GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error)
+func (b *NativeGitBackend) GetTree(ctx context.Context, repoPath, ref, dirPath string, recursive bool) ([]TreeEntry, error)
+func (b *NativeGitBackend) Init(ctx context.Context, repoPath string) error
+func (b *NativeGitBackend) IsAncestor(ctx context.Context, repoPath, ancestor, descendant string) (bool, error)
+func (b *NativeGitBackend) ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error)
+func (b *NativeGitBackend) ListLocalBranches(ctx context.Context, repoPath string) ([]string, error)
+func (b *NativeGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote string) ([]string, error)
+func (b *NativeGitBackend) Merge(ctx context.Context, repoPath, branch string, opts MergeOptions) error
+func (b *NativeGitBackend) MergeBase(ctx context.Context, repoPath, a, other string) (string, error)
+func (b *NativeGitBackend) Pull(ctx context.Context, repoPath, remote, branch string, auth AuthConfig) error
+func (b *NativeGitBackend) Push(ctx context.Context, opts PushOptions) (*PushResult, error)
+func (b *NativeGitBackend) PushTag(ctx context.Context, repoPath, remote, name string, auth AuthConfig) error
+func (b *NativeGitBackend) Rebase(ctx context.Context, repoPath, onto string) error
+func (b *NativeGitBackend) RebaseAbort(ctx context.Context, repoPath string) error
+func (b *NativeGitBackend) RebaseContinue(ctx context.Context, repoPath string) error
+func (b *NativeGitBackend) RemoveRemote(ctx context.Context, repoPath, name string) error
+func (b *NativeGitBackend) RenameBranch(ctx context.Context, repoPath, oldName, newName string) error
+func (b *NativeGitBackend) RevParse(ctx context.Context, repoPath, ref string) (string, error)
+func (b *NativeGitBackend) RunRaw(ctx context.Context, repoPath string, args []string) (string, string, error)
+func (b *NativeGitBackend) SetConfig(ctx context.Context, repoPath, key, value string) error
+func (b *NativeGitBackend) StashApply(ctx context.Context, repoPath string, index int) error
+func (b *NativeGitBackend) StashClear(ctx context.Context, repoPath string) error
+func (b *NativeGitBackend) StashDrop(ctx context.Context, repoPath string, index int) error
+func (b *NativeGitBackend) StashList(ctx context.Context, repoPath string) ([]StashEntry, error)
+func (b *NativeGitBackend) StashPop(ctx context.Context, repoPath string, index int) error
+func (b *NativeGitBackend) StashSave(ctx context.Context, repoPath, message string) error
+func (b *NativeGitBackend) TestConnection(ctx context.Context, url string, auth AuthConfig) error
+func (e *GitError) Error() string
+func (e *GitError) Is(target error) bool
+func (e *GitError) Unwrap() error
+func (r *Repository) Auth() AuthConfig
+func (r *Repository) Checkout(ctx context.Context, ref string) error
+func (r *Repository) CheckoutDetached(ctx context.Context, ref string) error
+func (r *Repository) CheckoutFiles(ctx context.Context, ref string, files []string) error
+func (r *Repository) Close() error
+func (r *Repository) CommitWithIdentity(ctx context.Context, name, email, msg string) error
+func (r *Repository) DeletedFiles(ctx context.Context, baseSHA, headSHA string) ([]string, error)
+func (r *Repository) Diff(ctx context.Context, baseSHA, headSHA string) (string, error)
+func (r *Repository) DiffNameOnly(ctx context.Context, baseSHA, headSHA string) ([]string, error)
+func (r *Repository) Dir() string
+func (r *Repository) Fetch(ctx context.Context, refspec string) error
+func (r *Repository) FetchAll(ctx context.Context) error
+func (r *Repository) MergeBase(ctx context.Context, a, b string) (string, error)
+func (r *Repository) RevParse(ctx context.Context, ref string) (string, error)
+func CloneRepository(ctx context.Context, b GitBackend, url, path string, auth AuthConfig, insecure bool) (*Repository, error)
+func IsAuthFailed(err error) bool
+func IsMergeConflict(err error) bool
+func IsNotFound(err error) bool
+func NewGitBackend(opts Options) (GitBackend, error)
+func NewGoGitBackend(opts Options) *GoGitBackend
+func NewHTTPBasicAuth(username, password string) AuthConfig
+func NewNativeGitBackend(opts Options) (*NativeGitBackend, error)
+func NewNoopLogger() Logger
+func NewSSHKeyContentAuth(keyContent, passphrase string) AuthConfig
+func NewSSHKeyFileAuth(keyPath, passphrase string) AuthConfig
+func NewTokenAuth(token string) AuthConfig
+func OpenRepository(b GitBackend, dir string, auth AuthConfig, insecure bool) *Repository
+func Register(name string, ctor GitBackendConstructor)
+func TransportAuth(auth AuthConfig) (transport.AuthMethod, error)
+type AdvancedOps interface {
+	RevParse(ctx context.Context, repoPath string, ref string) (string, error)
+
+	MergeBase(ctx context.Context, repoPath string, a string, b string) (string, error)
+
+	DiffNames(ctx context.Context, repoPath string, from string, to string) ([]string, error)
+
+	DeletedFiles(ctx context.Context, repoPath string, from string, to string) ([]string, error)
+
+	CheckoutRef(ctx context.Context, repoPath string, ref string) error
+
+	CheckoutDetached(ctx context.Context, repoPath string, ref string) error
+
+	CheckoutFiles(ctx context.Context, repoPath string, ref string, files []string) error
+
+	Add(ctx context.Context, repoPath string, files []string) error
+
+	CommitWithIdentity(ctx context.Context, repoPath string, name string, email string, message string) error
+}
+type AuthConfig struct {
+	Type	AuthType
+
+	Username	string
+
+	Password	string
+
+	Token	string
+
+	SSHKey	string
+
+	SSHKeyContent	string
+
+	Passphrase	string
+
+	InsecureSkipTLS	bool
+
+	KnownHostsPath	string
+
+	HostKeyFingerprint	string
+}
+type AuthType string
+type BlobContent struct {
+	Content	string
+
+	Encoding	BlobEncoding
+
+	Size	int64
+
+	IsBinary	bool
+}
+type BlobEncoding string
+type BranchDetail struct {
+	Name	string
+	Hash	string
+
+	IsCurrent	bool
+
+	IsRemote	bool
+
+	Remote	string
+
+	Upstream	string
+	Author		string
+	Email		string
+
+	Date	string
+
+	Message	string
+}
+type BranchOps interface {
+	ListRemoteBranches(ctx context.Context, repoPath string, remote string) ([]string, error)
+
+	ListLocalBranches(ctx context.Context, repoPath string) ([]string, error)
+
+	ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error)
+
+	CreateBranch(ctx context.Context, repoPath string, branch string, ref string) error
+
+	DeleteBranch(ctx context.Context, repoPath string, branch string) error
+
+	RenameBranch(ctx context.Context, repoPath string, oldName string, newName string) error
+
+	Checkout(ctx context.Context, repoPath string, branch string) error
+
+	GetCurrentBranch(ctx context.Context, repoPath string) (string, error)
+
+	GetBranchSyncInfo(ctx context.Context, repoPath string, branch string, upstream string) (ahead int, behind int, err error)
+}
+type CloneOptions struct {
+	URL	string
+
+	Path	string
+
+	Branch	string
+
+	Depth	int
+	Auth	AuthConfig
+
+	Progress	io.Writer
+	NoCheckout	bool
+	SingleBranch	bool
+	InsecureSkipTLS	bool
+
+	Filter	string
+
+	Submodules	bool
+
+	Reference	string
+
+	Dissociate	bool
+}
+type CommitInfo struct {
+	Hash	string
+
+	Message	string
+
+	Author	string
+
+	Date	string
+}
+type CommitOps interface {
+	GetCommitsBetween(ctx context.Context, repoPath string, from string, to string) ([]CommitInfo, error)
+
+	IsAncestor(ctx context.Context, repoPath string, ancestor string, descendant string) (bool, error)
+
+	Merge(ctx context.Context, repoPath string, branch string, opts MergeOptions) error
+
+	CherryPick(ctx context.Context, repoPath string, commitHash string) error
+
+	Rebase(ctx context.Context, repoPath string, onto string) error
+
+	RebaseAbort(ctx context.Context, repoPath string) error
+
+	RebaseContinue(ctx context.Context, repoPath string) error
+}
+type ConfigOps interface {
+	GetConfig(ctx context.Context, repoPath string, key string) (string, error)
+
+	SetConfig(ctx context.Context, repoPath string, key string, value string) error
+}
+type CoreOps interface {
+	Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error)
+
+	FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error
+
+	Push(ctx context.Context, opts PushOptions) (*PushResult, error)
+
+	Pull(ctx context.Context, repoPath string, remote string, branch string, auth AuthConfig) error
+
+	Clone(ctx context.Context, opts CloneOptions) error
+
+	Init(ctx context.Context, repoPath string) error
+
+	RunRaw(ctx context.Context, repoPath string, args []string) (stdout string, stderr string, err error)
+}
+type DiffOptions struct {
+	From	string
+
+	To	string
+
+	Paths	[]string
+}
+type FetchOptions struct {
+	RepoPath	string
+
+	Remote	string
+
+	Branches	[]string
+
+	Tags	bool
+
+	Prune	bool
+
+	Depth		int
+	InsecureSkipTLS	bool
+	Auth		AuthConfig
+
+	Progress	io.Writer
+}
+type FetchResult struct {
+	FetchedRefs	[]string
+	NewBranches	[]string
+	UpdatedBranch	[]string
+	DeletedBranch	[]string
+	NewTags		[]string
+}
+type FileOps interface {
+	GetFileAtRevision(ctx context.Context, repoPath string, path string, ref string) ([]byte, error)
+
+	GetFileHistory(ctx context.Context, repoPath string, path string, limit int) ([]CommitInfo, error)
+
+	GetTree(ctx context.Context, repoPath string, ref string, dirPath string, recursive bool) ([]TreeEntry, error)
+
+	GetBlob(ctx context.Context, repoPath string, ref string, filePath string) (*BlobContent, error)
+
+	GetCommit(ctx context.Context, repoPath string, hash string) (*CommitInfo, error)
+}
+type FileStatus struct {
+	Path	string
+
+	Worktree	StatusCode
+
+	Staging	StatusCode
+}
+type GitBackend interface {
+	CoreOps
+	BranchOps
+	StatusDiffOps
+	CommitOps
+	RemoteOps
+	TagOps
+	FileOps
+	StashOps
+	ConfigOps
+	AdvancedOps
+}
+type GitBackendConstructor func(opts Options) (GitBackend, error)
+type GitError struct {
+	Op	string
+	Path	string
+	Command	string
+	Stderr	string
+	Err	error
+}
+type GoGitBackend struct {
+}
+type Logger interface {
+	Debug(msg string, kv ...any)
+	Info(msg string, kv ...any)
+	Warn(msg string, kv ...any)
+	Error(msg string, kv ...any)
+}
+type MergeOptions struct {
+	Message	string
+
+	Squash	bool
+
+	NoCommit	bool
+
+	FFOnly	bool
+
+	AllowUnrelated	bool
+}
+type NativeGitBackend struct {
+}
+type Options struct {
+	Type	string
+	Logger	Logger
+}
+type PushOptions struct {
+	RepoPath	string
+
+	Remote	string
+
+	RefSpecs	[]string
+
+	Force	bool
+
+	Mirror		bool
+	InsecureSkipTLS	bool
+	Auth		AuthConfig
+
+	Progress	io.Writer
+}
+type PushResult struct {
+	PushedRefs	[]string
+
+	Errors	[]string
+}
+type RemoteOps interface {
+	GetRemotes(ctx context.Context, repoPath string) ([]string, error)
+
+	AddRemote(ctx context.Context, repoPath string, name string, url string) error
+
+	RemoveRemote(ctx context.Context, repoPath string, name string) error
+
+	GetRemoteURL(ctx context.Context, repoPath string, name string) (string, error)
+
+	TestConnection(ctx context.Context, url string, auth AuthConfig) error
+}
+type RepoStatus struct {
+	Branch	string
+
+	IsClean	bool
+
+	Staged	[]FileStatus
+
+	Unstaged	[]FileStatus
+
+	Untracked	[]string
+
+	Ahead	int
+
+	Behind	int
+}
+type Repository struct {
+}
+type StashEntry struct {
+	Index	int
+
+	Message	string
+}
+type StashOps interface {
+	StashList(ctx context.Context, repoPath string) ([]StashEntry, error)
+
+	StashSave(ctx context.Context, repoPath string, message string) error
+
+	StashApply(ctx context.Context, repoPath string, index int) error
+
+	StashPop(ctx context.Context, repoPath string, index int) error
+
+	StashDrop(ctx context.Context, repoPath string, index int) error
+
+	StashClear(ctx context.Context, repoPath string) error
+}
+type StatusCode byte
+type StatusDiffOps interface {
+	GetStatus(ctx context.Context, repoPath string) (*RepoStatus, error)
+
+	Diff(ctx context.Context, repoPath string, opts DiffOptions) (string, error)
+}
+type TagInfo struct {
+	Name	string
+
+	Hash	string
+
+	Message	string
+	Author	string
+}
+type TagOps interface {
+	CreateTag(ctx context.Context, repoPath string, name string, ref string) error
+
+	DeleteTag(ctx context.Context, repoPath string, name string) error
+
+	PushTag(ctx context.Context, repoPath string, remote string, name string, auth AuthConfig) error
+
+	GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error)
+}
+type TreeEntry struct {
+	Name	string
+
+	Path	string
+
+	Type	TreeEntryType
+
+	Mode	string
+	Hash	string
+
+	Size	int64
+}
+type TreeEntryType string
+var ErrAlreadyUpToDate = oekiterrors.New("already up to date")
+var ErrAuthFailed = oekiterrors.New("authentication failed")
+var ErrBranchExists = oekiterrors.New("branch already exists")
+var ErrBranchInUse = oekiterrors.New("branch is currently checked out")
+var ErrBranchNotFound = oekiterrors.New("branch not found")
+var ErrConfigKeyNotFound = oekiterrors.New("config key not found")
+var ErrDirtyWorktree = oekiterrors.New("dirty worktree")
+var ErrFileNotFound = oekiterrors.New("file not found at revision")
+var ErrGitNotFound = oekiterrors.New("git binary not found")
+var ErrInvalidGitArg = oekiterrors.New("invalid git argument")
+var ErrMergeConflict = oekiterrors.New("merge conflict")
+var ErrNotAGitRepo = oekiterrors.New("not a git repository")
+var ErrNothingToMerge = oekiterrors.New("nothing to merge")
+var ErrReferenceUnsupported = oekiterrors.New("reference clone requires the native git backend")
+var ErrRemoteNotFound = oekiterrors.New("remote not found")
+var ErrRepoNotFound = oekiterrors.New("repository not found")
+var ErrStashUnsupported = oekiterrors.New("stash requires the native git backend")
+var ErrTagExists = oekiterrors.New("tag already exists")
+var GitHTTPDialTimeout = 30 * time.Second
+var GitHTTPResponseHeaderTimeout = 60 * time.Second
+var GitHTTPTLSHandshakeTimeout = 15 * time.Second
+
+# package github.com/yi-nology/go-git-platform/smoke
+func ParseFamilies(s string) []string
+type Options struct {
+	Owner, Repo, URL	string
+	Token			string
+	Logf			func(format string, args ...any)
+}
+type ProbeFunc func(ctx context.Context, p provider.Provider, opts Options) error
+var Probes = map[string]ProbeFunc{
+	"repo":		probeRepo,
+	"cr":		probeCR,
+	"webhook":	probeWebhook,
+	"pagination":	probePagination,
+	"errors":	probeErrors,
+	"connection":	probeConnection,
+}

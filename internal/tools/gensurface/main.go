@@ -1,5 +1,7 @@
 // Command gensurface regenerates the v1 API golden file
-// docs/api-surface-v1.txt from the 18 frozen packages of spec §3.1.
+// docs/api-surface-v1.txt from the 22 frozen packages of spec §3.1 plus its
+// T2-review errata (the original §3.1 list plus the four public packages
+// transport, transport/metrics, gitbackend and smoke added by review).
 //
 // Usage:
 //

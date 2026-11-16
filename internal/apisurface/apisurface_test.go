@@ -1,5 +1,5 @@
 // Package apisurface guards the v1 frozen API surface: the live extraction
-// of the 18 spec §3.1 packages must equal the committed golden file
+// of the 22 spec §3.1 (+T2 评审勘误) packages must equal the committed golden file
 // docs/api-surface-v1.txt byte for byte. Any added, removed or re-rendered
 // exported symbol (增/删/改签名同权) turns `go test ./...` red until the
 // golden is explicitly regenerated (go run ./internal/tools/gensurface) and
@@ -27,14 +27,17 @@ import (
 // goldenRelPath is the committed golden file, relative to the module root.
 const goldenRelPath = "docs/api-surface-v1.txt"
 
-// frozenImports is the v1 frozen package list per spec §3.1
-// (docs/superpowers/specs/2026-11-17-phase4-v1readiness-design.md), mirrored
-// here on purpose — NOT as a second extraction implementation (there is
-// none), but as an independent cross-check of the tool's package list: if
-// frozenPackages in internal/tools/gensurface ever drifts from spec §3.1
-// (a package dropped or added), regenerating the golden would move the
-// section set and this test fails even though the byte comparison in
-// TestGoldenSurfaceMatches would stay green against the regenerated file.
+// frozenImports is the v1 frozen package list per spec §3.1 plus its T2
+// review errata — 22 packages: the original §3.1 list plus the four public
+// packages transport, transport/metrics, gitbackend and smoke added by the
+// T2 review (errata recorded in spec §3.1; a v1 freeze missing public
+// packages would be hollow), mirrored here on purpose — NOT as a second
+// extraction implementation (there is none), but as an independent
+// cross-check of the tool's package list: if frozenPackages in
+// internal/tools/gensurface ever drifts from spec §3.1 (a package dropped or
+// added), regenerating the golden would move the section set and this test
+// fails even though the byte comparison in TestGoldenSurfaceMatches would
+// stay green against the regenerated file.
 var frozenImports = []string{
 	"github.com/yi-nology/go-git-platform/provider",
 	"github.com/yi-nology/go-git-platform/model",
@@ -54,6 +57,10 @@ var frozenImports = []string{
 	"github.com/yi-nology/go-git-platform/auth/credential",
 	"github.com/yi-nology/go-git-platform/filter/branchfilter",
 	"github.com/yi-nology/go-git-platform/model/projection",
+	"github.com/yi-nology/go-git-platform/transport",
+	"github.com/yi-nology/go-git-platform/transport/metrics",
+	"github.com/yi-nology/go-git-platform/gitbackend",
+	"github.com/yi-nology/go-git-platform/smoke",
 }
 
 // TestGoldenSurfaceMatches compares the live extracted surface against the
@@ -99,7 +106,7 @@ func TestGoldenCoversExactlyFrozenPackages(t *testing.T) {
 	}
 	if len(problems) > 0 {
 		sort.Strings(problems)
-		t.Fatalf("金样包清单漂移（18 包冻结面，spec §3.1）:\n%s", strings.Join(problems, "\n"))
+		t.Fatalf("金样包清单漂移（22 包冻结面，spec §3.1 + T2 评审勘误）:\n%s", strings.Join(problems, "\n"))
 	}
 }
 

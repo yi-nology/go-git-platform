@@ -62,6 +62,9 @@
     （internal 面冻结=v1 生态内约定） adapter/all contracttest auth/{githubapp,
     credential} filter/branchfilter model/projection`——以 commit 时刻实际包表
     生成；`internal/` 与 `mcp/` 不进金样（前者非公共、后者独立模块）。
+    **勘误（4期 T2 评审）**：冻结面扩至 22 包——补 transport、
+    transport/metrics、gitbackend、smoke 四公共包（v1 冻结漏公共包则空心）；
+    根 `internal/` 与 `mcp/` 仍不进。
   - 比对：当前面 → 规范化排序文本 ↔ `docs/api-surface-v1.txt` 逐行 diff；
     差异即红（增/删/改签名同权）。金样头注写明更新纪律（v1 期改动=conscious
     编辑本文件并写 CHANGELOG）。
