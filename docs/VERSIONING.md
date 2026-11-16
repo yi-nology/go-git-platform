@@ -8,8 +8,8 @@
 ## 1. 主模块 tag 语义
 
 主模块 `github.com/yi-nology/go-git-platform` 按 SemVer 打 `vX.Y.Z` tag；tag
-push 触发 Release workflow（测试 → `gh release create --generate-notes`，
-见 `.github/workflows/release.yml`）。版本段含义：
+push 触发 Release workflow（测试 → `gh release create --generate-notes` →
+MCP 构建段，见 `.github/workflows/release.yml`）。版本段含义：
 
 | 版本段 | 内容 | 先例 |
 |---|---|---|
@@ -32,8 +32,9 @@ push 触发 Release workflow（测试 → `gh release create --generate-notes`�
 - **两步窗口**：父 tag 发布与 mcp require 抬版之间存在窗口期，期间
   `mcp/go.mod` 仍指上一版父模块；窗口随抬版闭合。从源码构建 mcp 时请基于
   require 已抬至目标父版本的提交。发布产物不受窗口影响——Release 构建段在
-  workflow 内临时抬版闭窗、构建完即弃（release.yml 构建段）。
-- **MCP 二进制挂父 tag 的 GitHub Release**（release.yml 构建段，第 4 期
+  workflow 内临时抬版闭窗、构建完即弃（release.yml 的 `mcp-dist` job）。
+- **MCP 二进制挂父 tag 的 GitHub Release**（构建段在 release.yml 的
+  `mcp-dist` job：6 目标二进制 + SBOM + checksums + build provenance；第 4 期
   v1.0 准备落地）。二进制的运行时版本串经 Go 构建信息自动解析（父模块依赖
   版本），无额外注入依赖。
 - 源码安装：`go install github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@latest`

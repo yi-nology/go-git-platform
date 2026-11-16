@@ -55,3 +55,75 @@ jobs:
             --title "$TAG" \
             --generate-notes \
             ${{ steps.prerelease.outputs.flag }}
+
+  # ---- MCP binary build（4期 T3）----
+  # 两步窗口在构建时自动闭合：mcp/go.mod 的 require 先抬到本 tag（构建完即弃，
+  # 不 commit），再编译 6 目标二进制；产物（6 二进制 + SBOM + checksums）挂同一
+  # Release 并附 build provenance。版本元数据走 go version -m 内建（构建信息已
+  # 含父模块依赖版本——internal/version 无导出 Tag/Version 变量，无 ldflags 注入）。
+  mcp-dist:
+    name: MCP dist
+    needs: release # Release（含 gh release create）先行——upload 需 Release 已存在
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload
+      id-token: write # attest-build-provenance 需要 OIDC token
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Bump mcp require to this tag（构建时自动闭合两步窗口，构建完即弃）
+        env:
+          GOPROXY: direct  # 刚 push 的 tag 在 proxy 传播有延迟——直连源必然可解析（S8 实操先例）
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          sed -i "s|github.com/yi-nology/go-git-platform v[0-9.]*|github.com/yi-nology/go-git-platform ${TAG}|" mcp/go.mod
+          cd mcp && GOWORK=off go mod tidy
+
+      - name: Build 6 targets
+        run: |
+          mkdir -p dist
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            os="${t%%/*}"; arch="${t##*/}"
+            out="dist/go-git-platform-mcp_${os}_${arch}"
+            [ "$os" = "windows" ] && out="${out}.exe"
+            (cd mcp && GOWORK=off CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w" -o "../$out" ./cmd/go-git-platform-mcp)
+          done
+
+      # SBOM（CycloneDX）：扫描 dist 内 6 个二进制的 Go 构建信息——产物清单即二进制
+      # 实际编译进来的依赖集。anchore/sbft-action（spec 原名）不存在（2026-11-17
+      # 实测 404），现役 action 为 anchore/sbom-action；本仓自管 upload（SBOM 先落
+      # dist/ 让 checksums 覆盖，再统一 gh release upload），故关掉 action 自带的
+      # artifact/release 上传。
+      - name: SBOM (CycloneDX over built binaries)
+        uses: anchore/sbom-action@v0
+        with:
+          path: dist
+          format: cyclonedx-json
+          output-file: dist/go-git-platform-mcp-sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Checksums
+        run: cd dist && sha256sum -- * > ../checksums.txt && mv ../checksums.txt .
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+
+      # subjects = 6 二进制 + SBOM + checksums（dist/* 全量）；spec 原文 @v2 已过
+      # 时（2026-11-17 实测现役 major 为 v4，subject-path 语义不变）。
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*
