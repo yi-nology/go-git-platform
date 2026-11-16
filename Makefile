@@ -8,7 +8,7 @@
 #   make vet         - run go vet
 #   make build       - build all packages
 #   make tidy        - run go mod tidy
-#   make check       - fmt + vet + lint + test (CI gate)
+#   make check       - vet + lint + test + cover-domains (CI gate)
 #   make clean       - remove generated artifacts
 
 GO ?= go
@@ -20,7 +20,7 @@ COVER_PROFILE ?= coverage.out
 # `make GOWORK=on` to build in workspace mode.
 GOWORK ?= off
 
-.PHONY: all build test test-short cover lint fmt vet tidy check check-mcp clean install-tools
+.PHONY: all build test test-short cover cover-domains lint fmt vet tidy check check-mcp clean install-tools
 
 all: build
 
@@ -44,6 +44,11 @@ cover: test
 cover-html: test
 	$(GO) tool cover -html=$(COVER_PROFILE)
 
+## cover-domains asserts the four gated domains (webhook/transport/gitbackend/
+## pageiter) each reach >=80% via scripts/cover-domain.sh; any miss exits non-zero.
+cover-domains: test
+	bash scripts/cover-domain.sh $(COVER_PROFILE)
+
 ## lint runs golangci-lint with the project's configuration.
 lint:
 	GOWORK=$(GOWORK) $(GOLANGCI_LINT) run ./...
@@ -61,8 +66,8 @@ vet:
 tidy:
 	GOWORK=$(GOWORK) $(GO) mod tidy
 
-## check is the CI gate: fmt + vet + lint + test.
-check: vet lint test
+## check is the CI gate: vet + lint + test + four-domain coverage floor.
+check: vet lint test cover-domains
 
 ## check-mcp runs the CI gate inside the mcp module (workspace mode, so it
 ## tests the local SDK, matching the pre-replace development flow).
