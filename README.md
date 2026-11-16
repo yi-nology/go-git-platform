@@ -551,7 +551,7 @@ backend 所依赖的工蜂 SDK，v0.1.0 起））：
 
 ## 项目结构
 
-四层单向依赖（规则详见 [AGENTS.md](AGENTS.md)，边表见 spec §4.1）：
+四层单向依赖（+ 消费方；规则详见 [AGENTS.md](AGENTS.md)，边表见 spec §4.1）：
 
 - `model` — 纯域实体与 `Platform` 枚举，零仓内依赖（叶子）；
 - `provider` — 契约缝：接口/选项/错误/patch 三态/Capability/Divergence/工厂注册表/Logger/Hooks/TokenSource/共享纯助手/Version()，只准向下看 `model`；

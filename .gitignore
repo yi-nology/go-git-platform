@@ -25,6 +25,7 @@ Thumbs.db
 .zcode/
 .worktrees/
 .superpowers/
+.video_agent/
 
 # Local security-hook state (Mimosa finding ledger / hook status)
 .mimosa/

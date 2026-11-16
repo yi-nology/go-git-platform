@@ -412,6 +412,11 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   lint / govulncheck。goimports 用 `-local github.com/yi-nology/go-git-platform`。
   根 `go.work` 已入库承接本地协同；CI 与 `make check` 用 `GOWORK=off` 保持
   分模块验证，`make check-mcp` 走 workspace 模式测本地 SDK。
+- **分层依赖（机器强制）**：`model` 是叶子；`provider` 只准向下看 `model`；
+  `runtime` 看 `provider+model`；`adapter` 看 `provider+runtime+model` +
+  自家 `adapter/internal`；`contracttest` 看 `provider+runtime+model`；反向
+  一律禁止。边表见 spec §4.1，机器守卫 `internal/layering/layering_test.go`
+  挂在 `go test ./...`，违例即红。
 - 测试夹具不得依赖本机 git 全局身份：
   `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null go test ./gitbackend/`。
 - git 行为先实测再钉测试（临时脚本验证语义后再写成集成测试）。
