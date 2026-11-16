@@ -1,0 +1,121 @@
+# gitea/forgejo sandbox write roundtrips (3期 T4, spec §3.4).
+#
+# 双场合之二：Actions services 编排一次性 gitea/forgejo 容器，harness 以
+# E2E_GITEA_URL/E2E_FORGEJO_URL + E2E_*_TOKEN env 契约复用外部端点（与本地
+# `make e2e` 共用同一套测试代码，差异只在容器编排）。
+#
+# 引导方式（与本地 harness 同一条命令线，现场实测于两镜像）：
+#   1. INSTALL_LOCK=true 跳过安装向导（GITEA__/FORGEJO__ environment-to-ini）；
+#   2. docker exec 服务容器跑内置 CLI 建 admin（ubuntu-latest 的 job step
+#      可达 services 的兄弟容器，按 ancestor 镜像过滤定位）；
+#   3. 基本认证 POST /api/v1/users/<user>/tokens 换 scoped token。
+#
+# 红线：写操作只发生在 job 结束即销毁的一次性容器内；仓库零 secrets
+# （spec §5：E2E 自建 token，不需要 secrets）。
+name: e2e
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'adapter/**'
+      - 'transport/**'
+      - 'contracttest/**'
+      - 'runtime/**'
+      - 'e2e/**'
+      - 'Makefile'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    paths:
+      - 'adapter/**'
+      - 'transport/**'
+      - 'contracttest/**'
+      - 'runtime/**'
+      - 'e2e/**'
+      - 'Makefile'
+      - '.github/workflows/e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 镜像钉与 Makefile（GITEA_IMAGE/FORGEJO_IMAGE）同一钉值——两处必须同步改。
+    env:
+      GITEA_IMAGE: gitea/gitea:28.4
+      FORGEJO_IMAGE: codeberg.org/forgejo/forgejo:17.0.1
+    services:
+      gitea:
+        image: gitea/gitea:28.4
+        ports:
+          - '13010:3000'
+        env:
+          GITEA__security__INSTALL_LOCK: 'true'
+          GITEA__server__ROOT_URL: 'http://localhost:13010/'
+        options: >-
+          --health-cmd "curl -fsS http://localhost:3000/api/v1/version || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 24
+      forgejo:
+        image: codeberg.org/forgejo/forgejo:17.0.1
+        ports:
+          - '13011:3000'
+        env:
+          FORGEJO__security__INSTALL_LOCK: 'true'
+          FORGEJO__server__ROOT_URL: 'http://localhost:13011/'
+        options: >-
+          --health-cmd "curl -fsS http://localhost:3000/api/v1/version || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 24
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # 引导 gitea：admin 由容器内 CLI 创建（/app/gitea/gitea，-u git），
+      # token 经基本认证 API 换取后注入 GITHUB_ENV 供测试步消费。
+      - name: Init gitea admin token
+        run: |
+          cid="$(docker ps -q --filter ancestor="${GITEA_IMAGE}" | head -n1)"
+          if [ -z "$cid" ]; then
+            echo "gitea service container not found (image=${GITEA_IMAGE})" >&2
+            exit 1
+          fi
+          docker exec -u git "$cid" /app/gitea/gitea admin user create --admin \
+            --username e2erunner --password 'E2ePassw0rd!' \
+            --email e2e@example.local --must-change-password=false
+          tok="$(curl -fsS -u e2erunner:'E2ePassw0rd!' -X POST \
+            http://localhost:13010/api/v1/users/e2erunner/tokens \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"e2e-ci","scopes":["all"]}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha1"])')"
+          echo "E2E_GITEA_TOKEN=$tok" >> "$GITHUB_ENV"
+
+      - name: Init forgejo admin token
+        run: |
+          cid="$(docker ps -q --filter ancestor="${FORGEJO_IMAGE}" | head -n1)"
+          if [ -z "$cid" ]; then
+            echo "forgejo service container not found (image=${FORGEJO_IMAGE})" >&2
+            exit 1
+          fi
+          docker exec -u git "$cid" /app/gitea/gitea admin user create --admin \
+            --username e2erunner --password 'E2ePassw0rd!' \
+            --email e2e@example.local --must-change-password=false
+          tok="$(curl -fsS -u e2erunner:'E2ePassw0rd!' -X POST \
+            http://localhost:13011/api/v1/users/e2erunner/tokens \
+            -H 'Content-Type: application/json' \
+            -d '{"name":"e2e-ci","scopes":["all"]}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha1"])')"
+          echo "E2E_FORGEJO_TOKEN=$tok" >> "$GITHUB_ENV"
+
+      - name: Run sandbox write roundtrips
+        run: go test -tags=e2e -count=1 -timeout 15m ./e2e/...
+        env:
+          E2E_GITEA_URL: 'http://localhost:13010'
+          E2E_FORGEJO_URL: 'http://localhost:13011'

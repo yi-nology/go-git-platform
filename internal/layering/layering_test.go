@@ -101,6 +101,10 @@ var baseEdges = map[string][]string{
 	"transport":           {},
 	"examples":            slices.Clone(columns), // 补充边
 	"smoke":               slices.Clone(columns), // 补充边
+	// e2e 补充边（3 期 T4 spec 2026-11-16 §3.4：沙箱写 roundtrip 只消费——
+	// model/provider/runtime + adapter/all 注册器空导入；红线是只写一次性
+	// 容器、不改任何公共 API，方向仍只朝下，与 examples/smoke 同类）。
+	"e2e": slices.Clone(columns),
 }
 
 // specTestOnlyCells 是 §4.1 表里标 `✓（仅 _test.go）` 的格（仅测试文件放行，
@@ -160,7 +164,7 @@ func rowKey(dir string) (string, bool) {
 	seg := strings.Split(dir, "/")
 	switch seg[0] {
 	case "model", "provider", "runtime", "adapter", "contracttest",
-		"gitbackend", "transport", "examples", "smoke":
+		"gitbackend", "transport", "examples", "smoke", "e2e":
 		return seg[0], true
 	case "auth":
 		if len(seg) == 2 && (seg[1] == "githubapp" || seg[1] == "credential") {
@@ -317,12 +321,13 @@ func TestSpecTableMatchesEncoding(t *testing.T) {
 		}
 	}
 
-	// baseEdges 的行键集合 = 10 表行 + 补充边两行。
+	// baseEdges 的行键集合 = 10 表行 + 补充边三行（examples/smoke/e2e——
+	// e2e 是 3 期 T4 spec 2026-11-16 §3.4 的新消费方包）。
 	wantRows := map[string]bool{}
 	for _, k := range rowKeys {
 		wantRows[k] = true
 	}
-	for _, k := range []string{"examples", "smoke"} {
+	for _, k := range []string{"examples", "smoke", "e2e"} {
 		wantRows[k] = true
 	}
 	for k := range baseEdges {
@@ -334,8 +339,8 @@ func TestSpecTableMatchesEncoding(t *testing.T) {
 	for k := range wantRows {
 		t.Errorf("baseEdges 缺行键 %q", k)
 	}
-	// 补充边两行必须全列放行。
-	for _, k := range []string{"examples", "smoke"} {
+	// 补充边三行必须全列放行。
+	for _, k := range []string{"examples", "smoke", "e2e"} {
 		if len(baseEdges[k]) != len(columns) {
 			t.Errorf("补充边行 %q 未全列放行: %v", k, baseEdges[k])
 		}

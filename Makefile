@@ -20,7 +20,14 @@ COVER_PROFILE ?= coverage.out
 # `make GOWORK=on` to build in workspace mode.
 GOWORK ?= off
 
-.PHONY: all build test test-short cover cover-domains lint fmt vet tidy check check-mcp clean install-tools
+# Sandbox write-E2E images (T4). Pins are live-verified against the go.mod
+# SDK compile faces (gitea.dev/sdk v1.5.1 gates up to 29.0.0; forgejo-sdk
+# v3.0.0 gate 1.22.0 ↔ forgejo "17.0.1+gitea-1.22.0") — see e2e/harness_test.go
+# for the evidence trail. Override with GITEA_IMAGE=... make e2e to try another.
+GITEA_IMAGE   ?= gitea/gitea:28.4
+FORGEJO_IMAGE ?= codeberg.org/forgejo/forgejo:17.0.1
+
+.PHONY: all build test test-short cover cover-domains lint fmt vet tidy check check-mcp e2e clean install-tools
 
 all: build
 
@@ -67,7 +74,16 @@ tidy:
 	GOWORK=$(GOWORK) $(GO) mod tidy
 
 ## check is the CI gate: vet + lint + test + four-domain coverage floor.
+## It does NOT compile the e2e package (//go:build e2e is invisible without
+## the tag) — sandbox write roundtrips run via `make e2e` or the e2e workflow.
 check: vet lint test cover-domains
+
+## e2e runs the gitea/forgejo sandbox write roundtrips (3期 T4): the harness
+## boots one-shot containers locally (docker required — skips with a reason
+## when absent); CI injects E2E_GITEA_URL/E2E_FORGEJO_URL + tokens instead.
+## Image overrides: GITEA_IMAGE=... FORGEJO_IMAGE=... make e2e
+e2e:
+	GOWORK=$(GOWORK) GITEA_IMAGE=$(GITEA_IMAGE) FORGEJO_IMAGE=$(FORGEJO_IMAGE) $(GO) test -tags=e2e -count=1 -timeout 15m ./e2e/...
 
 ## check-mcp runs the CI gate inside the mcp module (workspace mode, so it
 ## tests the local SDK, matching the pre-replace development flow).
