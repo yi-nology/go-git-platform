@@ -66,6 +66,10 @@ func TestRunCoverageMatrix(t *testing.T) {
 		"Pagination_Normalized", "Retry_On5xx", "TokenSource_Rotation",
 		"ConditionalRequests", "Webhook_ValidateSignature", "Context_Cancel",
 		"Capabilities_Consistency", "DivergenceSuite",
+		// FaultInjection (3期 T3): platform-level fault-injection suite, not a
+		// manager family — no coveredFamilies row (same exemption shape as the
+		// other non-family Platform subtests above; no "Suite" suffix either).
+		"FaultInjection",
 		"LabelsSuite", "IssuesSuite", "ReviewsSuite", "MilestonesSuite",
 		"SearchSuite", "ReleaseSuite", "CommitStatusSuite", "NotificationsSuite",
 		"ReactionsSuite", "BranchProtectionsSuite", "CollaboratorsSuite",

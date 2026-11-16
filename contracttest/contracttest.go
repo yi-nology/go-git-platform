@@ -155,6 +155,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("Webhook_ValidateSignature", func(t *testing.T) { testWebhookSignature(t, h) })
 	t.Run("Context_Cancel", func(t *testing.T) { testContextCancel(t, h) })
 	t.Run("ErrorClassSuite", func(t *testing.T) { testErrorClassSuite(t, h) })
+	t.Run("FaultInjection", func(t *testing.T) { testFaultSuite(t, h) })
 	t.Run("OperationSuite", func(t *testing.T) { testOperationSuite(t, h) })
 	t.Run("EnsureIssueSuite", func(t *testing.T) { testEnsureIssueSuite(t, h) })
 	t.Run("Capabilities_Consistency", func(t *testing.T) { testCapabilities(t, h) })
