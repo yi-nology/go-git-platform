@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.143.0] - 2026-11-17
+
 ### Changed（3 期：兼容性与测试工程化——零 API 变化，纯测试与 CI 面）
 
 - **四域覆盖率机器门进 `make check`**：`scripts/cover-domain.sh` 按 spec §1.1
