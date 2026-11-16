@@ -383,7 +383,9 @@
 
 ## Self-Review 记录
 
-- **Spec 覆盖**：§1.1 基线→T1 Step1/3；§1.2 巡检→T2；§1.3 docker 现状+SDK 版本→T4 Step1；§3.1→T1；§3.2 六家族表→T2 Step3（probe 函数按表逐个实现）；§3.3 三形态→T3；§3.4 双场合/写族清单/env 契约→T4；§4 分期表→T1-T5 一一对应；§5 secrets→T2 Step5 注释+T2 报告；§6 验收→各 task 绿门+T5 Step3；§7 不做→Global Constraints。**无缺口。**
+- **Spec 覆盖**：§1.1 基线→T1 Step1/3；§1.2 巡检→T2；§1.3 docker 现状+SDK 版本→T4 Step1；§3.1→T1；§3.2 六家族表→T2 Step3（probe 函数按表逐个实现）；§3.3 三形态→T3（T3 修订：§3.3 形态1 的 body 断言被现实推翻——body 进
+  错误文本是 Wrap 设计，见 contracttest/fault.go canary 在场钉与另立单）；
+  §3.4 双场合/写族清单/env 契约→T4；§4 分期表→T1-T5 一一对应；§5 secrets→T2 Step5 注释+T2 报告；§6 验收→各 task 绿门+T5 Step3；§7 不做→Global Constraints。**无缺口。**
 - **裁定落位**：①不刷已达标域（T1 Step1 只打 webhook 0% 行+transport 顺手、gitbackend/pageiter 明令不动）②不加 cron（T2 无 cron 项）③push/PR 门禁（T4 Step4 paths）④异常注入归 contracttest（T3 独立、T4 不含）。
 - **占位符扫描**：镜像版本/健康检查细节/init 步骤标「现场钉+报告贴证据」——这是执行期实测项（同 2B 现场核对先例），非 TBD 懒惰；三处 ruling 点（截断 JSON 现实、伪翻页停止语义、coverage mirror 命名）都给了现场裁定路径与报告要求。无 "TODO/implement later/similar to Task N"。
 - **类型一致**：`smoke.ProbeFunc`/`Probes`/`ParseFamilies` 在 T2 Step2 测试与 Step3 实现一致；`make e2e`、`E2E_*_URL/TOKEN` 在 T4 Step2/4/5 一致；`FaultInjection` 挂接名在 T3 Step2/3 一致（若现场改名须同步两处——Step3 已写明）。

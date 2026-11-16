@@ -7,7 +7,8 @@ fail=0
 check() { # name regex
   local name="$1" rx="$2"
   local agg
-  agg=$(go tool cover -func="$OUT" | grep -E "$rx" | awk -F'\t+' '{gsub("%","",$NF); s+=$NF; n++} END {if(n) printf "%.1f", s/n; else print "NA"}')
+  # grep 无匹配在 pipefail 下会中断脚本，用 `|| true` 放行到 NO FUNCS MATCHED 分支
+  agg=$(go tool cover -func="$OUT" | { grep -E "$rx" || true; } | awk -F'\t+' '{gsub("%","",$NF); s+=$NF; n++} END {if(n) printf "%.1f", s/n; else print "NA"}')
   if [ "$agg" = "NA" ]; then echo "cover-domain: $name NO FUNCS MATCHED ($rx)" >&2; fail=1; return; fi
   local ok
   ok=$(awk -v a="$agg" 'BEGIN{print (a+0 >= 80) ? 1 : 0}')

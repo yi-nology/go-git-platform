@@ -98,6 +98,9 @@ HMAC 双形态（sha256= 前缀/裸 hex）、`ReadAndRestoreBody` 读写恢复�
 - `smoke.yml` 升级：`inputs.families`（default `all`）+ `strategy.matrix.platform`
   七平台——一次 dispatch 跑全矩阵（每 matrix 单元仍走该平台 secret，缺则 skip）；
   保留单平台快跑（platform 输入非 all 时收窄 matrix）。
+  **勘误（T2 评审）**：workflow `families` input 缺省取 `repo` 保持既有
+  dispatcher 零行为变化，非本节上行的 `all`——env 侧缺省同为 `repo`
+  （`smoke.ParseFamilies` 空串→`["repo"]`）。
 - **secrets**：spec 附清单（§5），workflow 注释同步「如何加」。放 token 前全 skip。
 - 验收：本地 `GIT_PLATFORM_SMOKE_*=… go test -tags=smoke ./smoke/` 六 family 在
   至少 github 真 token 下手跑一次（**token 由用户提供；未提供则以 httptest 假

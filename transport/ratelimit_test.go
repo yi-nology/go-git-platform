@@ -116,8 +116,11 @@ func TestRateLimiter_NoLimit(t *testing.T) {
 	rl.Wait()
 	elapsed := time.Since(start)
 
-	// Should return immediately
-	if elapsed > 5*time.Millisecond {
+	// Should return immediately. Upper bound is generous (100ms): the bug class
+	// here is "Wait() wrongly sleeps through a ticker/timer" — second-scale and
+	// caught by any bound ≥ the enforced delay. 5ms was flaky under parallel
+	// suite load (scheduler jitter pushed it past 6ms in make check, 3期 T5).
+	if elapsed > 100*time.Millisecond {
 		t.Errorf("expected near-instant return, got %v", elapsed)
 	}
 }

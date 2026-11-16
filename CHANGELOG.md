@@ -6,6 +6,37 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed（3 期：兼容性与测试工程化——零 API 变化，纯测试与 CI 面）
+
+- **四域覆盖率机器门进 `make check`**：`scripts/cover-domain.sh` 按 spec §1.1
+  四正则聚合断言 ≥80%（webhook/transport/gitbackend/pageiter），任一域低于
+  地板即非零退出。webhook 验签域实测 55.6→98.6（口径注记：55.6 是 spec 的
+  39 函数口径——`runtime/webhook` 32 函数 + `contracttest/webhook{config,
+  corpus}` 7 函数全 0%；机器门正则只聚 `runtime/webhook` 32 函数，基线
+  67.8、补测后 98.6）；transport 顺手补 retry Do 分支 81.2→83.1；
+  gitbackend 83.8 / pageiter 98.8 已达标保线不动（裁定①）。
+- **只读巡检扩面（smoke → matrix patrol）**：`smoke/probes.go` 六 probe 家族
+  注册表（repo/cr/webhook/pagination/errors/connection，全部只读、沿用
+  env-gated 缺 secret=SKIP 不红）+ `smoke.yml` 升七平台 `strategy.matrix`——
+  一次 dispatch 全矩阵，单平台快跑保留；放 token 清单见 spec §5
+  （`GIT_PLATFORM_SMOKE_TOKEN_<GITHUB|GITLAB|GITEA|FORGEJO|GITEE|GITCODE|
+  TENCENTCODE>` + fallback `SMOKE_TOKEN`），未放 = 全 skip（现状即如此）。
+- **异常注入三形态进 contracttest**（`contracttest/fault.go` 挂 `Run` 的
+  `FaultSuite`，七后端全跑）：①5xx 故障体 canary 在场钉——body 进错误文本
+  是上游 SDK + `provider.Wrap`/`transport.Error` 的既有设计，测试按现实钉
+  （presence check 非 matching 检查）并留 flip-together 注释；②截断 JSON
+  七后端全部返回 err，无静默空集路径；③伪翻页 `Link: rel="next"` 死循环
+  stub 在页预算内以 `runtime.ErrPageBudgetExceeded` 止损（#285 语义的
+  wire 级钉，恰好 N 请求断言）。
+- **沙箱写 E2E 双场合**：新 `e2e/` 包（`//go:build e2e`，默认 `go test ./...`
+  与 `make check` 不含）——gitea（`gitea/gitea:28.4`，容器实测 28.4.0）+
+  forgejo（`codeberg.org/forgejo/forgejo:17.0.1`）真写 roundtrip 十子测
+  （Issue/Label/CR/Ensure 族/BranchProtection，只在一次性容器内写，不指向
+  真实平台）；本地 `make e2e` 两平台绿，CI `e2e.yml` push/PR path-filter
+  门禁随发版 push 首跑（纯 docs/CHANGELOG 不触发）。
+- 全程零 API 变化、零生产代码语义变化：`git diff` 只触测试/脚本/workflow/
+  Makefile 面。
+
 ## [0.141.0] - 2026-11-16
 
 ### Changed（**BREAKING**：文件排布重构，v0.141.0）

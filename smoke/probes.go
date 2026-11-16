@@ -105,6 +105,10 @@ func probeCR(ctx context.Context, p provider.Provider, opts Options) error {
 	if total != nil && *total < 0 {
 		return fmt.Errorf("ListCRs reported negative total %d — platform metadata drift?", *total)
 	}
+	// 页 1 条数不可能超过总数——自报 total 小于本页即分页字段漂移（spec §3.2 cr 行）。
+	if total != nil && *total < len(crs) {
+		return fmt.Errorf("ListCRs total %d smaller than page-1 count %d — pagination metadata drift", *total, len(crs))
+	}
 	opts.logf("ListCRs ok: %d CR(s) on page 1 (total=%s)", len(crs), totalStr(total))
 	if err := checkCRVocab(crs); err != nil {
 		return err
@@ -267,6 +271,10 @@ func ghostRepoName() (string, error) {
 // 通路）——零写方法（spec §2 红线）。断言面（spec §3.2 connection 行）：
 // 连通性 Connected=true；TokenSource 轮转型凭据（GitHub App 安装令牌等）
 // 走 Config.TokenSource 逐请求取 token 的通路冒烟。
+// 局限说明：本 probe 用同一静态 token 接线 TokenSource 通路（StaticTokenSource），
+// 只验「逐请求取 token」的通路本身，非真轮转（单一凭证无多 token 可转）——
+// spec §3.2 connection 行「TokenSource 轮转冒烟」的最小合理实现，真轮转面
+// 归消费方凭据实现（GitHub App 安装令牌等）自行保证。
 func probeConnection(ctx context.Context, p provider.Provider, opts Options) error {
 	res, err := p.TestConnection(ctx)
 	if err != nil {
