@@ -18,4 +18,9 @@
 // 红线（spec §2）：写操作只发生在一次性沙箱容器内；本包绝不指向真实平台。
 // 镜像凭据仅存在于进程内/临时容器，仓库零 secrets（spec §5：E2E 不需要
 // secrets，本地/CI 一次性容器自建 token）。
+//
+// 注意事项：本地 docker 模式下 `t.Cleanup` 在 go test 进程被 kill 时无法
+// 回收容器（残留 `e2e-*-<rand>` 需手动 `docker rm`；CI services 场合随
+// runner 自清）。`e2e.yml` 的触发路径含 `runtime/**`——超出 spec §3.4
+// 原文清单（roundtrip 钉 `runtime.Ensure*`，有意扩展）。
 package e2e

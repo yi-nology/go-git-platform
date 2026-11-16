@@ -22,7 +22,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   （`GIT_PLATFORM_SMOKE_TOKEN_<GITHUB|GITLAB|GITEA|FORGEJO|GITEE|GITCODE|
   TENCENTCODE>` + fallback `SMOKE_TOKEN`），未放 = 全 skip（现状即如此）。
 - **异常注入三形态进 contracttest**（`contracttest/fault.go` 挂 `Run` 的
-  `FaultSuite`，七后端全跑）：①5xx 故障体 canary 在场钉——body 进错误文本
+  `FaultInjection`，七后端全跑）：①5xx 故障体 canary 在场钉——body 进错误文本
   是上游 SDK + `provider.Wrap`/`transport.Error` 的既有设计，测试按现实钉
   （presence check 非 matching 检查）并留 flip-together 注释；②截断 JSON
   七后端全部返回 err，无静默空集路径；③伪翻页 `Link: rel="next"` 死循环
