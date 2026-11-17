@@ -281,7 +281,11 @@ func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemod
 		if err != nil {
 			return oekiterrors.Wrap(err, "read symlink target", "path", relPath)
 		}
-		_ = os.Remove(fullPath)
+		// 重建符号链接前的旧链接清理：非「不存在」的失败必须显式上报
+		// （否则 Symlink 会以 EEXIST 失败并遮蔽真实根因）。
+		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+			return oekiterrors.Wrap(err, "remove old symlink", "path", relPath)
+		}
 		if err := os.Symlink(string(target), fullPath); err != nil {
 			return oekiterrors.Wrap(err, "create symlink", "path", relPath)
 		}
@@ -296,7 +300,7 @@ func writeWorktreeFile(repoPath, relPath string, blob *object.Blob, mode filemod
 		return oekiterrors.Wrap(err, "create file", "path", relPath)
 	}
 	if _, err := io.Copy(f, reader); err != nil {
-		_ = f.Close()
+		_ = f.Close() // 写错误优先上报；close 失败不遮蔽主因（清理类刻意忽略）
 		return oekiterrors.Wrap(err, "write file", "path", relPath)
 	}
 	if err := f.Close(); err != nil {

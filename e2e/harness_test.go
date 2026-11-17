@@ -79,7 +79,6 @@ var (
 // gitea/forgejo 两后端构造均走该路径；SDK 不配 Retry（RetryConfig nil），
 // 计数即真实请求数。
 type requestCounter struct {
-	reads  int64
 	writes int64
 }
 
@@ -89,7 +88,7 @@ func (c *requestCounter) hook(_ context.Context, _ *http.Request, resp *http.Res
 	}
 	switch resp.Request.Method {
 	case http.MethodGet, http.MethodHead:
-		c.reads++
+		// 只读请求不计数（零写断言只消费 writes；reads 曾为死字段，T4 评审移除）。
 	default:
 		c.writes++
 	}

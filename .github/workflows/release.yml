@@ -86,7 +86,7 @@ jobs:
           GOPROXY: direct  # 刚 push 的 tag 在 proxy 传播有延迟——直连源必然可解析（S8 实操先例）
         run: |
           TAG="${GITHUB_REF_NAME}"
-          sed -i "s|github.com/yi-nology/go-git-platform v[0-9.]*|github.com/yi-nology/go-git-platform ${TAG}|" mcp/go.mod
+          sed -i -E "s|github.com/yi-nology/go-git-platform v[0-9.][0-9.A-Za-z.-]*|github.com/yi-nology/go-git-platform ${TAG}|" mcp/go.mod
           cd mcp && GOWORK=off go mod tidy
 
       - name: Build 6 targets
