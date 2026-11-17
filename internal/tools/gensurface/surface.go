@@ -221,7 +221,7 @@ func listPackages(dir string, importPaths []string) (map[string]listedPkg, error
 				// Reap the child before reporting; its exit status can name
 				// the real cause of a truncated/failed listing.
 				if waitErr := cmd.Wait(); waitErr != nil {
-					return nil, fmt.Errorf("go list -json: decode: %v; wait: %w", err, waitErr)
+					return nil, fmt.Errorf("go list -json: decode: %w; wait: %w", err, waitErr)
 				}
 				return nil, fmt.Errorf("go list -json: decode: %w", err)
 			}
@@ -261,8 +261,9 @@ func parsePackage(pkg listedPkg) ([]string, error) {
 				}
 				out = append(out, line)
 			case *ast.GenDecl:
-				for _, spec := range d.Specs {
-					line, ok, err := renderSpec(fset, d.Tok, spec)
+				groupIsIota := d.Tok == token.CONST && len(d.Specs) > 0 && hasIotaValue(d.Specs[0])
+				for i, spec := range d.Specs {
+					line, ok, err := renderSpec(fset, d.Tok, spec, i, groupIsIota)
 					if err != nil {
 						return nil, err
 					}
@@ -409,7 +410,7 @@ func renderFunc(fset *token.FileSet, d *ast.FuncDecl) (string, error) {
 // (`const X = …` / `var X …` / `type X …`). Grouping (parenthesized blocks)
 // is not API and is flattened away; a value spec whose names mix exported and
 // unexported identifiers is rejected loudly rather than mis-rendered.
-func renderSpec(fset *token.FileSet, tok token.Token, spec ast.Spec) (string, bool, error) {
+func renderSpec(fset *token.FileSet, tok token.Token, spec ast.Spec, specIndex int, groupIsIota bool) (string, bool, error) {
 	switch s := spec.(type) {
 	case *ast.TypeSpec:
 		if !s.Name.IsExported() {
@@ -435,15 +436,101 @@ func renderSpec(fset *token.FileSet, tok token.Token, spec ast.Spec) (string, bo
 		if exported != len(s.Names) {
 			return "", false, fmt.Errorf("value spec mixes exported and unexported names (%v) — unsupported", s.Names)
 		}
+		elideUnexportedVarInits(s, tok)
 		var buf bytes.Buffer
 		err := printer.Fprint(&buf, fset, &ast.GenDecl{Tok: tok, Specs: []ast.Spec{s}})
 		if err != nil {
 			return "", false, fmt.Errorf("render %v: %w", s.Names, err)
 		}
-		return buf.String(), true, nil
+		return annotateIotaInherited(buf.String(), tok, len(s.Values), specIndex, groupIsIota), true, nil
 	default:
 		return "", false, nil
 	}
+}
+
+// hasIotaValue reports whether the spec's value list is exactly the bare
+// identifier iota (the canonical first member of an iota const group).
+func hasIotaValue(spec ast.Spec) bool {
+	vs, ok := spec.(*ast.ValueSpec)
+	if !ok || len(vs.Values) != 1 {
+		return false
+	}
+	id, ok := vs.Values[0].(*ast.Ident)
+	return ok && id.Name == "iota"
+}
+
+// containsUnexportedRef reports whether expr references any unexported
+// identifier (universal/builtin names excluded). Used to elide var
+// initializers that embed internal names from the v1 golden.
+func containsUnexportedRef(n ast.Node) bool {
+	if n == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(n, func(x ast.Node) bool {
+		id, ok := x.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		switch id.Name {
+		case "nil", "true", "false", "iota", "len", "cap", "new", "make", "append", "delete":
+			return true
+		}
+		if !id.IsExported() {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// keysOnlyMapLit rebuilds a map composite literal keeping only the keys,
+// values elided ("...") — deterministic and free of unexported refs.
+func keysOnlyMapLit(lit *ast.CompositeLit) *ast.CompositeLit {
+	out := &ast.CompositeLit{Type: lit.Type}
+	for _, e := range lit.Elts {
+		if kv, ok := e.(*ast.KeyValueExpr); ok {
+			out.Elts = append(out.Elts, &ast.KeyValueExpr{Key: kv.Key, Value: &ast.Ellipsis{}})
+		}
+	}
+	return out
+}
+
+// elideUnexportedVarInits rewrites var-spec init expressions that reference
+// unexported identifiers (e.g. smoke.Probes' family registry) into a
+// deterministic elided form — map literals keep their keys with "..." values,
+// anything else collapses to "..." — so internal renames no longer trip the
+// v1 freeze guard while key add/remove (the consumer-visible face) still does.
+func elideUnexportedVarInits(s *ast.ValueSpec, tok token.Token) {
+	if tok != token.VAR {
+		return
+	}
+	for i, v := range s.Values {
+		if !containsUnexportedRef(v) {
+			continue
+		}
+		if lit, ok := v.(*ast.CompositeLit); ok && lit.Type != nil {
+			s.Values[i] = keysOnlyMapLit(lit)
+		} else {
+			s.Values[i] = &ast.Ellipsis{}
+		}
+	}
+}
+
+// annotateIotaInherited renders value-less members of an iota const group
+// with an explicit ordinal ("= iota(N)") — member swaps become visible in the
+// textual golden (value order is otherwise invisible once lines are sorted).
+// Inherited members of non-iota groups render as before (none in the repo).
+func annotateIotaInherited(line string, tok token.Token, valueCount, specIndex int, groupIsIota bool) string {
+	if tok != token.CONST || valueCount != 0 || !groupIsIota {
+		return line
+	}
+	trimmed := strings.TrimRight(line, "\n")
+	if strings.Contains(trimmed, "=") {
+		return trimmed
+	}
+	return fmt.Sprintf("%s = iota(%d)", trimmed, specIndex)
 }
 
 // repoRoot walks up from the process working directory to the directory

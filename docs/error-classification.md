@@ -1,7 +1,7 @@
 # 错误分类矩阵（provider）
 
 以 `provider/errors.go` 的 `classifyStatusCode` 为准——**改分类先改这里**，
-本表是它的逐行转写（行号核对于 2026-11-14 的 `provider/errors.go`）。分类
+本表是它的逐行转写（锚定 `provider/errors.go` 的**符号名**而非行号——行号锚曾于 2026-11-14 标注、因后续演进漂移已弃用）。分类
 判定一律 `errors.Is` 哨兵（规则二），禁止匹配错误消息文本；分类单源除
 `classifyStatusCode` 外还有 `Wrap`/`classifyProviderStatus` 的限流改道
 （见下「403 节流改道」）。
@@ -10,17 +10,17 @@
 
 | 状态码 | 哨兵 | 含义 | 源码 |
 |---|---|---|---|
-| 400 / 422 | `ErrInvalidInput` | 请求载荷被拒（issue #64：两种最常见的校验拒绝形态，此前落文本缺省致 `IsInvalidInput` 恒 false） | errors.go:404-410 |
-| 401 | `ErrAuthentication` | 认证失败 | errors.go:413-414 |
-| 403 | `ErrForbidden` | 服务端授权拒绝（例外：节流改道见下） | errors.go:415-416 |
-| 404 | `ErrNotFound` | 资源不存在 | errors.go:411-412 |
-| 409 | `ErrConflict` | 并发/状态冲突 | errors.go:419-420 |
-| 410 | `ErrGone` | 资源曾存在但永久消失（区别于「从未存在」的 404） | errors.go:421-424 |
-| 429 | `ErrRateLimited` | 限流 | errors.go:417-418 |
-| 500–599 | `ErrServerSide` | 服务端故障——退避后重试有意义 | errors.go:425-426 |
-| 其余 | 无哨兵：裸 `fmt.Errorf("HTTP %d")` | 专用哨兵缺席是设计（文本只读）——用 `ProviderError.IsStatus` 匹配，**不用** `errors.Is` | errors.go:427-429 |
+| 400 / 422 | `ErrInvalidInput` | 请求载荷被拒（issue #64：两种最常见的校验拒绝形态，此前落文本缺省致 `IsInvalidInput` 恒 false） | classifyStatusCode 400/422 分支 |
+| 401 | `ErrAuthentication` | 认证失败 | classifyStatusCode 401 分支 |
+| 403 | `ErrForbidden` | 服务端授权拒绝（例外：节流改道见下） | classifyStatusCode 403 分支 |
+| 404 | `ErrNotFound` | 资源不存在 | classifyStatusCode 404 分支 |
+| 409 | `ErrConflict` | 并发/状态冲突 | classifyStatusCode 409 分支 |
+| 410 | `ErrGone` | 资源曾存在但永久消失（区别于「从未存在」的 404） | classifyStatusCode 410 分支 |
+| 429 | `ErrRateLimited` | 限流 | classifyStatusCode 429 分支 |
+| 500–599 | `ErrServerSide` | 服务端故障——退避后重试有意义 | classifyStatusCode 5xx 分支 |
+| 其余 | 无哨兵：裸 `fmt.Errorf("HTTP %d")` | 专用哨兵缺席是设计（文本只读）——用 `ProviderError.IsStatus` 匹配，**不用** `errors.Is` | classifyStatusCode default 分支 |
 
-函数 doc 见 `ClassifyStatus`（errors.go:388-397）：完整映射即上表；上表
+函数 doc 见 `ClassifyStatus`（`classifyStatusCode` 全分支）：完整映射即上表；上表
 没有专用哨兵的状态一律文本形态。
 
 ### 403 节流改道（唯一的状态码例外）
@@ -30,10 +30,10 @@
 路都在状态分类之上：
 
 1. **transport 标记**：cause 实现 `rateLimitedMarker`（`IsRateLimited()
-   bool`，errors.go:169-179）且为真 ⇒ `classifyProviderStatus` 改判
-   `ErrRateLimited`（errors.go:221-230），复用 429 的哨兵；
+   bool`，`rateLimitedMarker` 接口）且为真 ⇒ `classifyProviderStatus` 改判
+   `ErrRateLimited`（`classifyProviderStatus`），复用 429 的哨兵；
 2. **平台 SDK 分类器**：`Wrap` 在状态提取后、裸状态分类前查平台注册的
-   `ThrottleClassifier`（errors.go:153-158），权威节流判定直接归
+   `ThrottleClassifier`（`ThrottleClassifier`），权威节流判定直接归
    `ErrRateLimited` 并复制恢复窗口（`RetryAfter`/`ResetAt`）。
 
 钉测 `provider/errors_ratelimit403_test.go`：

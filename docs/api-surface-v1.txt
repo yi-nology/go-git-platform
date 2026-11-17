@@ -22,7 +22,7 @@
 # --- 冻结面开始（包 section 头 + 每行一个导出符号）---
 
 # package github.com/yi-nology/go-git-platform/provider
-const CredentialDenied
+const CredentialDenied = iota(2)
 const DefaultPage = 1
 const DefaultPerPage = 20
 const DivergenceDetour DivergenceKind = "detour"
@@ -38,7 +38,7 @@ const OpListRepoNotifications Operation = "list_repo_notifications"
 const OpUpdateGlobalInbox Operation = "update_global_inbox"
 const OpUpdateSingleWebhook Operation = "update_single_webhook"
 const Supported OperationSupport = iota
-const Unsupported
+const Unsupported = iota(1)
 func (e *ProviderError) Error() string
 func (e *ProviderError) Is(target error) bool
 func (e *ProviderError) IsClientError() bool
@@ -746,23 +746,23 @@ type WebhookManager interface {
 	ParseWebhookEvent(r *http.Request, secret string) (*model.NormalizedEvent, error)
 	ValidateWebhookSignature(r *http.Request, secret string) error
 }
-var ErrAuthentication = errors.New("authentication failed")
-var ErrClearNotSupported = errors.New("clear not supported on this platform")
-var ErrConflict = errors.New("conflict")
-var ErrConnectionFailed = errors.New("connection failed")
-var ErrDraftNotSupported = errors.New("draft=true not supported on this platform")
-var ErrEmptyResponse = errors.New("empty response body")
-var ErrForbidden = errors.New("forbidden")
-var ErrGone = errors.New("resource permanently gone")
-var ErrInvalidInput = errors.New("invalid input")
-var ErrNotFound = errors.New("resource not found")
-var ErrNotImplemented = errors.New("not implemented")
-var ErrPermissionDenied = errors.New("permission denied for this credential")
-var ErrPlatformNotSupported = errors.New("platform not supported")
-var ErrRateLimited = errors.New("rate limited")
-var ErrServerSide = errors.New("server-side failure")
-var ErrWebhookFiltered = errors.New("webhook event filtered out (noise policy)")
-var ErrWebhookValidation = errors.New("webhook validation failed")
+var ErrAuthentication = ...
+var ErrClearNotSupported = ...
+var ErrConflict = ...
+var ErrConnectionFailed = ...
+var ErrDraftNotSupported = ...
+var ErrEmptyResponse = ...
+var ErrForbidden = ...
+var ErrGone = ...
+var ErrInvalidInput = ...
+var ErrNotFound = ...
+var ErrNotImplemented = ...
+var ErrPermissionDenied = ...
+var ErrPlatformNotSupported = ...
+var ErrRateLimited = ...
+var ErrServerSide = ...
+var ErrWebhookFiltered = ...
+var ErrWebhookValidation = ...
 
 # package github.com/yi-nology/go-git-platform/model
 const CRStateClosed CRState = "closed"
@@ -1342,9 +1342,9 @@ type WebhookValidator interface {
 }
 type WebhookValidatorRegistry struct {
 }
-var ErrPageBudgetExceeded = oekiterrors.New("page budget exceeded before an empty page")
-var ErrStopIteration = oekiterrors.New("iteration stopped")
-var ErrWaitTimedOut = oekiterrors.New("commit status did not reach a terminal state before the timeout")
+var ErrPageBudgetExceeded = ...
+var ErrStopIteration = ...
+var ErrWaitTimedOut = ...
 
 # package github.com/yi-nology/go-git-platform/adapter/github
 func (p *Provider) AddCRCommentReaction(ctx context.Context, owner, repo string, commentID int64, emoji string) (*model.Reaction, error)
@@ -3356,7 +3356,7 @@ type LabelRef struct {
 type ScanLimitError struct {
 	Msg string
 }
-var ErrLabelScanLimit = errors.New("label not found within scan limit")
+var ErrLabelScanLimit = ...
 
 # package github.com/yi-nology/go-git-platform/adapter/all
 
@@ -4097,8 +4097,8 @@ type TokenSourceAuth struct {
 	Source	TokenSource
 	Style	string
 }
-var ErrETagEntryGone = oekiterrors.New("conditional request answered 304 but the cached entry is gone")
-var ErrEmptyResponse = fmt.Errorf("transport: empty response body")
+var ErrETagEntryGone = ...
+var ErrEmptyResponse = ...
 
 # package github.com/yi-nology/go-git-platform/transport/metrics
 func (f RecorderFunc) ObserveRequest(method, path string, status int, duration time.Duration, err error)
@@ -4621,27 +4621,27 @@ type TreeEntry struct {
 	Size	int64
 }
 type TreeEntryType string
-var ErrAlreadyUpToDate = oekiterrors.New("already up to date")
-var ErrAuthFailed = oekiterrors.New("authentication failed")
-var ErrBranchExists = oekiterrors.New("branch already exists")
-var ErrBranchInUse = oekiterrors.New("branch is currently checked out")
-var ErrBranchNotFound = oekiterrors.New("branch not found")
-var ErrConfigKeyNotFound = oekiterrors.New("config key not found")
-var ErrDirtyWorktree = oekiterrors.New("dirty worktree")
-var ErrFileNotFound = oekiterrors.New("file not found at revision")
-var ErrGitNotFound = oekiterrors.New("git binary not found")
-var ErrInvalidGitArg = oekiterrors.New("invalid git argument")
-var ErrMergeConflict = oekiterrors.New("merge conflict")
-var ErrNotAGitRepo = oekiterrors.New("not a git repository")
-var ErrNothingToMerge = oekiterrors.New("nothing to merge")
-var ErrReferenceUnsupported = oekiterrors.New("reference clone requires the native git backend")
-var ErrRemoteNotFound = oekiterrors.New("remote not found")
-var ErrRepoNotFound = oekiterrors.New("repository not found")
-var ErrStashUnsupported = oekiterrors.New("stash requires the native git backend")
-var ErrTagExists = oekiterrors.New("tag already exists")
-var GitHTTPDialTimeout = 30 * time.Second
-var GitHTTPResponseHeaderTimeout = 60 * time.Second
-var GitHTTPTLSHandshakeTimeout = 15 * time.Second
+var ErrAlreadyUpToDate = ...
+var ErrAuthFailed = ...
+var ErrBranchExists = ...
+var ErrBranchInUse = ...
+var ErrBranchNotFound = ...
+var ErrConfigKeyNotFound = ...
+var ErrDirtyWorktree = ...
+var ErrFileNotFound = ...
+var ErrGitNotFound = ...
+var ErrInvalidGitArg = ...
+var ErrMergeConflict = ...
+var ErrNotAGitRepo = ...
+var ErrNothingToMerge = ...
+var ErrReferenceUnsupported = ...
+var ErrRemoteNotFound = ...
+var ErrRepoNotFound = ...
+var ErrStashUnsupported = ...
+var ErrTagExists = ...
+var GitHTTPDialTimeout = ...
+var GitHTTPResponseHeaderTimeout = ...
+var GitHTTPTLSHandshakeTimeout = ...
 
 # package github.com/yi-nology/go-git-platform/smoke
 func ParseFamilies(s string) []string
@@ -4651,11 +4651,9 @@ type Options struct {
 	Logf			func(format string, args ...any)
 }
 type ProbeFunc func(ctx context.Context, p provider.Provider, opts Options) error
-var Probes = map[string]ProbeFunc{
-	"repo":		probeRepo,
-	"cr":		probeCR,
-	"webhook":	probeWebhook,
-	"pagination":	probePagination,
-	"errors":	probeErrors,
-	"connection":	probeConnection,
-}
+var Probes = map[string]ProbeFunc{"repo": ...,
+	"cr": ...,
+	"webhook": ...,
+	"pagination": ...,
+	"errors": ...,
+	"connection": ...}
