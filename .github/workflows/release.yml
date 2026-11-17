@@ -68,6 +68,7 @@ jobs:
     permissions:
       contents: write # gh release upload
       id-token: write # attest-build-provenance 需要 OIDC token
+      attestations: write # attest-build-provenance 落证还需 attestations: write（首跑 403 教训）
     steps:
       - name: Checkout
         uses: actions/checkout@v7
