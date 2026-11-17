@@ -100,6 +100,9 @@ func TestGitLab_Contract(t *testing.T) {
 			// GetRawFile returns the raw bytes, not an envelope.
 			GetResponse:  "hello world",
 			ContentIsRaw: true,
+			// GitLab takes the content verbatim; plaintext-in is the
+			// unified caller contract (regression control for #169).
+			ContentWireEncoding: "plain",
 		},
 		// CR suite fixtures (issue #63): GitLab MR shape — iid-addressed,
 		// source_branch/target_branch keys, state_event verbs, "opened" state.

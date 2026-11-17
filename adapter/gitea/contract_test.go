@@ -97,8 +97,9 @@ func TestGitea_Contract(t *testing.T) {
 			FilesWithoutHunks: true,
 		},
 		Files: &contracttest.FileHarnessConfig{
-			GetResponse:  "hello world",
-			ContentIsRaw: true,
+			GetResponse:         "hello world",
+			ContentIsRaw:        true,
+			ContentWireEncoding: "base64", // gitea.dev/sdk: "content must be base64 encoded"
 		},
 		// CR suite fixtures (issue #63): Gitea PR shape — index-addressed,
 		// head/base branch info objects.

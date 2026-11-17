@@ -2,6 +2,7 @@ package giteafamily
 
 import (
 	"context"
+	"encoding/base64"
 	"strconv"
 	"strings"
 	"time"
@@ -404,6 +405,12 @@ type FamilyFileResult struct {
 // FamilyFileOptions is the family's file create/update/delete body
 // (SHA is the blob SHA for update/delete; the family's file options share
 // one struct across the three verbs).
+//
+// Content is the BASE64 wire form, not the caller's plaintext: both
+// gitea.dev/sdk and forgejo-sdk document their file content as "content
+// must be base64 encoded", so the family encodes provider.FileOptions.Content
+// at this port boundary (issue #169). Callers keep passing plaintext on
+// every platform.
 type FamilyFileOptions struct {
 	Message string
 	Branch  string
@@ -432,12 +439,21 @@ func GetFileContent(ctx context.Context, f Family, c FilePort, owner, repo, path
 	return string(data), nil
 }
 
+// encodeFileContent is the one place provider.FileOptions.Content (plaintext)
+// becomes the family SDK's base64 wire field. Both gitea.dev/sdk and
+// forgejo-sdk document "content must be base64 encoded" for CreateFile/
+// UpdateFile; their GetFile uses the raw endpoint and already returns bytes,
+// so only the write path needs a codec (issue #169).
+func encodeFileContent(content string) string {
+	return base64.StdEncoding.EncodeToString([]byte(content))
+}
+
 // CreateFile creates a file on a branch.
 func CreateFile(ctx context.Context, f Family, c FilePort, owner, repo string, opts provider.FileOptions) (*model.FileResult, error) {
 	res, err := c.CreateFile(ctx, owner, repo, opts.Path, FamilyFileOptions{
 		Message: opts.Message,
 		Branch:  opts.Branch,
-		Content: opts.Content,
+		Content: encodeFileContent(opts.Content),
 		Author:  opts.Author,
 		Email:   opts.Email,
 	})
@@ -453,7 +469,7 @@ func UpdateFile(ctx context.Context, f Family, c FilePort, owner, repo string, o
 		Message: opts.Message,
 		Branch:  opts.Branch,
 		SHA:     opts.SHA,
-		Content: opts.Content,
+		Content: encodeFileContent(opts.Content),
 		Author:  opts.Author,
 		Email:   opts.Email,
 	})

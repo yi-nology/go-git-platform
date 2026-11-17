@@ -190,8 +190,19 @@ type ForkRepoOptions struct {
 // --- Files ---
 
 // FileOptions contains options for creating or updating a file.
+//
+// Content is PLAINTEXT — the bytes as they should land in the repository.
+// The wire form differs by platform: the gitea/forgejo family's SDKs require
+// their content field base64-encoded (gitea.dev/sdk and forgejo-sdk:
+// "content must be base64 encoded"; the family adapter applies that codec),
+// GitHub's SDK encodes []byte internally, and GitLab takes the string
+// verbatim. Callers must NOT pre-encode: the adapter that needs a codec
+// applies it, and pre-encoding would make the base64 text itself the file on
+// the platforms that take plaintext (issue #169).
 type FileOptions struct {
-	Path    string `json:"path"`
+	Path string `json:"path"`
+	// Content is the file's plaintext content, never base64: the adapter
+	// applies the platform's wire encoding (gitea/forgejo family: base64).
 	Content string `json:"content"`
 	Message string `json:"message"`
 	Branch  string `json:"branch,omitempty"`

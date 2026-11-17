@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`FileOptions.Content` 统一为明文语义（#169）**：gitea/forgejo 族的 SDK
+  要求文件 `content` 字段 base64 编码（gitea.dev/sdk / forgejo-sdk：
+  "content must be base64 encoded"），而 adapter 之前把 `FileOptions.Content`
+  原样透传——同一段按 github/gitlab 习惯写明文内容的通用代码在 gitea/
+  forgejo 上必 4xx，iface/options 文档也没载明。修法选 (a)：`giteafamily`
+  port 边界统一 `base64.StdEncoding` 编码（CreateFile/UpdateFile），消费面
+  七平台一律传明文；`provider/options.go` 与 `FileManager` 接口文档写死
+  「调用方不编码、编码归 adapter」。同步删除 e2e harness 的自编码，新增
+  giteafamily 编码单测与 contracttest 文件写 wire 断言（gitea/forgejo 要求
+  base64，github/gitlab 作为明文调用方回归对照）。
+  **v1 金样面登记**：新增的 `contracttest.FileHarnessConfig.ContentWireEncoding`
+  是导出字段（金样冻结面），已按纪律 `go run ./internal/tools/gensurface`
+  显式重生成 `docs/api-surface-v1.txt`。
+
 ## [0.144.1] - 2026-11-17
 
 ### Changed（4 期：v1.0 准备——零生产语义变化，纯文档/守卫/CI 面）
