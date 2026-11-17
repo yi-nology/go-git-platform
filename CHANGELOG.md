@@ -6,6 +6,47 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed（4 期：v1.0 准备——零生产语义变化，纯文档/守卫/CI 面）
+
+- **v1 公共 API 金样守卫进 `go test ./...`**：新 `internal/apisurface` 守卫 +
+  `internal/tools/gensurface` 生成工具（零新依赖，stdlib `go list -json` +
+  `go/parser` 抽取、`go/printer` 规范渲染）——`docs/api-surface-v1.txt`
+  逐行冻结 **22 包导出面、4216 符号**（三契约包 + 七平台 adapter +
+  adapter/internal 两包 + adapter/all + contracttest + auth 两包 +
+  branchfilter + projection + transport{,/metrics} + gitbackend + smoke；
+  根 `internal/` 与 `mcp/` 不进金样）。增/删/改签名同权即红；未导出字段
+  剥离出金样（内部重构不出守卫噪音，T2 评审裁定）；负样例实证咬合
+  （假符号 `ApisurfaceProbe` → 红且 diff 指向该符号，删除即绿）。
+  **金样更新纪律**：v1 期内 API 变化 = `go run ./internal/tools/gensurface`
+  显式重生成 + CHANGELOG 登记——**不挂 go:generate**，绝不随 generate 自动
+  重写；详见 [VERSIONING.md](docs/VERSIONING.md) 金样纪律节。
+- **版本与兼容文档落位**：新 `docs/VERSIONING.md`（主模块 tag 语义
+  minor=breaking 承载先例 v0.73.0/v0.141.0、纯 docs 不打 tag、mcp require
+  人工跟随与两步窗口、金样纪律、下游 `go get`/`go install` 口径；承诺正文
+  单一真源仍为 CONTRIBUTING）；新 `docs/COMPATIBILITY.md`（平台×能力矩阵
+  ——真源 = README 表 ↔ `adapter/all/readme_matrix_test.go` 机器对账，本文
+  仅快照 + Go 地板 1.27.4 + mcp↔父模块耦合 + 平台实测覆盖面 + v1 语义五
+  节）；`docs/MIGRATION.md` 头部补 v1 声明（0.x → v1.0 无额外迁移，重构
+  迁移矩阵继续有效）。
+- **Release workflow 追加 MCP 构建段**（`mcp-dist` job，`needs: release`，
+  测试段语义逐字不动）：6 目标二进制 `linux/{amd64,arm64}
+  darwin/{amd64,arm64} windows/{amd64,arm64}`（`go-git-platform-mcp_<os>_
+  <arch>[.exe]`，CGO=0 + `-trimpath`；版本元数据走 `go version -m` 内建
+  ——`internal/version` 无导出注入变量，无 ldflags `-X`）；SBOM CycloneDX
+  经 `anchore/sbom-action`（spec 原名 `sbft-action` 实测 404，现役名取代）
+  扫描二进制构建信息；`sha256sum` checksums；`actions/attest-build-provenance`
+  （spec 原文 @v2 已过时，现役 @v4，subjects = dist 全量）——产物全挂同一
+  Release。**构建时自动闭合 mcp require 两步窗口**：构建前 `sed` 抬
+  `mcp/go.mod` require 到本 tag + `GOWORK=off go mod tidy`
+  （`GOPROXY=direct`——新 tag 在 proxy 传播有延迟），构建完即弃不 commit。
+  语法 actionlint 绿；**真实 tag 首跑挂发版序列**（红则修复循环归 T3 链）。
+- **零生产语义变化**：全分支 diff 面 = `docs/`（三文档 + 金样）+
+  `internal/apisurface`/`internal/tools/gensurface`（新守卫与工具）+
+  `.github/workflows/release.yml`（只追加构建段）+ CHANGELOG——
+  provider/model/runtime/adapter/transport/gitbackend 源文件零触碰。
+- **不打 v1.0 tag——就绪 ≠ 官宣**：本期交付 v1.0 就绪态（冻结机制 + 发布
+  物 + 文档），v1.0 tag 由维护者择时执行；打 tag 时金样守卫即生效边界。
+
 ## [0.143.0] - 2026-11-17
 
 ### Changed（3 期：兼容性与测试工程化——零 API 变化，纯测试与 CI 面）
