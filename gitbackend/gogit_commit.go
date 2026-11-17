@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -518,6 +519,10 @@ func (b *GoGitBackend) Rebase(ctx context.Context, repoPath, onto string) error 
 	if len(commits) == 0 {
 		return nil // nothing to rebase
 	}
+	// GetCommitsBetween 按 git log 语义返回 newest-first；rebase 回放必须
+	// oldest-first（与 native git 一致）：先回放最旧，后续 diff 才有它依赖的
+	// 前置内容。回放循环与 RebaseContinue 的 msgnum 索引消费同一份 oldest-first 列表。
+	slices.Reverse(commits)
 
 	// Save rebase state
 	dir := rebaseStateDir(repoPath)
@@ -654,6 +659,8 @@ func (b *GoGitBackend) RebaseContinue(ctx context.Context, repoPath string) erro
 	if err != nil {
 		return newGitError("RebaseContinue", repoPath, "", err)
 	}
+	// 与 Rebase 同序：消费 oldest-first 列表，msgnum 索引语义两侧一致。
+	slices.Reverse(commits)
 
 	// If the working tree is dirty the user has resolved conflicts — commit them.
 	wt, err := repo.Worktree()

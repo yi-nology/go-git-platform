@@ -376,10 +376,15 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   将被删除的 level 映射——transport SlogLogger 维持手写。Tier 3 复核维持：
   retry.go 退避/ratelimit 节流/gitee FixedZone/examples 日志/contracttest
   空密钥 HMAC/ptrx——扫描现场与存档一致（维持不引入）。后续候选（清单外，
-  另立单/下轮清理）：GetCommitsBetween 返回 newest-first 使多 commit gogit
-  Rebase 回放顺序与 native git 相反（既有行为、非本轮引入，另立单）；
-  gitbackend/gogit_file.go:284/:299 两处清理类裸 `_ =`（os.Remove/f.Close）
-  仍在任务清单外（清单外清理类）。
+  另立单/下轮清理）已全部清偿：GetCommitsBetween newest-first 使多 commit
+  gogit Rebase 回放顺序与 native 相反——2026-11-17 修复（两处消费点
+  slices.Reverse 成 oldest-first + 多 commit 同文件逐段内容回归钉住，
+  RebaseContinue 夹具按 oldest-first 布景重写）；gogit_file.go 两处清理类
+  裸 `_ =` 已于 6b1d7ed 清偿（symlink 清理显式报错 + f.Close 意图注释）；
+  sshHostKeyArgs 专属元字符测试已补（shellx.Quote 形态 + 真 sh round-trip）；
+  gensurface 二进制已入 .gitignore。
+
+## 规则二：公共契约红线
 
 ## 规则二：公共契约红线
 

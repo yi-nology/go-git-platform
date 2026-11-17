@@ -2,8 +2,10 @@ package gitbackend
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -204,10 +206,15 @@ func TestGoGit_Rebase_BothSidesDeletedFile(t *testing.T) {
 // TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile replays a
 // delete-first commit (both sides deleted the file; the delete is the first
 // change of the commit, followed by an edit of another file) through
-// RebaseContinue's replay loop. Tolerating the already-gone file must not
-// swallow the commit's other change: shared.txt's edit has to land in
-// history. Round-1 propagation of ENOENT turned this replay into
-// ErrMergeConflict.
+// RebaseContinue. Tolerating the already-gone file must not swallow the
+// commit's other change: shared.txt's edit has to land in history. Round-1
+// propagation of ENOENT turned this replay into ErrMergeConflict.
+//
+// 夹具按 oldest-first 语义布景（回放列表已反转，commits[0] = delete-first
+// commit）：暂停位 msgnum=0 即第一段回放，冲突解决（shared.txt 编辑；doomed
+// 在 onto 侧已缺席）已暂存，RebaseContinue 的 dirty 分支把它按 d1 消息提交，
+// 再由回放环补上 d2（top.txt）。删除容忍本体由
+// TestGoGit_Rebase_BothSidesDeletedFile 在 Rebase 环内直接钉住。
 func TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile(t *testing.T) {
 	b := newTestGoGitBackend(t)
 	repo := createTestRepo(t)
@@ -231,16 +238,17 @@ func TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile(t *testing.T) {
 	gitOutput(t, repo, "commit", "-m", "main delete doomed")
 	mainTip := headHash(t, repo)
 
-	// Simulate a rebase stopped at the NEWER commit (msgnum=0) with its
-	// resolution staged: the branch sits on onto's tip, top.txt is staged,
+	// Simulate a rebase stopped at the FIRST replay position (msgnum=0) with
+	// the delete-first commit's resolution staged: the branch sits on onto's
+	// tip, shared.txt is staged (doomed.txt already absent on the onto side),
 	// and the state files record the replay position. GetCommitsBetween is
-	// newest-first, so commits[1] is the delete-first commit that the
-	// replay loop below must apply.
+	// now replayed oldest-first, so commits[0] is the delete-first commit
+	// whose resolution the dirty branch below must commit.
 	gitOutput(t, repo, "checkout", "-q", "-B", "topic", main)
-	if err := os.WriteFile(filepath.Join(repo, "top.txt"), []byte("top"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "shared.txt"), []byte("topic shared"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	gitOutput(t, repo, "add", "top.txt")
+	gitOutput(t, repo, "add", "shared.txt")
 	stateDir := filepath.Join(repo, ".git", "rebase-merge")
 	if err := os.MkdirAll(stateDir, 0o750); err != nil {
 		t.Fatal(err)
@@ -274,5 +282,53 @@ func TestGoGit_RebaseContinue_DeleteFirstCommitKeepsOtherFile(t *testing.T) {
 	}
 	if _, err := os.Stat(stateDir); !os.IsNotExist(err) {
 		t.Errorf("expected the rebase state cleaned up, stat err = %v", err)
+	}
+}
+
+// 多 commit 同文件回放顺序回归：native git rebase 按 oldest-first 回放
+// (base, HEAD]，gogit 路径曾把 GetCommitsBetween 的 newest-first 列表按切片序
+// 直接回放——第一步就把「最新 commit 的 diff」套在 onto 树上（文件尚未存在
+// 即冲突；即使侥幸不冲突，回放出的历史与 native 相反）。本测试钉住
+// oldest-first 回放与逐段内容对齐 native。
+func TestGoGit_Rebase_MultiCommitReplayOrderOldestFirst(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	ctx := context.Background()
+	repo, main, _ := rebaseSetup(t)
+
+	// topic 上再叠两个 commit：topic.txt 从 l1 → l1,l2 → l1,l2,l3
+	gitOutput(t, repo, "checkout", "topic")
+	commitFile(t, repo, "topic.txt", "l1\nl2\n", "c2: append l2")
+	commitFile(t, repo, "topic.txt", "l1\nl2\nl3\n", "c3: append l3")
+	topicTip := headHash(t, repo)
+	gitOutput(t, repo, "checkout", main)
+	commitFile(t, repo, "main.txt", "main work 2", "main work 2")
+	gitOutput(t, repo, "checkout", "topic")
+
+	if err := b.Rebase(ctx, repo, main); err != nil {
+		t.Fatalf("Rebase: %v", err)
+	}
+	if got := headHash(t, repo); got == topicTip {
+		t.Error("expected topic to be rewritten, HEAD unchanged")
+	}
+
+	// 回放后逐段内容对齐 native：回放侧是夹具的 topic work(=cT) → c2 → c3，
+	// HEAD~2=cT("topic work")、HEAD~1=c2(l1,l2)、HEAD=c3(l1,l2,l3)。
+	// gitOutput TrimRight 尾换行，want 用无尾换行形态。
+	wants := []string{"topic work", "l1\nl2", "l1\nl2\nl3"}
+	for i, want := range wants {
+		rev := fmt.Sprintf("HEAD~%d:topic.txt", len(wants)-1-i)
+		if got := gitOutput(t, repo, "show", rev); got != want {
+			t.Errorf("%s = %q, want %q", rev, got, want)
+		}
+	}
+
+	// 父链顺序：HEAD 的三段祖先消息必须按回放序排列（c3' 最新、c1' 直接坐在
+	// main tip 上）；main 侧的 main work 2 必须在 c1' 之下（即父链第四段）。
+	msgs := strings.Split(strings.TrimRight(gitOutput(t, repo, "log", "--pretty=%s", "-4"), "\n"), "\n")
+	wantMsgs := []string{"c3: append l3", "c2: append l2", "topic work", "main work 2"}
+	for i, want := range wantMsgs {
+		if msgs[i] != want {
+			t.Errorf("replay chain position %d = %q, want %q", i, msgs[i], want)
+		}
 	}
 }

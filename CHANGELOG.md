@@ -6,6 +6,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **gogit Rebase 多 commit 回放顺序与 native git 相反（数据丢失级）**：
+  `GetCommitsBetween` 按 git log 语义返回 newest-first，Rebase/RebaseContinue
+  按切片序直接回放——第一步就把最新 commit 的 diff 套在 onto 树上（文件尚未
+  存在即冲突；侥幸不冲突则产出与 native 相反的历史，多 commit 同文件场景
+  最终树丢内容）。两处消费点各自 `slices.Reverse` 成 oldest-first（与 native
+  git 一致；`msgnum` 索引语义两侧对齐）。多 commit 同文件逐段内容断言 +
+  RebaseContinue 删除容忍夹具按 oldest-first 布景重写钉住。
+
 ## [1.0.0] - 2026-11-17
 
 ### Added（v1.0.0 GA——统一七平台 Git SDK 正式版）
