@@ -6,7 +6,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.144.0] - 2026-11-17
+## [0.144.1] - 2026-11-17
 
 ### Changed（4 期：v1.0 准备——零生产语义变化，纯文档/守卫/CI 面）
 
