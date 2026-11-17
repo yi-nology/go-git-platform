@@ -6,6 +6,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-17
+
+### Added（v1.0.0 GA——统一七平台 Git SDK 正式版）
+
+- **统一七平台 Git SDK**：GitHub / GitLab / Gitea / Forgejo / Gitee / GitCode /
+  腾讯工蜂（TencentCode）——32 个能力接口族 + `CapabilitySet` 派生 +
+  `CheckOperation` 操作级三态判定； `model`（纯域）← `provider`（契约缝）←
+  `runtime`（机器）← `adapter`（平台实现）四层分层，依赖边机器守卫。
+- **v1 冻结契约机器边界**：`internal/apisurface` 金样守卫（22 包 / 4216 导出
+  符号）——v1.0 tag 起任何公共面增删改签名即红；依赖分层由
+  `internal/layering` 守卫强制。
+- **测试工程化**：四域覆盖率门（webhook/transport/gitbackend/pageiter ≥80%）
+  进 `make check` 与 CI；七平台只读巡检六家族 matrix；FaultInjection 异常
+  注入三形态；gitea/forgejo 沙箱写 E2E（本地 `make e2e` + CI services）。
+- **MCP 分发**：`release.yml` 构建段产 6 目标二进制（linux/darwin/windows ×
+  amd64/arm64）+ SBOM（CycloneDX）+ checksums + build provenance（attest 可
+  验证），全部挂本 Release。
+- **迁移与承诺**：0.x → v1.0 见 `docs/MIGRATION.md`；平台×能力矩阵见
+  `docs/COMPATIBILITY.md`；版本承诺见 `docs/VERSIONING.md`——v1 起
+  breaking = major、minor = 能力、patch = 修复。
+
 ### Fixed
 
 - **`FileOptions.Content` 统一为明文语义（#169）**：gitea/forgejo 族的 SDK
