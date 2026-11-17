@@ -770,3 +770,21 @@ func TestEnsureBranchProtection_NilNilGetTreatedAsAbsent(t *testing.T) {
 		t.Fatal("want created entity, got nil")
 	}
 }
+
+// W2 收尾（2B defer）：List 命中同 URL 旧钩子、Delete 成功后 Create 撞 409——
+// 冲突携带非 nil 写前快照（prior = matches[0]）。
+func TestEnsureWebhook_RecreateConflictCarriesPriorSnapshot(t *testing.T) {
+	hook := &model.PlatformWebhook{ID: 7, URL: "https://new", Events: []string{"push"}}
+	m := conflictWebhookMgr{hooks: []*model.PlatformWebhook{hook}}
+	action, entity, err := EnsureWebhook(context.Background(), m,
+		provider.CreateWebhookOptions{Owner: "o", Repo: "r", URL: "https://new", Events: []string{"push", "pull_request"}})
+	if !provider.IsConflict(err) {
+		t.Fatalf("want ErrConflict in chain, got %v", err)
+	}
+	if action != OutcomeConflict {
+		t.Fatalf("action = %q, want Conflict", action)
+	}
+	if entity == nil || entity.ID != 7 {
+		t.Fatalf("want prior snapshot ID 7, got %+v", entity)
+	}
+}

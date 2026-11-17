@@ -342,3 +342,49 @@ func TestEnsureIssueLabels(t *testing.T) {
 		})
 	}
 }
+
+// dup current（2B defer 收尾）：current 含重复标签 → 集合等价判定不敏感，
+// 零写入返 Unchanged（dedupLabels/labelSetEqual 的重复侧钉子）。
+func TestEnsureIssueLabels_DupCurrentUnchanged(t *testing.T) {
+	f := &fakeIssueMgr{cur: &model.Issue{Number: "7", Labels: []string{"a", "a", "b"}}}
+	outcome, labels, err := EnsureIssueLabels(context.Background(), f, "o", "r", "7", []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if outcome != OutcomeUnchanged {
+		t.Errorf("outcome = %q, want Unchanged（重复对集合等价不可见）", outcome)
+	}
+	if !slices.Equal(labels, []string{"a", "a", "b"}) {
+		t.Errorf("labels = %v, want current 原样", labels)
+	}
+	if f.bulkRemoveCalls != 0 || len(f.addCalls) != 0 {
+		t.Errorf("集合等价不得触发写入, got add=%v bulkRemove=%d", f.addCalls, f.bulkRemoveCalls)
+	}
+}
+
+// ReopenIssue 方向（2B defer 收尾）：cur=Closed、want=Open → ReopenIssue
+// 恰一次返 Updated（Close 方向既有测试的对称面）。
+func TestEnsureIssueState_ReopenDirection(t *testing.T) {
+	closed := &model.Issue{Number: "7", State: model.IssueStateClosed}
+	f := &fakeIssueMgr{cur: closed, reopened: closed}
+	outcome, entity, err := EnsureIssueState(context.Background(), f, "o", "r", "7", model.IssueStateOpen)
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if outcome != OutcomeUpdated || entity != closed {
+		t.Fatalf("want Updated/%v, got %q/%v", closed, outcome, entity)
+	}
+	if f.reopenCalls != 1 {
+		t.Errorf("reopenCalls = %d, want 1", f.reopenCalls)
+	}
+}
+
+// labels 缺 IssueManager（2B defer 收尾）：与 EnsureIssueState 的 case 4 对称——
+// 返回 ErrNotImplemented 且零 HTTP。
+func TestEnsureIssueLabels_NonIssueManagerProvider(t *testing.T) {
+	p := struct{ provider.Provider }{}
+	_, _, err := EnsureIssueLabels(context.Background(), p, "o", "r", "7", []string{"a"})
+	if !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("want ErrNotImplemented in chain, got %v", err)
+	}
+}

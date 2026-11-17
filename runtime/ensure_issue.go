@@ -58,6 +58,8 @@ func EnsureIssueState(ctx context.Context, p provider.Provider, owner, repo, num
 // 补齐。返回值为本地计算的收敛目标（want 去重保序），非再读回——并发窗口
 // 内平台侧可能已再变动，以 err / 下次 GET 为准。
 //
+// 非原子：Add 与 Remove 是两段序列，中途失败可能留下部分收敛态
+// （已 Add 的一半到位）——重跑本函数即可收敛（幂等设计）。
 // 形态与既有 Ensure* 不同（取 provider.Provider 而非 provider.IssueManager）：provider.IssueManager
 // 不在 provider.Provider 组成里，内部断言让调用方免二次断言，缺能力统一
 // provider.ErrNotImplemented。
