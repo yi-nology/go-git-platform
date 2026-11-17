@@ -368,6 +368,7 @@ type FileManager interface {
 }
 type FileOptions struct {
 	Path	string	`json:"path"`
+
 	Content	string	`json:"content"`
 	Message	string	`json:"message"`
 	Branch	string	`json:"branch,omitempty"`
@@ -3526,6 +3527,8 @@ type FileHarnessConfig struct {
 	GetResponse	string
 
 	ContentIsRaw	bool
+
+	ContentWireEncoding	string
 }
 type ForkSyncHarness struct {
 	Name		string

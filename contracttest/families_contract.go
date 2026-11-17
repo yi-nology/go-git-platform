@@ -2,6 +2,7 @@ package contracttest
 
 import (
 	"context"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -340,6 +341,15 @@ type FileHarnessConfig struct {
 	// ContentIsRaw declares that the platform's content endpoint returns the
 	// raw bytes (gitea family) instead of an envelope carrying base64.
 	ContentIsRaw bool
+	// ContentWireEncoding declares how CreateFile/UpdateFile carry
+	// FileOptions.Content on the wire: "base64" for a platform whose API
+	// requires the content field base64-encoded (the gitea/forgejo family —
+	// gitea.dev/sdk and forgejo-sdk both document "content must be base64
+	// encoded"), "plain" for a platform that takes the bytes verbatim, or ""
+	// to skip the write-wire subtest. Callers always pass plaintext; this is
+	// the adapter's codec, pinned so a port change cannot silently drop it
+	// (issue #169).
+	ContentWireEncoding string
 }
 
 type FileHarness struct {
@@ -364,22 +374,6 @@ func testFileSuite(t *testing.T, h Harness) {
 // RunFileSuite executes the file contract suite: GetFileContent must decode
 // the platform's content encoding into the raw bytes.
 func RunFileSuite(t *testing.T, h FileHarness) {
-	newFM := func(t *testing.T) (provider.FileManager, *[]recordedRequest) {
-		srv, requests := keywordStubServer(keywordStub{
-			get: h.GetResponse,
-			pathIsGet: func(path string) bool {
-				return strings.Contains(path, "contents") || strings.Contains(path, "repository/files") || strings.Contains(path, "blobs")
-			},
-		})
-		t.Cleanup(srv.Close)
-		p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
-		fm, ok := p.(provider.FileManager)
-		if !ok {
-			t.Fatalf("%s does not implement provider.FileManager", h.Name)
-		}
-		return fm, requests
-	}
-
 	t.Run("Get_ParsesContent", func(t *testing.T) {
 		if h.GetResponse == "" {
 			t.Skipf("%s harness wires no File GetResponse fixture", h.Name)
@@ -405,7 +399,7 @@ func RunFileSuite(t *testing.T, h FileHarness) {
 			}
 			return
 		}
-		fm, _ := newFM(t)
+		fm, _ := newFileManagerHarness(t, h)
 		content, err := fm.GetFileContent(context.Background(), "owner", "repo", "README.md", "main")
 		if err != nil {
 			t.Fatalf("GetFileContent: %v", err)
@@ -414,6 +408,101 @@ func RunFileSuite(t *testing.T, h FileHarness) {
 			t.Errorf("expected decoded content %q, got %q — the platform's content encoding was not decoded", "hello world", content)
 		}
 	})
+
+	runFileWriteEncodingSuite(t, h)
+}
+
+// runFileWriteEncodingSuite pins the file write codec: the caller's
+// FileOptions.Content is plaintext, and the request the adapter sends must
+// carry it under the platform's declared wire encoding. Extracted from
+// RunFileSuite to keep its cyclomatic complexity under the lint ceiling.
+func runFileWriteEncodingSuite(t *testing.T, h FileHarness) {
+	t.Run("CreateAndUpdate_WriteTheDeclaredEncoding", func(t *testing.T) {
+		if h.ContentWireEncoding == "" {
+			t.Skipf("%s declares no file write encoding", h.Name)
+		}
+		const plaintext = "hello world\n"
+		fm, requests := newFileManagerHarness(t, h)
+
+		// Slice the recorded requests per call: CreateFile is POST on the
+		// gitea family and GitLab but PUT on GitHub, and an eager "look for
+		// POST then PUT" would pair UpdateFile's body with CreateFile's
+		// assertion.
+		createFrom := len(*requests)
+		if _, err := fm.CreateFile(context.Background(), "owner", "repo", provider.FileOptions{
+			Path: "hello.txt", Content: plaintext, Message: "add hello", Branch: "main",
+		}); err != nil {
+			t.Fatalf("CreateFile: %v", err)
+		}
+		assertWriteContent(t, h, "CreateFile", (*requests)[createFrom:], plaintext)
+
+		updateFrom := len(*requests)
+		if _, err := fm.UpdateFile(context.Background(), "owner", "repo", provider.FileOptions{
+			Path: "hello.txt", Content: plaintext, Message: "update hello", Branch: "main", SHA: "abc123",
+		}); err != nil {
+			t.Fatalf("UpdateFile: %v", err)
+		}
+		assertWriteContent(t, h, "UpdateFile", (*requests)[updateFrom:], plaintext)
+	})
+}
+
+// newFileManagerHarness wires a FileManager over the recording keyword stub.
+// The file write response shapes agree on commit.sha (gitea/forgejo and
+// github read it; gitlab reads the response header), so one fixture
+// satisfies both the read and write suites without platform wiring.
+func newFileManagerHarness(t *testing.T, h FileHarness) (provider.FileManager, *[]recordedRequest) {
+	t.Helper()
+	srv, requests := keywordStubServer(keywordStub{
+		get:    h.GetResponse,
+		mutate: `{"commit":{"sha":"c0ffee"}}`,
+		pathIsGet: func(path string) bool {
+			return strings.Contains(path, "contents") || strings.Contains(path, "repository/files") || strings.Contains(path, "blobs")
+		},
+	})
+	t.Cleanup(srv.Close)
+	p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+	fm, ok := p.(provider.FileManager)
+	if !ok {
+		t.Fatalf("%s does not implement provider.FileManager", h.Name)
+	}
+	return fm, requests
+}
+
+// assertWriteContent checks the last mutation request a create/update call
+// made carried the caller's plaintext under the platform's declared wire
+// encoding.
+func assertWriteContent(t *testing.T, h FileHarness, op string, requests []recordedRequest, plaintext string) {
+	t.Helper()
+	var body map[string]any
+	for i := len(requests) - 1; i >= 0; i-- {
+		if requests[i].Method == http.MethodPost || requests[i].Method == http.MethodPut {
+			body = requests[i].Body
+			break
+		}
+	}
+	if body == nil {
+		t.Fatalf("%s: no POST/PUT request recorded; requests = %+v", op, requests)
+	}
+	got, ok := body["content"].(string)
+	if !ok {
+		t.Fatalf("%s: body carries no string content: %v", op, body)
+	}
+	switch h.ContentWireEncoding {
+	case "base64":
+		decoded, err := base64.StdEncoding.DecodeString(got)
+		if err != nil {
+			t.Fatalf("%s: content is not base64 (%q): %v — the adapter dropped the platform codec", op, got, err)
+		}
+		if string(decoded) != plaintext {
+			t.Errorf("%s: content decodes to %q, want %q", op, string(decoded), plaintext)
+		}
+	case "plain":
+		if got != plaintext {
+			t.Errorf("%s: content = %q, want plaintext %q", op, got, plaintext)
+		}
+	default:
+		t.Fatalf("unknown ContentWireEncoding %q", h.ContentWireEncoding)
+	}
 }
 
 // --- shared keyword-routed stub ---

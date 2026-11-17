@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
@@ -243,12 +242,12 @@ func roundtripCR(t *testing.T, spec platformSpec, p provider.Provider, owner, re
 			t.Logf("cleanup delete branch %s: %v", source, err)
 		}
 	})
-	// content 编码契约：gitea/forgejo 族透传 FileOptions.Content 到 SDK 的
-	// base64 字段（gitea.dev/sdk repo_file.go: "content must be base64
-	// encoded"，family CreateFile 原样传递）——e2e 调用方负责编码。
+	// content 编码契约（#169）：FileOptions.Content 是明文，gitea/forgejo 族
+	// 的 base64 编码由 adapter 在 family port 边界完成——e2e 调用方与
+	// github/gitlab 共用同一段明文代码，不再自行编码。
 	if _, err := fm.CreateFile(ctx, owner, repo, provider.FileOptions{
 		Path:    "e2e-cr-marker.txt",
-		Content: base64.StdEncoding.EncodeToString([]byte("e2e roundtrip content\n")),
+		Content: "e2e roundtrip content\n",
 		Message: "e2e: cr roundtrip commit",
 		Branch:  source,
 	}); err != nil {

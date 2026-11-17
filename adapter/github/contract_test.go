@@ -124,6 +124,9 @@ func TestGitHub_Contract(t *testing.T) {
 		},
 		Files: &contracttest.FileHarnessConfig{
 			GetResponse: `{"content":"aGVsbG8gd29ybGQ=","encoding":"base64"}`,
+			// go-github JSON-marshals Content []byte as base64; the adapter
+			// itself stays plaintext-in (regression control for #169).
+			ContentWireEncoding: "base64",
 		},
 		// CR suite fixtures (issue #63): GitHub PR shape — number-addressed,
 		// head/base branch keys, closed+merged folds to CRStateMerged.
