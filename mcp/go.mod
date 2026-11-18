@@ -7,7 +7,7 @@ require (
 	github.com/oekit/concurrency v0.39.0
 	github.com/oekit/logx v0.12.0
 	github.com/oekit/pkg v0.54.0
-	github.com/yi-nology/go-git-platform v1.0.4
+	github.com/yi-nology/go-git-platform v1.0.5
 )
 
 require (
