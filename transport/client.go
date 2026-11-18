@@ -628,9 +628,10 @@ func (c *Client) Hooks() *Hooks { return c.hooks }
 func (c *Client) sharedPipeline() http.RoundTripper {
 	c.pipelineOnce.Do(func() {
 		c.pipeline = &retryingRoundTripper{
-			inner:  &clientRoundTripper{client: c},
-			cfg:    c.retry,
-			logger: c.log(),
+			inner:       &clientRoundTripper{client: c},
+			cfg:         c.retry,
+			logger:      c.log(),
+			maxBodySize: c.effectiveMaxBodySize(),
 		}
 	})
 	return c.pipeline
@@ -653,7 +654,7 @@ func (c *Client) RoundTripper() http.RoundTripper {
 // ...) are retried exclusively on errors proving the request never reached
 // the network, unless RetryConfig.RetryWrite is set.
 func (c *Client) NewRetryingRoundTripper() http.RoundTripper {
-	return &retryingRoundTripper{inner: c.RoundTripper(), cfg: c.retry, logger: c.log()}
+	return &retryingRoundTripper{inner: c.RoundTripper(), cfg: c.retry, logger: c.log(), maxBodySize: c.effectiveMaxBodySize()}
 }
 
 // clientRoundTripper adapts a Client into an http.RoundTripper. It must be
@@ -815,9 +816,10 @@ func (rt *clientRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 // buffered for replay, and the final upstream response — even a 5xx — is
 // returned with a nil error per the http.RoundTripper contract.
 type retryingRoundTripper struct {
-	inner  http.RoundTripper
-	cfg    *RetryConfig
-	logger Logger
+	inner       http.RoundTripper
+	cfg         *RetryConfig
+	logger      Logger
+	maxBodySize int64 // 重试缓冲体上限（与 Do 路径 readAndClose 同源钳制）
 }
 
 // RoundTrip implements http.RoundTripper and re-issues the request on
@@ -844,8 +846,11 @@ func (rt *retryingRoundTripper) RoundTrip(req *http.Request) (*http.Response, er
 			// the SDK response decoders sitting on top of this RoundTripper)
 			// received a closed, empty body and could not see the real 5xx
 			// payload.
-			body, err := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
+			// v1.0.6 修复：缓冲受 maxBodySize 钳制（cap+1 LimitReader，与 Do
+			// 路径 readAndClose 同源）——裸 ReadAll 绕过 WithMaxBodySize 的
+			// OOM 守卫：恶意/误配服务器的一个无界 5xx 体即可按尝试次数倍增
+			// 内存（审计 #深挖轮 P1）。
+			body, err := readAndClose(resp, rt.maxBodySize)
 			if err != nil {
 				return nil, nil, false, err
 			}

@@ -202,6 +202,10 @@ func serveHTTP(addr, bearer string, srv *mcp.Server) error {
 		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second, // Slowloris bound; MCP bodies are small JSON-RPC frames
+		// IdleTimeout 必设：缺省时空闲 keep-alive 连接永不超时，每条连接钉住
+		// 一个 goroutine+fd——认证在 header 之后才校验，匿名连接也可无限堆积
+		// 钉死 accept 环（预认证 DoS 面）。SSE 在途流算活跃请求不受影响。
+		IdleTimeout: 2 * time.Minute,
 	}
 
 	// Graceful shutdown: SIGINT/SIGTERM stop accepting and give in-flight

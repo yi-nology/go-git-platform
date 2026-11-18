@@ -28,6 +28,11 @@ func EnsureIssueState(ctx context.Context, p provider.Provider, owner, repo, num
 	if err != nil {
 		return "", nil, err
 	}
+	// 契约防御：GetIssue 违约的 (nil, nil)（#90 同形——EnsureBranchProtection
+	// 侧已有同款防御，此处补齐）按缺席处理走 ErrNotFound，而非 panic。
+	if cur == nil {
+		return "", nil, oekiterrors.Wrap(provider.ErrNotFound, "EnsureIssueState: GetIssue returned nil issue with nil error")
+	}
 	if cur.State == want {
 		return OutcomeUnchanged, cur, nil
 	}
@@ -71,6 +76,10 @@ func EnsureIssueLabels(ctx context.Context, p provider.Provider, owner, repo, nu
 	cur, err := im.GetIssue(ctx, owner, repo, number)
 	if err != nil {
 		return "", nil, err
+	}
+	// 契约防御：同 EnsureIssueState——违约的 (nil, nil) 走 ErrNotFound 而非 panic。
+	if cur == nil {
+		return "", nil, oekiterrors.Wrap(provider.ErrNotFound, "EnsureIssueLabels: GetIssue returned nil issue with nil error")
 	}
 	current := cur.Labels
 	if labelSetEqual(current, want) {

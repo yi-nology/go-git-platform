@@ -675,3 +675,28 @@ func TestTruncateForLog_CJKStaysValidUTF8(t *testing.T) {
 		t.Errorf("truncateForLog CJK = %q, want %q", got, want)
 	}
 }
+
+// v1.0.6 修复钉子：重试路径的缓冲体受 maxBodySize 钳制（cap+1 LimitReader，
+// 与 Do 路径 readAndClose 同源）——裸 ReadAll 曾绕过 WithMaxBodySize 的
+// OOM 守卫（深挖轮 P1：恶意/误配服务器一个无界 5xx 体按尝试次数倍增内存）。
+func TestRetryingRoundTripper_BodyCapAppliesOnRetryBuffer(t *testing.T) {
+	inner := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", 4096))),
+			Header:     make(http.Header),
+			Request:    req,
+		}, nil
+	})
+	rt := &retryingRoundTripper{
+		inner:       inner,
+		cfg:         &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond},
+		logger:      NoopLogger(),
+		maxBodySize: 1024,
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	resp, err := rt.RoundTrip(req)
+	if err == nil || !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Fatalf("expected capped-body error, got resp=%v err=%v", resp, err)
+	}
+}

@@ -65,7 +65,7 @@ func registerRepoExtras(s *mcp.Server, st *state) {
 			Page        int    `json:"page,omitempty"`
 			PerPage     int    `json:"per_page,omitempty"`
 		}) ([]*model.Deployment, error) {
-			deps, _, err := dm.ListDeployments(ctx, in.Owner, in.Repo, in.Environment, perPage(in.Page), perPage(in.PerPage))
+			deps, _, err := dm.ListDeployments(ctx, in.Owner, in.Repo, in.Environment, in.Page, perPage(in.PerPage))
 			return deps, err
 		})
 		add(s, st, "create_deployment_status", "Report deployment status", "Report state on a deployment (pending|in_progress|queued|success|failure|error|canceled|inactive).", true, func(ctx context.Context, in deploymentStatusIn) (map[string]any, error) {

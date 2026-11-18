@@ -116,11 +116,17 @@ func (c *ETagCache) applyConditional(req *http.Request) {
 // gzip delivers bodies decoded (with the header stripped), so an explicitly
 // negotiated encoding would be stored verbatim while the replay strips the
 // Content-Encoding header — handing callers encoded bytes labeled identity.
+// A response that is STILL encoded without any negotiation (a CDN sending
+// `Content-Encoding: br` unprompted) is excluded by the Content-Encoding
+// check below: Go's transport only auto-decodes the gzip it negotiated
+// itself, so any non-empty Content-Encoding means the body is not the
+// identity representation and must not be cached (v1.0.6 修复).
 func (c *ETagCache) cacheable(req *http.Request, resp *http.Response) bool {
 	return req.Method == http.MethodGet &&
 		resp.StatusCode == http.StatusOK &&
 		resp.Header.Get("ETag") != "" &&
 		req.Header.Get("Accept-Encoding") == "" &&
+		resp.Header.Get("Content-Encoding") == "" &&
 		!hasNoStoreDirective(resp.Header)
 }
 

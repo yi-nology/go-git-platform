@@ -6,6 +6,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-11-18
+
+### Fixed
+
+- **深挖轮三路分区审计回收：七处修复全带钉子**（post-v0.143 新面专项审计
+  ——2B/2C mutation 机制 / mcp 模块 / transport 管线，逐条探针亲验后落修）：
+
+  **transport**
+  - P1 重试路径 OOM 守卫绕过：retryingRoundTripper 的 classify 回调裸
+    `io.ReadAll` 无上限——`WithMaxBodySize` 只保护 Do 路径，恶意/误配服务
+    器的一个无界 5xx 体即可按尝试次数倍增内存。修复：重试缓冲体复用
+    `readAndClose`（cap+1 LimitReader，maxBodySize 注入两个构造点）。
+  - P2 ETag 缓存编码污染：`cacheable` 不验 `Content-Encoding`——未协商
+    直接发 `br`/`zstd` 的响应会被缓存并在首次响应与 304 重放时以 identity
+    名义吐编码字节。修复：`cacheable` 增加 Content-Encoding 为空判定。
+  - border 导出边界 nil Logger：`retryLoop` 对外部零值 Logger 曾经 panic，
+    补 NoopLogger 兜底（与 Client.log/Hooks 兄弟面对称）。
+  **runtime（2B/2C mutation 面）**
+  - P2 `EnsureIssueState`/`EnsureIssueLabels` 对 GetIssue 违约的 (nil, nil)
+    无守卫直接 panic——补 `ErrNotFound` 契约防御（EnsureBranchProtection
+    侧 #90 同款防御的 issue 侧补齐）。
+  - P2 `EnsureSecretAlwaysUpdate` 缺 `WebhookConfigManager` 的错误是裸
+    `errors.New` 无哨兵链，违反错误分类红线——改 Wrap
+    `provider.ErrNotImplemented`（对齐 ensure_issue 侧惯例）。
+  **mcp**
+  - P1 `list_deployments` 分页参数错位：`perPage(in.Page)` 把页码当每页数
+    钳制（省略 page 时变 30 → 默认调用恒翻第 30 页返回空列表）。改为透传
+    `in.Page`（与兄弟 list 工具一致）。
+  - P2 HTTP 模式缺 `IdleTimeout`：空闲 keep-alive 连接永不回收，预认证
+    即可堆连接钉死 accept 环。补 `IdleTimeout: 2m`（SSE 在途流为活跃请求
+    不受影响）。
+
 ## [1.0.5] - 2026-11-18
 
 ### Fixed

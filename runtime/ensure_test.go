@@ -788,3 +788,52 @@ func TestEnsureWebhook_RecreateConflictCarriesPriorSnapshot(t *testing.T) {
 		t.Fatalf("want prior snapshot ID 7, got %+v", entity)
 	}
 }
+
+// v1.0.6 修复钉子：缺能力错误带 provider.ErrNotImplemented 哨兵（对齐
+// ensure_issue 侧惯例——旧实现裸 errors.New 无哨兵链，消费方无法用
+// errors.Is 分类「缺能力勿重试」与传输错误）。fakeWebhookManager 自己就
+// 实现了 Get/UpdateWebhook（即 WebhookConfigManager），断言走不进——需
+// 只实现 WebhookManager 的裁剪 fake。
+type webhookMgrNoConfig struct {
+	hooks []*model.PlatformWebhook
+}
+
+func (f *webhookMgrNoConfig) ListWebhooks(context.Context, string, string) ([]*model.PlatformWebhook, error) {
+	return f.hooks, nil
+}
+
+func (f *webhookMgrNoConfig) CreateWebhook(_ context.Context, opts provider.CreateWebhookOptions) (*model.PlatformWebhook, error) {
+	// 存规范形 events（与真 provider 一致），否则第二次 EnsureWebhook 判
+	// drift 走重建路径、到不了被钉的 secret 分支。
+	h := &model.PlatformWebhook{ID: int64(len(f.hooks) + 1), URL: opts.URL, Events: canonicalWebhookEvents(opts.Events)}
+	f.hooks = append(f.hooks, h)
+	return h, nil
+}
+
+func (f *webhookMgrNoConfig) ParseWebhookEvent(*http.Request, string) (*model.NormalizedEvent, error) {
+	return nil, nil
+}
+
+func (f *webhookMgrNoConfig) ValidateWebhookSignature(*http.Request, string) error { return nil }
+
+func (f *webhookMgrNoConfig) DeleteWebhook(context.Context, string, string, int64) error {
+	return nil
+}
+
+func TestEnsureWebhook_SecretModeMissingConfigManager_Sentinel(t *testing.T) {
+	f := &webhookMgrNoConfig{}
+	// 先建 hook：EnsureSecretAlwaysUpdate 只在「匹配到既有 hook 走 patch」
+	// 分支触发 secret 处理（裸 Create 不经过 ensureWebhookSecret）。
+	if _, _, err := EnsureWebhook(t.Context(), f, provider.CreateWebhookOptions{
+		Owner: "o", Repo: "r", URL: "https://cb.example/hook",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := EnsureWebhook(t.Context(), f, provider.CreateWebhookOptions{
+		Owner: "o", Repo: "r", URL: "https://cb.example/hook", Secret: "new",
+		EnsureSecretMode: provider.EnsureSecretAlwaysUpdate,
+	})
+	if err == nil || !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("expected ErrNotImplemented-classified error, got %v", err)
+	}
+}

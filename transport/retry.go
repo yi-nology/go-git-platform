@@ -265,6 +265,11 @@ func (rc *RetryConfig) retryLoop(
 	attempt func() (*http.Response, error),
 	classify func(*http.Response) (*http.Response, []byte, bool, error),
 ) (*http.Response, []byte, error) {
+	// 外部调用方（导出的 RetryConfig.Do）可能传 nil Logger——仓内全传
+	// NoopLogger，但导出边界与兄弟面（Client.log/Hooks）一致做 nil 安全。
+	if logger == nil {
+		logger = NoopLogger()
+	}
 	var lastErr error
 	var lastResp *http.Response
 	var lastBody []byte

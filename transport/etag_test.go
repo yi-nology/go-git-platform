@@ -451,3 +451,21 @@ func TestETag304MissSelfHealsUnconditionally(t *testing.T) {
 		t.Fatalf("steady-state conditional hit still hit the wire (calls=%d)", calls)
 	}
 }
+
+// v1.0.6 修复钉子：cacheable 拒绝非协商 Content-Encoding 的响应（CDN 未
+// 协商直接发 br/zstd 时 Go 只自动解自己协商的 gzip，缓存会把编码体当
+// identity 重放）。
+func TestETagCache_CacheableRejectsUnpromptedContentEncoding(t *testing.T) {
+	c := NewETagCache(8)
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	base := http.Header{}
+	base.Set("ETag", `"v1"`) // Set 走规范形键；map 字面量 "ETag" 会被 Get 规范化查询漏掉
+	encoded := base.Clone()
+	encoded.Set("Content-Encoding", "br")
+	if c.cacheable(req, &http.Response{StatusCode: 200, Header: encoded}) {
+		t.Fatal("unprompted Content-Encoding response must not be cacheable")
+	}
+	if !c.cacheable(req, &http.Response{StatusCode: 200, Header: base}) {
+		t.Fatal("identity response must remain cacheable")
+	}
+}

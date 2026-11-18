@@ -737,3 +737,27 @@ func TestRetry_IsRateLimited403(t *testing.T) {
 		}
 	}
 }
+
+// v1.0.6 修复钉子：导出边界 nil Logger 安全（与 Client.log/Hooks 兄弟面一致
+// ——仓内调用全传 NoopLogger，外部零值调用曾会 panic）。
+func TestRetryLoop_NilLoggerNoPanic(t *testing.T) {
+	rc := &RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond}
+	attempts := 0
+	_, _, err := rc.retryLoop(context.Background(),
+		httptest.NewRequest(http.MethodGet, "http://example.com/x", nil),
+		nil,
+		func() (*http.Response, error) {
+			attempts++
+			return nil, errors.New("boom")
+		},
+		func(resp *http.Response) (*http.Response, []byte, bool, error) {
+			return resp, nil, false, nil
+		},
+	)
+	if err == nil {
+		t.Fatal("expected the transport error to surface")
+	}
+	if attempts != 2 {
+		t.Fatalf("expected MaxAttempts attempts, got %d", attempts)
+	}
+}

@@ -388,3 +388,21 @@ func TestEnsureIssueLabels_NonIssueManagerProvider(t *testing.T) {
 		t.Fatalf("want ErrNotImplemented in chain, got %v", err)
 	}
 }
+
+// v1.0.6 修复钉子：GetIssue 违约的 (nil, nil) 走 ErrNotFound 而非 panic
+// （#90 同形——EnsureBranchProtection 侧已有同款防御与测试，issue 侧补齐）。
+func TestEnsureIssueState_NilNilGetTreatedAsError(t *testing.T) {
+	f := &fakeIssueMgr{} // cur=nil → GetIssue 返回 (nil, nil)
+	_, _, err := EnsureIssueState(context.Background(), f, "o", "r", "7", model.IssueStateClosed)
+	if err == nil || !provider.IsNotFound(err) {
+		t.Fatalf("expected NotFound-classified error, got %v", err)
+	}
+}
+
+func TestEnsureIssueLabels_NilNilGetTreatedAsError(t *testing.T) {
+	f := &fakeIssueMgr{}
+	_, _, err := EnsureIssueLabels(context.Background(), f, "o", "r", "7", nil)
+	if err == nil || !provider.IsNotFound(err) {
+		t.Fatalf("expected NotFound-classified error, got %v", err)
+	}
+}

@@ -2,9 +2,9 @@ package runtime
 
 import (
 	"context"
-	"errors"
 	"slices"
 
+	oekiterrors "github.com/oekit/pkg/errors"
 	"github.com/oekit/pkg/slicex"
 
 	"github.com/yi-nology/go-git-platform/model"
@@ -174,7 +174,10 @@ func equalEvents(a, sortedB []string) bool {
 func ensureWebhookSecret(ctx context.Context, p provider.WebhookManager, opts provider.CreateWebhookOptions, hook *model.PlatformWebhook) (EnsureAction, *model.PlatformWebhook, error) {
 	wcm, ok := p.(provider.WebhookConfigManager)
 	if !ok {
-		return "", nil, errors.New("provider: EnsureSecretAlwaysUpdate requires the manager to also implement WebhookConfigManager")
+		// 缺能力统一 provider.ErrNotImplemented（与 ensure_issue 侧惯例一致；
+		// v1.0.6 修复——旧实现裸 errors.New 无哨兵链，消费方无法分类「缺能力
+		// 勿重试」与传输错误）。
+		return "", nil, oekiterrors.Wrap(provider.ErrNotImplemented, "EnsureSecretAlwaysUpdate requires WebhookConfigManager")
 	}
 	secret := opts.Secret
 	out, err := wcm.UpdateWebhook(ctx, opts.Owner, opts.Repo, hook.ID, provider.UpdateWebhookOptions{Secret: &secret})
