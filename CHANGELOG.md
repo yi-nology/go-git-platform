@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-11-18
+
+### Fixed
+
+- **gitbackend gogit `GetStatus` 文件序非确定**：旧实现直接迭代 go-git 的
+  status **map**（顺序逐次运行不可复现；macOS 探针单次采样碰巧有序、linux
+  CI 的排序钉子当场暴露——与 ListRemoteBranches 同款陷阱，探针单采样不可
+  信二次实锤）。修复：Staged/Unstaged/Untracked 三切片按路径排序，对齐
+  native porcelain 的有序输出（v1.0.4 起 iface 契约即「按路径排序」，本
+  patch 使 gogit 侧真正成立）。
+
 ## [1.0.4] - 2026-11-18
 
 ### Fixed

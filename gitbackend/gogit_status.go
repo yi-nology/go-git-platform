@@ -71,6 +71,12 @@ func (b *GoGitBackend) GetStatus(ctx context.Context, repoPath string) (*RepoSta
 		}
 	}
 
+	// Map 迭代序不可复现：文件切片按路径排序，与 native 的 porcelain 有序
+	// 输出对齐（v1.0.4 排序契约——linux CI 钉子暴露的 macOS 探针运气采样）。
+	sort.Slice(status.Staged, func(i, j int) bool { return status.Staged[i].Path < status.Staged[j].Path })
+	sort.Slice(status.Unstaged, func(i, j int) bool { return status.Unstaged[i].Path < status.Unstaged[j].Path })
+	sort.Strings(status.Untracked)
+
 	status.IsClean = len(status.Staged) == 0 && len(status.Unstaged) == 0 && len(status.Untracked) == 0
 	return status, nil
 }
