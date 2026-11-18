@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-18
+
 ### Fixed
 
 - **gogit Rebase 多 commit 回放顺序与 native git 相反（数据丢失级）**：
