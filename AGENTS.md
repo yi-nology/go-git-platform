@@ -381,7 +381,7 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   slices.Reverse 成 oldest-first + 多 commit 同文件逐段内容回归钉住，
   RebaseContinue 夹具按 oldest-first 布景重写）；gogit_file.go 两处清理类
   裸 `_ =` 已于 6b1d7ed 清偿（symlink 清理显式报错 + f.Close 意图注释）；
-  sshHostKeyArgs 专属元字符测试已补（shellx.Quote 自形态 + 真 sh round-trip）；
+  sshHostKeyArgs 专属元字符测试已补（shellx.Quote 单引号化形态 + 真 sh round-trip）；
   gensurface 二进制已入 .gitignore。
 - **pkg v0.49–v0.54 / concurrency v0.35–v0.39 / logx v0.11–v0.12 增量审计与
   三行同升（2026-11-18，先行审计再动工；本条即结论存档）**。升级落点
@@ -412,8 +412,6 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   经 NewLogxLogger 桥。**logx #176–#181 open 单全闭**（v0.11.0 落地：
   #174/#175/#176/#177/#179/#180/#181；#180 shutdown 删除为本仓零触达
   BREAKING）——上方 v0.45 条目的「下轮增量再审」句就此存档闭环。
-
-## 规则二：公共契约红线
 
 ## 规则二：公共契约红线
 
