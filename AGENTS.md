@@ -381,8 +381,37 @@ registry 等）——本仓是公共 SDK，依赖会传递给全部下游。
   slices.Reverse 成 oldest-first + 多 commit 同文件逐段内容回归钉住，
   RebaseContinue 夹具按 oldest-first 布景重写）；gogit_file.go 两处清理类
   裸 `_ =` 已于 6b1d7ed 清偿（symlink 清理显式报错 + f.Close 意图注释）；
-  sshHostKeyArgs 专属元字符测试已补（shellx.Quote 形态 + 真 sh round-trip）；
+  sshHostKeyArgs 专属元字符测试已补（shellx.Quote 自形态 + 真 sh round-trip）；
   gensurface 二进制已入 .gitignore。
+- **pkg v0.49–v0.54 / concurrency v0.35–v0.39 / logx v0.11–v0.12 增量审计与
+  三行同升（2026-11-18，先行审计再动工；本条即结论存档）**。升级落点
+  pkg v0.48→v0.54、concurrency v0.34→v0.39、logx v0.10→v0.12（双模块三行
+  同步）。**BREAKING 核查双绿**：concurrency v0.36.0 删 `syncx.Slot.Panicked`
+  兼容字段——本仓 batch 引擎只消费 `s.Val/s.Err`（runtime/batch.go:78-80）
+  零触达；logx v0.11.0 删 shutdown 兼容层——本仓零引用（仅
+  NewLogxLogger 桥），存档句「core 仅 deprecated shutdown 子包引用」随删除
+  自然消解。**规则一 Newf/Wrapf 裁定（pkg v0.52.0 #520 三形态并存）**：
+  本仓**维持 stdlib fmt.Errorf 不迁移**——刚 GA（v1.0.1）、fmt.Errorf 语义
+  自足、迁移是纯风格变更无能力收益；上游「全矩阵三形态对位替换」是 oekit
+  org 内部约定，不约束本仓；下一轮收编轮再评估。**收编点排查（无消费点/
+  形态不匹配，勿再评估）**：errors.RecoverTo（ttlcache 已收编 Recovered+
+  Wrap，形态迁移非缺陷修复）、stringx.RandomToken/UUIDv4（无令牌/UUID 面）、
+  contextx.OrBackground（contextx 已定性）、timex.SleepContext、
+  pathx.JoinURL（与自有 DefaultBaseURL 同 v0.36-38 NormalizeBaseURL 裁定：
+  上游管拼接归一、自有管空值回退+/api/v1 裁剪，链式引入改变行为面）、
+  errors.Degraded、distlock.MaxLifetime（distlock 已定性）、sse/canon 三面
+  （无 SSE/指纹面）、shellx.IsSafeWord/QuoteMinimal（本仓用 Quote 全量
+  引用化，无省引号需求）、container.VersionedCell、pagination
+  ComputePages/ServedPage（服务端分页，pageiter 客户端域已定性）、
+  webhook.SignerWithClock（发端面已定性；其 nil-clock 从 panic 改回退默认
+  时钟的行为变更对本仓零影响）、scanrotation、breaker 钩子、auditchain/
+  webhook Forwarder（licensx/IM 载荷改道 yi-nology/gopkg，本仓不消费）。
+  **被动受益**：pkg cache bugfix 线经 ttlcache 委托、concurrency
+  async-gopool panic handler 统一面（v0.36.1 #338）经 GoSafe 桥、logx
+  v0.12.0 #229 渲染面脱敏组链前缀双匹配（安全修复）+ #230/#231 内部收敛
+  经 NewLogxLogger 桥。**logx #176–#181 open 单全闭**（v0.11.0 落地：
+  #174/#175/#176/#177/#179/#180/#181；#180 shutdown 删除为本仓零触达
+  BREAKING）——上方 v0.45 条目的「下轮增量再审」句就此存档闭环。
 
 ## 规则二：公共契约红线
 

@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-11-18
+
+### Changed
+
+- **oekit 底座三行同升（双模块同步）**：pkg v0.48.0→v0.54.0、concurrency
+  v0.34.0→v0.39.0、logx v0.10.0→v0.12.0。BREAKING 两处均零触达（concurrency
+  删 `syncx.Slot.Panicked`——batch 引擎只消费 `s.Val/s.Err`；logx 删 shutdown
+  兼容层——本仓仅 NewLogxLogger 桥零引用）。增量审计全量存档 AGENTS.md
+  规则一（收编点 13 项逐一定性；规则一 Newf/Wrapf 三形态裁定维持 stdlib
+  fmt.Errorf 不迁移）。被动受益：pkg cache bugfix 经 ttlcache 委托、
+  concurrency async panic handler 统一面经 GoSafe 桥、logx #229 渲染面脱敏
+  组链前缀双匹配（安全修复）经 NewLogxLogger 桥。零 API 变化，patch 承载。
+
 ## [1.0.1] - 2026-11-18
 
 ### Fixed
