@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **gitbackend 排序契约文档化+钉住（branches/tags）**：`ListLocalBranches`
+  与 `GetTagList` 双后端均按字母序（探针实证双后端一致；gogit 的 storer
+  迭代顺序上游 go-git 并不保证，钉子防其静默漂移）——iface doc 明确 +
+  双后端钉住测试各一枚。零行为变化；tag 排序为纯字典序非版本感知
+  （"v10" 排在 "v2" 前），要版本序调用方自行排序。
+
 ## [1.0.3] - 2026-11-18
 
 ### Fixed

@@ -35,7 +35,10 @@ type CoreOps interface {
 type BranchOps interface {
 	// ListRemoteBranches lists branches that exist on the given remote.
 	ListRemoteBranches(ctx context.Context, repoPath string, remote string) ([]string, error)
-	// ListLocalBranches lists local branches (refs/heads/*).
+	// ListLocalBranches lists local branches (refs/heads/*) in alphabetical
+	// order — probed identical on both backends (native for-each-ref default
+	// sort, gogit storer iteration currently sorts too, pinned by test so a
+	// go-git upstream change cannot silently break the contract).
 	ListLocalBranches(ctx context.Context, repoPath string) ([]string, error)
 	// ListBranches lists both local and remote branches with extended details.
 	ListBranches(ctx context.Context, repoPath string) ([]BranchDetail, error)
@@ -117,7 +120,10 @@ type TagOps interface {
 	DeleteTag(ctx context.Context, repoPath string, name string) error
 	// PushTag pushes a single tag to remote.
 	PushTag(ctx context.Context, repoPath string, remote string, name string, auth AuthConfig) error
-	// GetTagList lists all tags with their metadata.
+	// GetTagList lists all tags with their metadata in alphabetical order
+	// (lexicographic, NOT version-aware: "v10" sorts before "v2" — same on
+	// both backends, pinned by test; callers wanting version order must sort
+	// themselves).
 	GetTagList(ctx context.Context, repoPath string) ([]TagInfo, error)
 }
 
