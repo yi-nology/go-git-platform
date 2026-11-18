@@ -6,13 +6,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-11-18
+
+### Fixed
+
+- **gitbackend `ListRemoteBranches` 双后端语义对齐（两处分歧）**：
+  ① gogit 路径旧行为走 `remoteObj.List()` 的 **live ls-remote 网络调用**
+  （离线直接报错；顺序为服务端 map 序不可复现——排序契约钉子在夹具随机化
+  下暴露，首轮探针的有序输出系运气），对齐 native：读本地 remote-tracking
+  refs 快照（离线可用）+ 字母序排序。② native 路径 missing remote config
+  旧行为返回空列表零报错，对齐 gogit 的 fail-loud 契约（ErrNotFound）。
+  下游 manage-service 的 wrapper 注释本就声明「基于本地 remote-tracking
+  refs」——gogit 的 live 行为连下游文档假设都违背。iface doc 明确：字母序
+  + 本地快照语义 + missing remote 双侧 ErrNotFound；快照语义钉子（clone
+  后新增分支 fetch 前不可见）+ missing remote 双生测试钉住。
+
 ### Changed
 
-- **gitbackend 排序契约文档化+钉住（branches/tags）**：`ListLocalBranches`
-  与 `GetTagList` 双后端均按字母序（探针实证双后端一致；gogit 的 storer
-  迭代顺序上游 go-git 并不保证，钉子防其静默漂移）——iface doc 明确 +
-  双后端钉住测试各一枚。零行为变化；tag 排序为纯字典序非版本感知
-  （"v10" 排在 "v2" 前），要版本序调用方自行排序。
+- **gitbackend 排序契约文档化+钉住（branches/tags/status）**：
+  `ListLocalBranches`/`GetTagList`/`GetStatus`（Staged/Untracked 路径序）
+  双后端一致（探针实证）——iface doc 明确 + 钉住测试防 gogit 侧静默漂移
+  （storer 迭代顺序上游 go-git 不保证）。tag 排序为纯字典序非版本感知
+  （"v10" 排在 "v2" 前），要版本序调用方自行排序。空参数语义矩阵同步
+  文档化：`GetBlob` 空 ref = HEAD、`Fetch` 空 Remote = "origin"（双后端
+  本就一致，doc 补齐）。
 
 ## [1.0.3] - 2026-11-18
 

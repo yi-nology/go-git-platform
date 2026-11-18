@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,24 +21,33 @@ func (b *GoGitBackend) ListRemoteBranches(ctx context.Context, repoPath, remote 
 		return nil, err
 	}
 
-	remoteObj, err := repo.Remote(remote)
-	if err != nil {
+	// Remote 存在性校验保持 fail-loud（ErrRemoteNotFound）。LISTING 语义对齐
+	// native（`git branch -r`）：读本地 remote-tracking refs 快照（离线可用
+	// ——旧行为走 remoteObj.List() 的 live ls-remote 网络调用，离线直接报错；
+	// 且顺序为服务端 map 序不可复现）。探针实证 2026-11-18。
+	if _, err := repo.Remote(remote); err != nil {
 		return nil, newGitError("ListRemoteBranches", repoPath, "", ErrRemoteNotFound)
 	}
 
-	refs, err := remoteObj.List(&git.ListOptions{})
+	prefix := "refs/remotes/" + remote + "/"
+	iter, err := repo.References()
 	if err != nil {
 		return nil, newGitError("ListRemoteBranches", repoPath, "", err)
 	}
 
 	var result []string
-	prefix := "refs/heads/"
-	for _, ref := range refs {
+	err = iter.ForEach(func(ref *plumbing.Reference) error {
 		name := ref.Name().String()
-		if strings.HasPrefix(name, prefix) {
-			result = append(result, strings.TrimPrefix(name, prefix))
+		if !strings.HasPrefix(name, prefix) || strings.HasSuffix(name, "/HEAD") {
+			return nil
 		}
+		result = append(result, strings.TrimPrefix(name, prefix))
+		return nil
+	})
+	if err != nil {
+		return nil, newGitError("ListRemoteBranches", repoPath, "", err)
 	}
+	slices.Sort(result)
 	return result, nil
 }
 

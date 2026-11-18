@@ -12,6 +12,12 @@ func (b *NativeGitBackend) ListRemoteBranches(ctx context.Context, repoPath, rem
 	if err := checkNameArg("ListRemoteBranches", remote); err != nil {
 		return nil, err
 	}
+	// Fail loud on a missing remote config, aligned with the gogit backend's
+	// ErrRemoteNotFound contract: a silent empty list on a typo'd remote name
+	// hides the mistake (对齐轮 2026-11-18——旧行为返回空列表零报错).
+	if _, stderr, err := b.runGit(ctx, repoPath, []string{"remote", "get-url", remote}, AuthConfig{}); err != nil {
+		return nil, newGitError("ListRemoteBranches", repoPath, stderr, ErrRemoteNotFound)
+	}
 	stdout, stderr, err := b.runGit(ctx, repoPath, []string{"branch", "-r", "--list", remote + "/*"}, AuthConfig{})
 	if err != nil {
 		return nil, newGitError("ListRemoteBranches", repoPath, stderr, err)

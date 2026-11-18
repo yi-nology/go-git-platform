@@ -14,7 +14,7 @@ import "context"
 // CoreOps covers repository-level network and lifecycle operations.
 type CoreOps interface {
 	// Fetch downloads objects and refs from a remote into the local repository
-	// without touching the working tree.
+	// without touching the working tree. An empty opts.Remote means "origin".
 	Fetch(ctx context.Context, opts FetchOptions) (*FetchResult, error)
 	// FetchAll fetches tags and every branch from all configured remotes.
 	FetchAll(ctx context.Context, repoPath string, auth AuthConfig) error
@@ -33,7 +33,11 @@ type CoreOps interface {
 
 // BranchOps covers branch listing, creation, deletion, and checkout.
 type BranchOps interface {
-	// ListRemoteBranches lists branches that exist on the given remote.
+	// ListRemoteBranches lists the branches of the given remote in
+	// alphabetical order. The listing reads the LOCAL remote-tracking refs
+	// (the snapshot from the last fetch, offline-capable) on both backends —
+	// not a live network query. A missing remote config is ErrNotFound on
+	// both backends.
 	ListRemoteBranches(ctx context.Context, repoPath string, remote string) ([]string, error)
 	// ListLocalBranches lists local branches (refs/heads/*) in alphabetical
 	// order — probed identical on both backends (native for-each-ref default
@@ -139,7 +143,8 @@ type FileOps interface {
 	// GetTree lists entries under dirPath at ref. When recursive is true it
 	// lists all files (not directories) below dirPath.
 	GetTree(ctx context.Context, repoPath string, ref string, dirPath string, recursive bool) ([]TreeEntry, error)
-	// GetBlob returns the content of filePath at ref.
+	// GetBlob returns the content of filePath at ref. An empty ref means
+	// HEAD (the committed content), the same default as GetFileAtRevision.
 	GetBlob(ctx context.Context, repoPath string, ref string, filePath string) (*BlobContent, error)
 	// GetCommit returns metadata for a single commit.
 	GetCommit(ctx context.Context, repoPath string, hash string) (*CommitInfo, error)
