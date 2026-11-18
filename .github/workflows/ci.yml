@@ -182,7 +182,20 @@ jobs:
       - name: Install from module proxy
         env:
           GOWORK: 'off'
-        run: go install github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@${{ github.event.pull_request.head.sha || github.sha }}
+        # 嵌套模块（mcp/ 独立 go.mod）@<新 SHA> 的伪版本在 proxy 上有传播
+        # 延迟：秒级 fresh push 后立即 install 会 404 → Go 回落查父模块
+        # zip（嵌套模块目录被排除）→ "does not contain package"（v1.0.3
+        # S8 收尾提交实证，重跑即绿）。带退避重试消化竞态窗口。
+        run: |
+          for i in 1 2 3 4 5; do
+            if go install github.com/yi-nology/go-git-platform/mcp/cmd/go-git-platform-mcp@${{ github.event.pull_request.head.sha || github.sha }}; then
+              exit 0
+            fi
+            echo "::warning::mcp@SHA proxy propagation race (attempt $i/5), retrying in 20s"
+            sleep 20
+          done
+          echo "::error::nested-module install failed after 5 attempts (proxy propagation window exceeded)"
+          exit 1
 
       - name: Smoke the installed binary
         run: '"$(go env GOPATH)/bin/go-git-platform-mcp" --help'
