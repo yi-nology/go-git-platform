@@ -155,3 +155,49 @@ func TestGoGit_GetCommitsBetween_ForkParity(t *testing.T) {
 		}
 	}
 }
+
+// TestGoGit_GetCommitsBetween_NewestFirstOrder pins the v1 ordering contract
+// (iface.go): newest-first, `git log` semantics. Rebase 的回放环依赖此钉子
+// ——它在内部反转成 oldest-first 回放（v1.0.1 修复）。
+func TestGoGit_GetCommitsBetween_NewestFirstOrder(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	commitFile(t, repo, "a.txt", "a", "c1")
+	commitFile(t, repo, "b.txt", "b", "c2")
+	commitFile(t, repo, "c.txt", "c", "c3")
+
+	commits, err := b.GetCommitsBetween(context.Background(), repo, "HEAD~3", "HEAD")
+	if err != nil {
+		t.Fatalf("GetCommitsBetween: %v", err)
+	}
+	if len(commits) != 3 {
+		t.Fatalf("expected 3 commits, got %d", len(commits))
+	}
+	want := []string{"c3", "c2", "c1"}
+	for i, w := range want {
+		if commits[i].Message != w {
+			t.Fatalf("ordering contract broken at %d: got %q, want %q (full: %v)", i, commits[i].Message, w, commits)
+		}
+	}
+}
+
+// TestGoGit_GetCommitsBetween_EmptyFromWholeHistory pins the empty-from
+// semantics aligned with native（`git log to`）：to 可达的全量历史，无边界。
+// 旧行为 gogit 侧空 from 直接 cannot-resolve 报错——同一调用随 git.backend
+// 配置而变的后端分歧，本测试钉住 v1.0.3 对齐。
+func TestGoGit_GetCommitsBetween_EmptyFromWholeHistory(t *testing.T) {
+	b := newTestGoGitBackend(t)
+	repo := createTestRepo(t)
+	commitFile(t, repo, "a.txt", "a", "c1")
+
+	commits, err := b.GetCommitsBetween(context.Background(), repo, "", "HEAD")
+	if err != nil {
+		t.Fatalf("GetCommitsBetween: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("expected whole history (init+c1), got %d commits: %v", len(commits), commits)
+	}
+	if commits[0].Message != "c1" {
+		t.Fatalf("newest-first violated: first = %q", commits[0].Message)
+	}
+}

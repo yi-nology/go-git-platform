@@ -577,3 +577,53 @@ func TestNative_FetchRefSpecIntoCheckedOutClone(t *testing.T) {
 		t.Fatal("pr-1 ref not created")
 	}
 }
+
+// TestNative_GetCommitsBetween_NewestFirstOrder pins the ordering contract
+// (`git log` semantics) on the native path — the parity twin of the gogit
+// ordering test.
+func TestNative_GetCommitsBetween_NewestFirstOrder(t *testing.T) {
+	b := newTestNativeBackend(t)
+	repo := createTestRepo(t)
+	for i, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		msg := fmt.Sprintf("c%d", i+1)
+		os.WriteFile(filepath.Join(repo, name), []byte(name[:len(name)-4]), 0o644)
+		gitOutput(t, repo, "add", ".")
+		gitOutput(t, repo, "commit", "-m", msg)
+	}
+
+	commits, err := b.GetCommitsBetween(context.Background(), repo, "HEAD~3", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 3 {
+		t.Fatalf("expected 3 commits, got %d", len(commits))
+	}
+	for i := range []int{0, 1, 2} {
+		msg := fmt.Sprintf("c%d", 3-i)
+		if commits[i].Message != msg {
+			t.Fatalf("ordering contract broken at %d: got %q, want %q", i, commits[i].Message, msg)
+		}
+	}
+}
+
+// TestNative_GetCommitsBetween_EmptyFrom pins native's empty-from semantics
+// (whole history, `git log to`) — the parity twin of the gogit empty-from
+// alignment (v1.0.3).
+func TestNative_GetCommitsBetween_EmptyFrom(t *testing.T) {
+	b := newTestNativeBackend(t)
+	repo := createTestRepo(t)
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a"), 0o644)
+	gitOutput(t, repo, "add", ".")
+	gitOutput(t, repo, "commit", "-m", "c1")
+
+	commits, err := b.GetCommitsBetween(context.Background(), repo, "", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("expected whole history (init+c1), got %d", len(commits))
+	}
+	if commits[0].Message != "c1" {
+		t.Fatalf("newest-first violated: first = %q", commits[0].Message)
+	}
+}

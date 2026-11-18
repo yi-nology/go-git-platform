@@ -29,9 +29,19 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 		return nil, err
 	}
 
-	fromHash, err := resolveRev(repo, from)
-	if err != nil {
-		return nil, newGitError("GetCommitsBetween", repoPath, "", err)
+	// 空 from 与 native 对齐（`git log to`）：to 可达的全量历史，无边界。
+	// 旧行为 gogit 侧对空 from 直接 cannot-resolve 报错——同一调用随
+	// git.backend 配置而变，属后端分歧（探针实证 2026-11-18）。
+	var (
+		fromHash plumbing.Hash
+		hasFrom  bool
+	)
+	if from != "" {
+		fromHash, err = resolveRev(repo, from)
+		if err != nil {
+			return nil, newGitError("GetCommitsBetween", repoPath, "", err)
+		}
+		hasFrom = true
 	}
 	toHash, err := resolveRev(repo, to)
 	if err != nil {
@@ -55,9 +65,16 @@ func (b *GoGitBackend) GetCommitsBetween(ctx context.Context, repoPath, from, to
 	// （同一个调用方拿到的「目标侧独有提交」随 git.backend 配置而变）。
 	//
 	// 没有共同祖先（无关历史）⇒ 不设边界（走到底），与 git 的范围语义一致。
-	base, hasBase, baseErr := mergeBaseOf(repo, fromHash, toHash)
-	if baseErr != nil {
-		return nil, newGitError("GetCommitsBetween", repoPath, "", baseErr)
+	var (
+		base    plumbing.Hash
+		hasBase bool
+	)
+	if hasFrom {
+		var baseErr error
+		base, hasBase, baseErr = mergeBaseOf(repo, fromHash, toHash)
+		if baseErr != nil {
+			return nil, newGitError("GetCommitsBetween", repoPath, "", baseErr)
+		}
 	}
 
 	var commits []CommitInfo

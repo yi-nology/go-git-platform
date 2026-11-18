@@ -70,7 +70,14 @@ type StatusDiffOps interface {
 
 // CommitOps covers history traversal and history-rewriting operations.
 type CommitOps interface {
-	// GetCommitsBetween returns commits in the range (from, to].
+	// GetCommitsBetween returns the commits in the range (from, to] ordered
+	// newest-first (reverse chronological, `git log` semantics) — the same
+	// order on both backends. The ordering is part of the v1 contract:
+	// consumers that need oldest-first replay order (history rewriting,
+	// changelog assembly) must reverse the slice themselves, the same way
+	// Rebase does internally. An empty from means "the whole history
+	// reachable from to" (native: `git log to`; gogit: a walk from to with
+	// no boundary).
 	GetCommitsBetween(ctx context.Context, repoPath string, from string, to string) ([]CommitInfo, error)
 	// IsAncestor reports whether ancestor is an ancestor of descendant.
 	IsAncestor(ctx context.Context, repoPath string, ancestor string, descendant string) (bool, error)

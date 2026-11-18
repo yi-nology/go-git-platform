@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-11-18
+
+### Fixed
+
+- **gitbackend `GetCommitsBetween` 空 `from` 后端分歧**：native 路径空 `from`
+  =「to 可达的全量历史」（`git log to`），gogit 路径却直接 cannot-resolve
+  报错——同一调用随 `git.backend` 配置而变（探针实证）。gogit 对齐 native：
+  空 `from` 走无边界全量遍历。双后端各一枚空 from 钉住测试。
+
+### Changed
+
+- **gitbackend `GetCommitsBetween` 排序契约文档化**：`CommitOps` iface doc
+  明确返回 newest-first（逆时序，`git log` 语义）且为 v1 契约的一部分——
+  需要 oldest-first 回放序的调用方自行反转（与 Rebase 内部做法一致）；
+  双后端各一枚排序钉住测试（此前零钉子，靠口头知识维系）。
+
 ## [1.0.2] - 2026-11-18
 
 ### Changed
