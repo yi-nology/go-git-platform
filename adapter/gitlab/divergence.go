@@ -48,6 +48,12 @@ var divergences = []provider.Divergence{
 		Reason: "The Todos API (this backend's notification source, see the mapping note on ListNotifications) has no per-project mark-all-as-done; the method fails with ErrNotImplemented and callers fall back to MarkNotificationsRead (global) or MarkNotificationRead per thread."},
 	{Capability: "NotificationManager", Method: "MarkNotificationsRead", Field: "opts.LastReadAt (valid values)", Kind: provider.DivergenceIgnore,
 		Reason: "Mark-all-todos has no last_read_at face — valid timestamps are dropped and the call degenerates to marking every todo done (irreversible); malformed values still fail the call with ErrInvalidInput (issue #129, the #52/#75/#97 family contract)."},
+	{Capability: "BranchProtectionManager", Method: "CreateBranchProtection", Field: "opts.Contexts, opts.RequireCodeOwnerReviews, opts.EnforceAdmins", Kind: provider.DivergenceIgnore,
+		Reason: "GitLab's protect-branch endpoint and SDK options carry only the branch name and force-push flag; approval rules live on a separate API this unified surface does not model. The three extended fields (issue #171) are accepted but dropped."},
+	{Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.Contexts, opts.RequireCodeOwnerReviews, opts.EnforceAdmins", Kind: provider.DivergenceIgnore,
+		Reason: "See CreateBranchProtection (issue #171)."},
+	{Capability: "BranchProtectionManager", Method: "GetBranchProtection", Field: "Contexts, RequireCodeOwnerReviews, EnforceAdmins", Kind: provider.DivergenceIgnore,
+		Reason: "GitLab's protected-branch payload exposes no such faces; reads leave the three fields nil (issue #171)."},
 	{Capability: "ChangeRequestManager", Method: "CreateCR", Field: "opts.Draft", Kind: provider.DivergenceMapping,
 		Reason: "GitLab 创建面无 draft 参数（go-gitlab CreateMergeRequestOptions 无该字段，与官方 API 文档一致）——draft 语义在 GitLab 是标题 Draft: 前缀。Draft=true 返回 provider.ErrDraftNotSupported（绝不静默产出非 draft MR）；Draft=false 现行为不变（issue #160，行为钉在 contracttest Create_DraftWire；标题前缀映射若要做另立单）。"},
 }

@@ -284,5 +284,11 @@ func Divergences(displayName string) []provider.Divergence {
 			Reason: fmt.Sprintf("The %s branch-protection wire has no allow-deletions face (neither family SDK models such a field): valid values are dropped and reads always report false. The pre-#130 mapping inverted the option onto block_on_rejected_reviews — an unrelated merge-blocking switch — silently flipping protection semantics the caller never asked for; a semantic mapping must never ride an unrelated toggle (issue #130, superseding the #93 inverse mapping).", displayName)},
 		{Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.AllowDeletions", Kind: provider.DivergenceIgnore,
 			Reason: "See CreateBranchProtection (issue #130)."},
+		{Capability: "BranchProtectionManager", Method: "CreateBranchProtection", Field: "opts.Contexts, opts.RequireCodeOwnerReviews, opts.EnforceAdmins", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("The %s branch-protection wire/SDK option has no required-status-checks contexts, code-owner-review, or enforce-admins faces (issue #171): valid values are silently dropped; the unified surface does not model the family platforms' separate approval-rule APIs.", displayName)},
+		{Capability: "BranchProtectionManager", Method: "UpdateBranchProtection", Field: "opts.Contexts, opts.RequireCodeOwnerReviews, opts.EnforceAdmins", Kind: provider.DivergenceIgnore,
+			Reason: "See CreateBranchProtection (issue #171)."},
+		{Capability: "BranchProtectionManager", Method: "GetBranchProtection", Field: "Contexts, RequireCodeOwnerReviews, EnforceAdmins", Kind: provider.DivergenceIgnore,
+			Reason: fmt.Sprintf("The %s protection payload exposes no such faces; reads leave the three fields nil (issue #171).", displayName)},
 	}
 }

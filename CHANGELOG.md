@@ -6,6 +6,47 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [待发版 v1.0.7]
+
+### Added
+
+- **BranchProtection 补 `Contexts` / `RequireCodeOwnerReviews` /
+  `EnforceAdmins` 三字段（读写双侧，issue #171）**——解锁下游
+  fuxi_forge 的 BranchProtection 换芯（go-github 手搓面退役）：
+  - `model.BranchProtection` 增三字段：`Contexts []string`、
+    `RequireCodeOwnerReviews *bool`、`EnforceAdmins *bool`。两个 bool
+    用指针承载「平台未返回」（nil）与显式 false 的区分——值语义会把
+    「没这字段」误读成「关了」。
+  - `CreateBranchProtectionOptions` 增对应字段：`Contexts` 非空蕴含启用
+    required_status_checks；与 `RequiredStatusChecks` 显式 false 冲突时
+    **以 contexts 为准**（启用并按 contexts 落线，不报错——冲突处置选
+    「蕴含优先」而非报错，因为 Create 是命令式全量创建，调用方给
+    contexts 的意图必然是启用检查）。
+  - `UpdateBranchProtectionOptions` 增三指针字段（`Contexts` 为
+    `*[]string`），nil = 不更新（#74 契约同族）；`Contexts` 显式空切片
+    = 清空 contexts（checks 保持启用），与 nil 严格区分。
+  - GitHub adapter `convertProtection` 读侧按对象在场性回填三字段；
+    写侧 `RequiredStatusChecks.Contexts` /
+    `PullRequestReviewsEnforcementRequest.RequireCodeOwnerReviews` /
+    `ProtectionRequest.EnforceAdmins` 映射落线。
+  - **Ensure 语义升级**：`EnsureBranchProtection` 对三字段采用
+    「显式才生效」——opts 未指定（nil/空）不参与漂移判定、不进 Update
+    请求（保值，防 GitHub 全量替换语义复位）；显式给出的按显式值收敛。
+    旧四字段（值语义）语义不变。
+
+### Notes
+
+- 非 GitHub 后端（gitea/forgejo 家族、gitlab、gitee、tencentcode）对三
+  字段按 field-scoped `DivergenceIgnore` 降维：写侧丢弃、读侧恒 nil，
+  已登记进各后端 divergence 台账并再生成
+  `docs/divergence-ledger.md`；contracttest suite 新增
+  `GetBranchProtection_ExtendedFields` 读侧回填断言（未接线的后端按
+  声明跳过）。
+- 全部行为带钉子：github wire 测试 6 条（读侧回填/对象缺席 nil 语义/
+  create 三字段落线/contexts 蕴含启用与冲突处置/update 保值与显式覆盖/
+  显式空切片清空），runtime Ensure 测试 2 条（显式收敛 + no-opinion
+  不漂移），contracttest 读侧 round-trip 1 条。
+
 ## [1.0.6] - 2026-11-18
 
 ### Fixed

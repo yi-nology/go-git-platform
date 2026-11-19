@@ -124,6 +124,12 @@ GitCode 脚注（2026-11-04 live 探针实证，证据链见
 ⁵ CI 失败日志走 v8 Actions 面（go-gitcode v0.15.0 起：head_sha 客户端
 扫描 + download-log）；单条最新 run 语义与 job 状态词表假设见分歧台账。
 
+BranchProtections 字段级脚注（issue #171）：`Contexts` /
+`RequireCodeOwnerReviews` / `EnforceAdmins` 三扩展字段仅 GitHub 读写双侧
+映射（Update 侧 nil 走保值、显式 false 落线；Create 侧 Contexts 非空蕴含
+启用 required_status_checks）；其余平台按 field-scoped `DivergenceIgnore`
+降维——写侧丢弃、读侧恒 nil，详见 divergence 台账。
+
 ### Local git operations
 
 `gitbackend` wraps local git behind two interchangeable backends — `native` (shells out to `git`, fullest feature set incl. rebase/stash) and `gogit` (pure Go via go-git/v5, no git binary needed). See the [中文 · Git 后端操作](#git-后端操作) section for the auth security model (token credential helper, SSH fingerprint pinning) and partial-clone options.

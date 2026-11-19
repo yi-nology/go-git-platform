@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"slices"
 
 	"github.com/google/go-github/v93/github"
 
@@ -31,7 +32,11 @@ func (p *Provider) GetBranchProtection(ctx context.Context, owner, repo, branch 
 // UpdateBranchProtection,而 Update 的「读当前保护再合并」前置在未保护
 // 分支上必然 404 ⇒ create 路径死锁,EnsureBranchProtection 的
 // EnsureCreated 分支(runtime/ensure.go)在 GitHub 上不可达。
-// 创建按调用方给定的四旋钮直出 wire,不做任何读回。
+// 创建按调用方给定的旋钮直出 wire,不做任何读回。三扩展字段(issue #171):
+// Contexts 非空蕴含启用 required_status_checks(与 RequiredStatusChecks
+// 显式 false 冲突时以 contexts 为准);RequireCodeOwnerReviews 进 PR
+// reviews 请求体;EnforceAdmins 是请求体的裸 bool(go-github 形态),
+// nil 取 false 缺省。
 func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo string, opts provider.CreateBranchProtectionOptions) (*model.BranchProtection, error) {
 	req := &github.ProtectionRequest{
 		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
@@ -40,7 +45,19 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 		AllowForcePushes: new(opts.AllowForcePushes),
 		AllowDeletions:   new(opts.AllowDeletions),
 	}
-	if opts.RequiredStatusChecks {
+	if opts.RequireCodeOwnerReviews != nil {
+		req.RequiredPullRequestReviews.RequireCodeOwnerReviews = *opts.RequireCodeOwnerReviews
+	}
+	if opts.EnforceAdmins != nil {
+		req.EnforceAdmins = *opts.EnforceAdmins
+	}
+	if contexts := opts.Contexts; len(contexts) > 0 {
+		// Contexts 非空蕴含启用 required_status_checks——与
+		// RequiredStatusChecks 显式 false 冲突时以 contexts 为准
+		// (options.go 类型注释的冲突处置,钉在
+		// TestCreateBranchProtection_ContextsWinOverExplicitFalse)。
+		req.RequiredStatusChecks = &github.RequiredStatusChecks{Strict: true, Contexts: &contexts}
+	} else if opts.RequiredStatusChecks {
 		req.RequiredStatusChecks = &github.RequiredStatusChecks{Strict: true}
 	}
 	protection, _, err := p.client.Repositories.UpdateBranchProtection(ctx, owner, repo, opts.BranchName, req)
@@ -64,7 +81,11 @@ func (p *Provider) CreateBranchProtection(ctx context.Context, owner, repo strin
 //     nil 不出线,全量替换下等价于复位为 false;
 //   - Restrictions 从 current 回填(Users/Teams/Apps)——不回填则 wire 出
 //     "restrictions": null,push/merge 限制被清空;
-//   - PR review 三布尔与 status checks 的 strict/contexts 原样保留。
+//   - PR review 三布尔与 status checks 的 strict/contexts 原样保留;
+//   - 三扩展字段(issue #171)nil 走保值:Contexts nil 保留 current 的
+//     contexts(显式启用 checks 时也不再重建丢 contexts),RequireCodeOwner
+//     Reviews / EnforceAdmins 从 current 回填;非 nil 按显式值覆盖,显式
+//     false 照常落线(能关掉)。
 //
 // 对未保护分支的 Update 返回 GET 的 404(归 ErrNotFound):统一接口的
 // 语义是 create 走 CreateBranchProtection / EnsureBranchProtection,
@@ -101,26 +122,7 @@ func (p *Provider) UpdateBranchProtection(ctx context.Context, owner, repo, bran
 			Apps:  appSlugsOf(current.Restrictions.Apps),
 		}
 	}
-	// Apply caller overrides.
-	if opts.RequiredApprovingReviews != nil {
-		if req.RequiredPullRequestReviews == nil {
-			req.RequiredPullRequestReviews = &github.PullRequestReviewsEnforcementRequest{}
-		}
-		req.RequiredPullRequestReviews.RequiredApprovingReviewCount = *opts.RequiredApprovingReviews
-	}
-	if opts.RequiredStatusChecks != nil {
-		if *opts.RequiredStatusChecks {
-			req.RequiredStatusChecks = &github.RequiredStatusChecks{Strict: true}
-		} else {
-			req.RequiredStatusChecks = nil
-		}
-	}
-	if opts.AllowForcePushes != nil {
-		req.AllowForcePushes = opts.AllowForcePushes
-	}
-	if opts.AllowDeletions != nil {
-		req.AllowDeletions = opts.AllowDeletions
-	}
+	applyProtectionOverrides(req, current, opts)
 	protection, _, err := p.client.Repositories.UpdateBranchProtection(ctx, owner, repo, branch, req)
 	if err != nil {
 		return nil, provider.Wrap(model.PlatformGitHub, "UpdateBranchProtection", err)
@@ -164,14 +166,82 @@ func appSlugsOf(apps []*github.App) []string {
 	return out
 }
 
+// applyProtectionOverrides 把 opts 的显式非 nil 值覆盖到已按 current
+// 回填的 req 上(#74 保值族的「显式优先」半边;issue #171 扩展到三扩展
+// 字段):
+//
+//   - RequiredApprovingReviews / RequireCodeOwnerReviews 覆盖 PR reviews
+//     请求体,后者 req 缺席时先造空壳;
+//   - EnforceAdmins 直接覆盖(request 体是裸 bool);
+//   - RequiredStatusChecks 显式启用时保留 current 的 contexts(issue
+//     #171)——旧实现重建 Strict:true 会把已配置的检查列表静默清空;
+//   - Contexts nil = 不动(保值);显式空切片 = 清空 contexts 但 checks
+//     保持启用;非空 = 覆盖且蕴含启用(与 RequiredStatusChecks 显式
+//     false 冲突时以 contexts 为准,同 Create 的冲突处置)。启用时
+//     strict 保留 current 值,current 缺席取 true。
+func applyProtectionOverrides(req *github.ProtectionRequest, current *github.Protection, opts provider.UpdateBranchProtectionOptions) {
+	if opts.RequiredApprovingReviews != nil {
+		ensureReviewsRequest(req).RequiredApprovingReviewCount = *opts.RequiredApprovingReviews
+	}
+	if opts.RequireCodeOwnerReviews != nil {
+		ensureReviewsRequest(req).RequireCodeOwnerReviews = *opts.RequireCodeOwnerReviews
+	}
+	if opts.EnforceAdmins != nil {
+		req.EnforceAdmins = *opts.EnforceAdmins
+	}
+	strict := true
+	if current.RequiredStatusChecks != nil {
+		strict = current.RequiredStatusChecks.Strict
+	}
+	if opts.RequiredStatusChecks != nil {
+		if *opts.RequiredStatusChecks {
+			req.RequiredStatusChecks = &github.RequiredStatusChecks{Strict: strict}
+			if current.RequiredStatusChecks != nil {
+				req.RequiredStatusChecks.Contexts = current.RequiredStatusChecks.Contexts
+			}
+		} else {
+			req.RequiredStatusChecks = nil
+		}
+	}
+	if opts.Contexts != nil {
+		contexts := slices.Clone(*opts.Contexts)
+		if req.RequiredStatusChecks == nil && len(contexts) > 0 {
+			req.RequiredStatusChecks = &github.RequiredStatusChecks{Strict: strict}
+		}
+		if req.RequiredStatusChecks != nil {
+			req.RequiredStatusChecks.Contexts = &contexts
+		}
+	}
+	if opts.AllowForcePushes != nil {
+		req.AllowForcePushes = opts.AllowForcePushes
+	}
+	if opts.AllowDeletions != nil {
+		req.AllowDeletions = opts.AllowDeletions
+	}
+}
+
+func ensureReviewsRequest(req *github.ProtectionRequest) *github.PullRequestReviewsEnforcementRequest {
+	if req.RequiredPullRequestReviews == nil {
+		req.RequiredPullRequestReviews = &github.PullRequestReviewsEnforcementRequest{}
+	}
+	return req.RequiredPullRequestReviews
+}
+
 // convertProtection maps a github.Protection to a model.BranchProtection.
+// 三扩展字段(issue #171)按对象在场性回填:平台响应缺对应对象时指针
+// 保持 nil(「未返回」≠「false」)。
 func convertProtection(branch string, p *github.Protection) *model.BranchProtection {
 	bp := &model.BranchProtection{BranchName: branch}
 	if p.RequiredStatusChecks != nil {
 		bp.RequiredStatusChecks = true
+		bp.Contexts = slices.Clone(p.RequiredStatusChecks.GetContexts())
 	}
 	if p.RequiredPullRequestReviews != nil {
 		bp.RequiredApprovingReviews = p.RequiredPullRequestReviews.RequiredApprovingReviewCount
+		bp.RequireCodeOwnerReviews = new(p.RequiredPullRequestReviews.RequireCodeOwnerReviews)
+	}
+	if p.EnforceAdmins != nil {
+		bp.EnforceAdmins = new(p.EnforceAdmins.Enabled)
 	}
 	if p.AllowForcePushes != nil {
 		bp.AllowForcePushes = p.AllowForcePushes.Enabled

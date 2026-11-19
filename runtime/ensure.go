@@ -166,6 +166,47 @@ func equalEvents(a, sortedB []string) bool {
 	return slices.Equal(sa, sortedB)
 }
 
+// boolPtrEqual 比较两个 *bool 的「解析值」:平台未返回(nil)只有对
+// 方也是 nil 时才相等;一方 nil 一方有值(无论 true/false)都算漂移。
+func boolPtrEqual(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// branchProtectionMatches 判定存量规则是否已达 opts 期望态。旧四字段
+// (值语义)逐字相等;三扩展字段(issue #171)no-opinion 不判定——
+// opts 未显式给出(nil/空)即视为对该字段无意见,不因存量值漂移。
+func branchProtectionMatches(cur *model.BranchProtection, opts provider.CreateBranchProtectionOptions) bool {
+	return cur.RequiredApprovingReviews == opts.RequiredApprovingReviews &&
+		cur.RequiredStatusChecks == opts.RequiredStatusChecks &&
+		cur.AllowForcePushes == opts.AllowForcePushes &&
+		cur.AllowDeletions == opts.AllowDeletions &&
+		(len(opts.Contexts) == 0 || slices.Equal(cur.Contexts, opts.Contexts)) &&
+		(opts.RequireCodeOwnerReviews == nil || boolPtrEqual(cur.RequireCodeOwnerReviews, opts.RequireCodeOwnerReviews)) &&
+		(opts.EnforceAdmins == nil || boolPtrEqual(cur.EnforceAdmins, opts.EnforceAdmins))
+}
+
+// branchProtectionUpdateOpts 从 Create opts 推导 Update 请求:旧四字段
+// 值语义恒下发(既有行为);三扩展字段(issue #171)只在显式给出时
+// 下发——未指定的保持 nil,把「不动」的保值语义传递给后端。
+func branchProtectionUpdateOpts(opts provider.CreateBranchProtectionOptions) provider.UpdateBranchProtectionOptions {
+	upd := provider.UpdateBranchProtectionOptions{
+		RequiredApprovingReviews: &opts.RequiredApprovingReviews,
+		RequiredStatusChecks:     &opts.RequiredStatusChecks,
+		AllowForcePushes:         &opts.AllowForcePushes,
+		AllowDeletions:           &opts.AllowDeletions,
+		RequireCodeOwnerReviews:  opts.RequireCodeOwnerReviews,
+		EnforceAdmins:            opts.EnforceAdmins,
+	}
+	if len(opts.Contexts) > 0 {
+		contexts := slices.Clone(opts.Contexts)
+		upd.Contexts = &contexts
+	}
+	return upd
+}
+
 // ensureWebhookSecret is the provider.EnsureSecretAlwaysUpdate convergence path for
 // a hook that already matches URL + events: patch the secret in place via
 // provider.WebhookConfigManager (keeps the platform ID, one API round-trip). A
@@ -197,21 +238,18 @@ func ensureWebhookSecret(ctx context.Context, p provider.WebhookManager, opts pr
 // provider.Provider (type-assert it at the call site) or test double.
 // 契约防御：Get 违约返回 (nil, nil)（iface 契约禁止）时视为缺席走 Create
 // 而非 Update——见 iface_branch_protection.go Get 的契约注释。
+//
+// 三扩展字段(issue #171)的语义升级:Contexts / RequireCodeOwnerReviews /
+// EnforceAdmins 为「显式才生效」——未指定(nil/空)不参与漂移判定,也不
+// 进 Update 请求(保值,防 GitHub 全量替换语义复位);显式给出的字段按
+// 显式值收敛。
 func EnsureBranchProtection(ctx context.Context, bpm provider.BranchProtectionManager, owner, repo string, opts provider.CreateBranchProtectionOptions) (EnsureAction, *model.BranchProtection, error) {
 	cur, err := bpm.GetBranchProtection(ctx, owner, repo, opts.BranchName)
 	if err == nil && cur != nil {
-		if cur.RequiredApprovingReviews == opts.RequiredApprovingReviews &&
-			cur.RequiredStatusChecks == opts.RequiredStatusChecks &&
-			cur.AllowForcePushes == opts.AllowForcePushes &&
-			cur.AllowDeletions == opts.AllowDeletions {
+		if branchProtectionMatches(cur, opts) {
 			return EnsureUnchanged, cur, nil
 		}
-		out, err := bpm.UpdateBranchProtection(ctx, owner, repo, opts.BranchName, provider.UpdateBranchProtectionOptions{
-			RequiredApprovingReviews: &opts.RequiredApprovingReviews,
-			RequiredStatusChecks:     &opts.RequiredStatusChecks,
-			AllowForcePushes:         &opts.AllowForcePushes,
-			AllowDeletions:           &opts.AllowDeletions,
-		})
+		out, err := bpm.UpdateBranchProtection(ctx, owner, repo, opts.BranchName, branchProtectionUpdateOpts(opts))
 		if err != nil {
 			if provider.IsConflict(err) {
 				return OutcomeConflict, cur, err

@@ -506,21 +506,42 @@ type MarkNotificationsOptions struct {
 
 // CreateBranchProtectionOptions contains options for creating a branch
 // protection rule.
+//
+// 三扩展字段(issue #171)语义:Contexts 非空蕴含启用 required status
+// checks——与 RequiredStatusChecks 显式 false 冲突时以 Contexts 为准
+// (启用并按 contexts 落线,不报错);RequireCodeOwnerReviews / EnforceAdmins
+// 为 nil 时取平台缺省,非 nil 按显式值落线。
 type CreateBranchProtectionOptions struct {
 	BranchName               string `json:"branch_name"`
 	RequiredApprovingReviews int    `json:"required_approving_reviews,omitempty"`
 	RequiredStatusChecks     bool   `json:"required_status_checks,omitempty"`
 	AllowForcePushes         bool   `json:"allow_force_pushes,omitempty"`
 	AllowDeletions           bool   `json:"allow_deletions,omitempty"`
+	// Contexts 非空蕴含启用 required_status_checks(见类型注释)。
+	Contexts []string `json:"contexts,omitempty"`
+	// RequireCodeOwnerReviews / EnforceAdmins 指针语义:nil = 平台缺省。
+	RequireCodeOwnerReviews *bool `json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins           *bool `json:"enforce_admins,omitempty"`
 }
 
 // UpdateBranchProtectionOptions contains options for updating a branch
 // protection rule. Nil fields are left unchanged.
+//
+// 三扩展字段(issue #171)延续 #74 的「nil 字段不变」契约:
+// Contexts 为 *([]string)——nil 不动;显式空切片 = 清空 contexts(checks
+// 保持启用);非空 = 覆盖(非空蕴含启用 checks,与 RequiredStatusChecks
+// 显式 false 冲突时同样以 contexts 为准)。RequireCodeOwnerReviews /
+// EnforceAdmins 的 nil 表示不动,显式 false 也要落线(能关掉)。
 type UpdateBranchProtectionOptions struct {
 	RequiredApprovingReviews *int  `json:"required_approving_reviews,omitempty"`
 	RequiredStatusChecks     *bool `json:"required_status_checks,omitempty"`
 	AllowForcePushes         *bool `json:"allow_force_pushes,omitempty"`
 	AllowDeletions           *bool `json:"allow_deletions,omitempty"`
+	// Contexts nil = 不动;显式空切片 = 清空;非空 = 覆盖(蕴含启用)。
+	Contexts *[]string `json:"contexts,omitempty"`
+	// RequireCodeOwnerReviews / EnforceAdmins nil = 不动,显式 false 落线。
+	RequireCodeOwnerReviews *bool `json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins           *bool `json:"enforce_admins,omitempty"`
 }
 
 // --- Collaborators ---

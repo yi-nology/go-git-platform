@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,6 +29,12 @@ type BranchProtectionsHarnessConfig struct {
 	// of failing on the nil,nil contract. Mirrors UpdateSendsDescriptionOnly.
 	ListUnsupported bool
 	GetUnsupported  bool
+	// ExtendedGetResponse 是携带三扩展字段(Contexts /
+	// RequireCodeOwnerReviews / EnforceAdmins)的单件 GET fixture,驱动
+	// GetBranchProtection_ExtendedFields 的读侧回填断言。空 = 该后端
+	// 未映射扩展字段(登记为 field-scoped DivergenceIgnore),子测试
+	// 跳过——按能力声明降维(issue #171)。
+	ExtendedGetResponse string
 }
 
 func testBranchProtectionsSuite(t *testing.T, h Harness) {
@@ -48,20 +55,22 @@ func testBranchProtectionsSuite(t *testing.T, h Harness) {
 			ListResponse: h.BranchProtections.ListResponse, MutateResponse: h.BranchProtections.MutateResponse,
 			GetResponse:     h.BranchProtections.GetResponse,
 			ListUnsupported: h.BranchProtections.ListUnsupported, GetUnsupported: h.BranchProtections.GetUnsupported,
+			ExtendedGetResponse: h.BranchProtections.ExtendedGetResponse,
 		})
 	}
 }
 
 // BranchProtectionsHarness bundles inputs for the branch-protection suite.
 type BranchProtectionsHarness struct {
-	Name            string
-	Platform        model.Platform
-	NewProvider     func(t *testing.T, cfg provider.Config) provider.Provider
-	ListResponse    string
-	MutateResponse  string
-	GetResponse     string
-	ListUnsupported bool
-	GetUnsupported  bool
+	Name                string
+	Platform            model.Platform
+	NewProvider         func(t *testing.T, cfg provider.Config) provider.Provider
+	ListResponse        string
+	MutateResponse      string
+	GetResponse         string
+	ListUnsupported     bool
+	GetUnsupported      bool
+	ExtendedGetResponse string
 }
 
 // RunBranchProtectionsSuite tests branch-protection CRUD operations.
@@ -144,6 +153,10 @@ func RunBranchProtectionsSuite(t *testing.T, h BranchProtectionsHarness) {
 		assertBPGetShape(t, h, newBPM(t))
 	})
 
+	t.Run("GetBranchProtection_ExtendedFields", func(t *testing.T) {
+		assertBPGetExtendedFields(t, h)
+	})
+
 	t.Run("GetBranchProtection_NotFound", func(t *testing.T) {
 		assertBPGetNotFound(t, h)
 	})
@@ -202,6 +215,52 @@ func assertBPGetShape(t *testing.T, h BranchProtectionsHarness, bpm provider.Bra
 	}
 }
 
+// assertBPGetExtendedFields 钉 issue #171 三扩展字段的读侧回填:fixture
+// 携带 contexts ["ci/build","ci/test"]、require_code_owner_reviews=true、
+// enforce_admins.enabled=true,后端必须原样映射;指针字段非 nil。
+// Harness 未接线(未映射扩展字段的后端)按能力声明降维跳过。
+func assertBPGetExtendedFields(t *testing.T, h BranchProtectionsHarness) {
+	t.Helper()
+	if h.GetUnsupported {
+		t.Skipf("%s has no get endpoint (DivergenceStub)", h.Name)
+	}
+	if h.ExtendedGetResponse == "" {
+		t.Skipf("%s maps no extended branch-protection fields (field-scoped DivergenceIgnore)", h.Name)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(h.ExtendedGetResponse))
+	}))
+	t.Cleanup(srv.Close)
+	p := h.NewProvider(t, provider.Config{Platform: h.Platform, BaseURL: srv.URL, Token: "test"})
+	bpm, ok := p.(provider.BranchProtectionManager)
+	if !ok {
+		t.Fatalf("%s does not implement provider.BranchProtectionManager", h.Name)
+	}
+	bp, err := bpm.GetBranchProtection(context.Background(), "owner", "repo", "main")
+	if err != nil {
+		t.Fatalf("GetBranchProtection: %v", err)
+	}
+	if bp == nil {
+		t.Fatal("expected a branch protection, got nil")
+	}
+	wantCtx := []string{"ci/build", "ci/test"}
+	if !slices.Equal(bp.Contexts, wantCtx) {
+		t.Errorf("Contexts = %v, want %v (读侧必须回填 required_status_checks.contexts)", bp.Contexts, wantCtx)
+	}
+	if bp.RequireCodeOwnerReviews == nil {
+		t.Error("RequireCodeOwnerReviews = nil, want *true (指针承载「平台未返回 vs false」的区分)")
+	} else if !*bp.RequireCodeOwnerReviews {
+		t.Error("RequireCodeOwnerReviews = *false, want *true")
+	}
+	if bp.EnforceAdmins == nil {
+		t.Error("EnforceAdmins = nil, want *true (指针承载「平台未返回 vs false」的区分)")
+	} else if !*bp.EnforceAdmins {
+		t.Error("EnforceAdmins = *false, want *true")
+	}
+}
+
+// mutation and returns a protection (platform-limitation errors skip).
 // assertBPUpdateAcceptsMutation asserts UpdateBranchProtection accepts a
 // mutation and returns a protection (platform-limitation errors skip).
 func assertBPUpdateAcceptsMutation(t *testing.T, bpm provider.BranchProtectionManager) {

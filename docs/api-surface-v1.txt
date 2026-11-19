@@ -214,6 +214,11 @@ type CreateBranchProtectionOptions struct {
 	RequiredStatusChecks		bool	`json:"required_status_checks,omitempty"`
 	AllowForcePushes		bool	`json:"allow_force_pushes,omitempty"`
 	AllowDeletions			bool	`json:"allow_deletions,omitempty"`
+
+	Contexts	[]string	`json:"contexts,omitempty"`
+
+	RequireCodeOwnerReviews	*bool	`json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins		*bool	`json:"enforce_admins,omitempty"`
 }
 type CreateCROptions struct {
 	Owner			string		`json:"owner"`
@@ -668,6 +673,11 @@ type UpdateBranchProtectionOptions struct {
 	RequiredStatusChecks		*bool	`json:"required_status_checks,omitempty"`
 	AllowForcePushes		*bool	`json:"allow_force_pushes,omitempty"`
 	AllowDeletions			*bool	`json:"allow_deletions,omitempty"`
+
+	Contexts	*[]string	`json:"contexts,omitempty"`
+
+	RequireCodeOwnerReviews	*bool	`json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins		*bool	`json:"enforce_admins,omitempty"`
 }
 type UpdateCROptions struct {
 	Title	string	`json:"title,omitempty"`
@@ -810,6 +820,11 @@ type BranchProtection struct {
 	RequiredStatusChecks		bool	`json:"required_status_checks"`
 	AllowForcePushes		bool	`json:"allow_force_pushes"`
 	AllowDeletions			bool	`json:"allow_deletions"`
+
+	Contexts	[]string	`json:"contexts,omitempty"`
+
+	RequireCodeOwnerReviews	*bool	`json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins		*bool	`json:"enforce_admins,omitempty"`
 }
 type CRComment struct {
 	ID		int64		`json:"id"`
@@ -3403,14 +3418,15 @@ type BranchHarnessConfig struct {
 	MutateResponse	string
 }
 type BranchProtectionsHarness struct {
-	Name		string
-	Platform	model.Platform
-	NewProvider	func(t *testing.T, cfg provider.Config) provider.Provider
-	ListResponse	string
-	MutateResponse	string
-	GetResponse	string
-	ListUnsupported	bool
-	GetUnsupported	bool
+	Name			string
+	Platform		model.Platform
+	NewProvider		func(t *testing.T, cfg provider.Config) provider.Provider
+	ListResponse		string
+	MutateResponse		string
+	GetResponse		string
+	ListUnsupported		bool
+	GetUnsupported		bool
+	ExtendedGetResponse	string
 }
 type BranchProtectionsHarnessConfig struct {
 	ListResponse	string
@@ -3420,6 +3436,8 @@ type BranchProtectionsHarnessConfig struct {
 
 	ListUnsupported	bool
 	GetUnsupported	bool
+
+	ExtendedGetResponse	string
 }
 type CILogsHarnessConfig struct {
 	GreenResponse	string

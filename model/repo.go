@@ -84,6 +84,14 @@ type BranchProtection struct {
 	RequiredStatusChecks     bool   `json:"required_status_checks"`
 	AllowForcePushes         bool   `json:"allow_force_pushes"`
 	AllowDeletions           bool   `json:"allow_deletions"`
+	// Contexts 是 required status checks 的上下文列表(issue #171)。
+	// 平台未返回该面时保持 nil。
+	Contexts []string `json:"contexts,omitempty"`
+	// RequireCodeOwnerReviews / EnforceAdmins 指针承载「平台未返回」
+	// (nil) 与显式 false 的区分(issue #171)——值语义 bool 会把
+	// 「没这字段」误读成「关了」。
+	RequireCodeOwnerReviews *bool `json:"require_code_owner_reviews,omitempty"`
+	EnforceAdmins           *bool `json:"enforce_admins,omitempty"`
 }
 
 // Collaborator represents a repository collaborator.

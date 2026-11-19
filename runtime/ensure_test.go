@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/yi-nology/go-git-platform/model"
@@ -79,6 +80,10 @@ func (f *fakeWebhookManager) ValidateWebhookSignature(*http.Request, string) err
 type fakeBranchProtection struct {
 	rules    map[string]*model.BranchProtection
 	getFails error
+	// lastUpdate 记录最近一次 Update 收到的 options,钉 Ensure 的
+	// 「显式值按显式、nil 走保值」语义(未显式指定的字段必须保持 nil,
+	// 不得被 Ensure 擅自填默认值触发复位)。
+	lastUpdate *provider.UpdateBranchProtectionOptions
 }
 
 func (f *fakeBranchProtection) ListBranchProtections(context.Context, string, string) ([]*model.BranchProtection, error) {
@@ -104,13 +109,17 @@ func (f *fakeBranchProtection) CreateBranchProtection(_ context.Context, _, _ st
 	r := &model.BranchProtection{
 		BranchName: opts.BranchName, RequiredApprovingReviews: opts.RequiredApprovingReviews,
 		RequiredStatusChecks: opts.RequiredStatusChecks, AllowForcePushes: opts.AllowForcePushes,
-		AllowDeletions: opts.AllowDeletions,
+		AllowDeletions:          opts.AllowDeletions,
+		Contexts:                slices.Clone(opts.Contexts),
+		RequireCodeOwnerReviews: opts.RequireCodeOwnerReviews,
+		EnforceAdmins:           opts.EnforceAdmins,
 	}
 	f.rules[opts.BranchName] = r
 	return r, nil
 }
 
 func (f *fakeBranchProtection) UpdateBranchProtection(_ context.Context, _, _, branch string, opts provider.UpdateBranchProtectionOptions) (*model.BranchProtection, error) {
+	f.lastUpdate = &opts
 	r := f.rules[branch]
 	if opts.RequiredApprovingReviews != nil {
 		r.RequiredApprovingReviews = *opts.RequiredApprovingReviews
@@ -123,6 +132,15 @@ func (f *fakeBranchProtection) UpdateBranchProtection(_ context.Context, _, _, b
 	}
 	if opts.AllowDeletions != nil {
 		r.AllowDeletions = *opts.AllowDeletions
+	}
+	if opts.Contexts != nil {
+		r.Contexts = slices.Clone(*opts.Contexts)
+	}
+	if opts.RequireCodeOwnerReviews != nil {
+		r.RequireCodeOwnerReviews = opts.RequireCodeOwnerReviews
+	}
+	if opts.EnforceAdmins != nil {
+		r.EnforceAdmins = opts.EnforceAdmins
 	}
 	return r, nil
 }
@@ -395,6 +413,93 @@ func TestEnsureBranchProtectionLifecycle(t *testing.T) {
 	}
 	if rule.RequiredApprovingReviews != 1 {
 		t.Fatalf("rule = %+v, want reviews=1", rule)
+	}
+}
+
+// TestEnsureBranchProtectionExtendedFieldsLifecycle 三扩展字段的 Ensure
+// 收敛(issue #171):create 落全字段;重跑 unchanged;改一个字段 updated,
+// 且 Update 只带显式指定的字段——未指定的保持 nil(保值语义,防
+// GitHub 全量替换语义复位)。
+func TestEnsureBranchProtectionExtendedFieldsLifecycle(t *testing.T) {
+	f := &fakeBranchProtection{rules: map[string]*model.BranchProtection{}}
+	codeOwner := true
+	opts := provider.CreateBranchProtectionOptions{
+		BranchName: "main", RequiredApprovingReviews: 2, RequiredStatusChecks: true,
+		Contexts: []string{"ci/build", "ci/test"}, RequireCodeOwnerReviews: &codeOwner,
+	}
+
+	action, rule, err := EnsureBranchProtection(t.Context(), f, "o", "r", opts)
+	if err != nil || action != EnsureCreated {
+		t.Fatalf("create: action=%q err=%v", action, err)
+	}
+	if !slices.Equal(rule.Contexts, []string{"ci/build", "ci/test"}) {
+		t.Fatalf("created rule.Contexts = %v", rule.Contexts)
+	}
+
+	action, _, err = EnsureBranchProtection(t.Context(), f, "o", "r", opts)
+	if err != nil || action != EnsureUnchanged {
+		t.Fatalf("re-run: action=%q err=%v", action, err)
+	}
+
+	enforce := true
+	// 换一份只显式 EnforceAdmins 的 opts:Contexts / RequireCodeOwnerReviews
+	// 未指定 ⇒ 不得进 Update 请求。
+	updOpts := provider.CreateBranchProtectionOptions{
+		BranchName: "main", RequiredApprovingReviews: 2, RequiredStatusChecks: true,
+		EnforceAdmins: &enforce,
+	}
+	action, _, err = EnsureBranchProtection(t.Context(), f, "o", "r", updOpts)
+	if err != nil || action != EnsureUpdated {
+		t.Fatalf("update: action=%q err=%v", action, err)
+	}
+	if f.lastUpdate == nil {
+		t.Fatal("update path must reach the manager")
+	}
+	if f.lastUpdate.EnforceAdmins == nil || !*f.lastUpdate.EnforceAdmins {
+		t.Errorf("explicit EnforceAdmins must reach Update, got %+v", f.lastUpdate.EnforceAdmins)
+	}
+	if f.lastUpdate.Contexts != nil {
+		t.Errorf("unspecified Contexts must stay nil (保值), got %v", *f.lastUpdate.Contexts)
+	}
+	if f.lastUpdate.RequireCodeOwnerReviews != nil {
+		t.Errorf("unspecified RequireCodeOwnerReviews must stay nil (保值), got %v", *f.lastUpdate.RequireCodeOwnerReviews)
+	}
+}
+
+// TestEnsureBranchProtectionExtendedNoOpinionStaysUnchanged 未显式指定的
+// 扩展字段不参与漂移判定(no-opinion):存量规则带 contexts/code-owner,
+// Ensure 的 opts 不提它们 ⇒ unchanged,零写入。
+func TestEnsureBranchProtectionExtendedNoOpinionStaysUnchanged(t *testing.T) {
+	codeOwner := true
+	f := &fakeBranchProtection{rules: map[string]*model.BranchProtection{
+		"main": {
+			BranchName: "main", RequiredApprovingReviews: 2, RequiredStatusChecks: true,
+			Contexts: []string{"ci/build"}, RequireCodeOwnerReviews: &codeOwner,
+		},
+	}}
+	opts := provider.CreateBranchProtectionOptions{
+		BranchName: "main", RequiredApprovingReviews: 2, RequiredStatusChecks: true,
+	}
+	action, _, err := EnsureBranchProtection(t.Context(), f, "o", "r", opts)
+	if err != nil || action != EnsureUnchanged {
+		t.Fatalf("no-opinion ensure: action=%q err=%v", action, err)
+	}
+	if f.lastUpdate != nil {
+		t.Errorf("unchanged path must not issue Update, got %+v", f.lastUpdate)
+	}
+
+	// 反向:opts 显式给出与存量不同的值 ⇒ 判漂移并只下发该字段。
+	otherOwner := false
+	opts.RequireCodeOwnerReviews = &otherOwner
+	action, _, err = EnsureBranchProtection(t.Context(), f, "o", "r", opts)
+	if err != nil || action != EnsureUpdated {
+		t.Fatalf("drifted ensure: action=%q err=%v", action, err)
+	}
+	if f.lastUpdate == nil || f.lastUpdate.RequireCodeOwnerReviews == nil || *f.lastUpdate.RequireCodeOwnerReviews {
+		t.Errorf("drifted field must reach Update as explicit value, got %+v", f.lastUpdate)
+	}
+	if f.lastUpdate.Contexts != nil {
+		t.Errorf("Context drift must not be invented, got %v", *f.lastUpdate.Contexts)
 	}
 }
 

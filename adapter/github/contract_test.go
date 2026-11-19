@@ -173,6 +173,9 @@ func TestGitHub_Contract(t *testing.T) {
 			GetResponse:     `{"required_status_checks":{"strict":true,"contexts":[]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":false,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
 			ListUnsupported: true,
 			GetUnsupported:  false,
+			// issue #171:三扩展字段的读侧回填断言夹具(contexts 双值、
+			// code-owner/enforce-admins 均 true,与上方 GetResponse 区分)。
+			ExtendedGetResponse: `{"required_status_checks":{"strict":true,"contexts":["ci/build","ci/test"]},"required_pull_request_reviews":{"dismiss_stale_reviews":true,"require_code_owner_reviews":true,"required_approving_review_count":1},"enforce_admins":{"enabled":true},"allow_force_pushes":{"enabled":false},"allow_deletions":{"enabled":false}}`,
 		},
 		Collaborators: &contracttest.CollaboratorsHarnessConfig{
 			ListResponse: `[{"id":1,"login":"dev","permission":"write"}]`,
