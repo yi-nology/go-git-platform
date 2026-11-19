@@ -4007,7 +4007,7 @@ func DebugEnabled(l Logger) bool
 func DefaultRetryConfig() RetryConfig
 func NewClient(baseURL string, auth AuthStrategy, opts ...ClientOption) *Client
 func NewDebugLogger() Logger
-func NewETagCache(maxEntries int) *ETagCache
+func NewETagCache(maxEntries int, opts ...ETagCacheOption) *ETagCache
 func NewLogxLogger(component string) Logger
 func NewRateLimiter(opts ...RateLimiterOption) *RateLimiter
 func NewStatusError(method, path string, status int, body []byte) error
@@ -4020,6 +4020,7 @@ func StripSensitiveHeaders(req *http.Request)
 func StripSensitiveQueryParams(req *http.Request)
 func WithETag(cache *ETagCache) ClientOption
 func WithHooks(h *Hooks) ClientOption
+func WithKeyScope(fn func(*http.Request) string) ETagCacheOption
 func WithLimiter(rl *RateLimiter) ClientOption
 func WithLogger(l Logger) ClientOption
 func WithMaxBodySize(n int64) ClientOption
@@ -4039,6 +4040,7 @@ type Client struct {
 type ClientOption func(*Client)
 type ETagCache struct {
 }
+type ETagCacheOption func(*ETagCache)
 type Error struct {
 	Method	string
 	Path	string

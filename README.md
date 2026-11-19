@@ -171,7 +171,7 @@ In CI, dispatch the **smoke** GitHub Actions workflow manually (`workflow_dispat
 - **oekit 底层生态**: goroutine 经 `oekit/concurrency/async` 启动(panic 自动 recover, 批处理单项 panic 转为该项 Err); 错误包装用 `oekit/pkg/errors.Wrap`(nil-safe + kv); 并发注册表走 `oekit/pkg/container.SafeMap`(平台/后端/validator/凭据表)、有序注册表走 `pkg/container.Slice`(host 别名表,AppendIfAbsent 原子查重追加); 可选接入 `oekit/logx`(`provider.NewLogxLogger`, 随消费方 `logx.SetDefault` 懒解析跟随)。规则见 [AGENTS.md](AGENTS.md)
 - **主动限流** (`transport.RateLimiter`): 跟踪 `X-RateLimit-*` 响应头, 在撞限前自适应节流 (含并发预约定, 避免惊群); 限流类错误携带 `Retry-After`/`ResetAt` 恢复窗口 (`provider.RateLimitRecovery`)
 - **可刷新凭证** (`Config.TokenSource`): transport 层每请求取 token, GitHub App installation token / OAuth 轮换类凭证下一次请求即生效; 顶层 `auth/githubapp` 包提供 JWT 铸造 + installation token 换取, 可直接作为 TokenSource 接入
-- **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额
+- **ETag 条件请求** (`Config.ConditionalRequests`, 默认关): GET 自动 `If-None-Match`, 304 透明回放缓存的 200 —— 轮询型负载在 GitHub 上不消耗限流配额; 共享 token 多租户形态用 `transport.WithKeyScope` 把租户维度并入缓存键（缺省键逐字节不变, #172）
 - **期望态助手**: `EnsureWebhook` / `EnsureBranchProtection` / `EnsureDeployKey` 幂等收敛 (created/updated/unchanged)
 - **泛型分页迭代器**: `runtime.Each` / `Collect`(带 Bounded 变体)逐页惰性遍历, 空页终止 + 页预算硬错误, 不再手写 page++ 循环
 - **版本可观测**: `provider.Version()` + 默认 `User-Agent: ...go-git-platform/<ver>` 产品标识; `transport/metrics` 零依赖观测接口 (Recorder/ResponseHook/ClassifyPath)

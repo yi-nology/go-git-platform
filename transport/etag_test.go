@@ -469,3 +469,116 @@ func TestETagCache_CacheableRejectsUnpromptedContentEncoding(t *testing.T) {
 		t.Fatal("identity response must remain cacheable")
 	}
 }
+
+// ===== #172：ETag 缓存键租户维度（WithKeyScope） =====
+
+// TestETagKey_DefaultByteIdentical 回归红线：未注入 scope 时缓存键与
+// httpjson.CanonicalETagKey 的既有三 vary 形态逐字节一致（#172 验收：
+// 「缺省（无 scope 注入）行为与现状逐字节一致」）。
+func TestETagKey_DefaultByteIdentical(t *testing.T) {
+	c := NewETagCache(8)
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("PRIVATE-TOKEN", "")
+	if got, want := c.etagKey(req), etagKey(req); got != want {
+		t.Fatalf("default key drifted:\n got=%q\nwant=%q", got, want)
+	}
+}
+
+// TestETagKey_ScopePartitionsAndEmptyFallback 钉 scope 的键语义：
+// 不同 scope 分键、同 scope 同键、空串 scope 回退缺省形态（逐字节）。
+func TestETagKey_ScopePartitionsAndEmptyFallback(t *testing.T) {
+	c := NewETagCache(8, WithKeyScope(func(r *http.Request) string {
+		return r.Header.Get("X-Tenant")
+	}))
+	req := func(tenant string) *http.Request {
+		r := httptest.NewRequest(http.MethodGet, "http://example.com/x", nil)
+		r.Header.Set("Authorization", "Bearer shared-token")
+		if tenant != "" {
+			r.Header.Set("X-Tenant", tenant)
+		}
+		return r
+	}
+
+	base := c.etagKey(req(""))
+	if want := etagKey(req("")); base != want {
+		t.Fatalf("empty scope must fall back to default key:\n got=%q\nwant=%q", base, want)
+	}
+	a1, a2, b := c.etagKey(req("tenant-a")), c.etagKey(req("tenant-a")), c.etagKey(req("tenant-b"))
+	if a1 != a2 {
+		t.Fatalf("same scope must share key: %q vs %q", a1, a2)
+	}
+	if a1 == b {
+		t.Fatal("different scopes must not share key")
+	}
+	if a1 == base || b == base {
+		t.Fatal("non-empty scope must differ from default key")
+	}
+}
+
+// TestETagTenantScopePreventsCrossTenantReplay 端到端：#172 的泄漏场景——
+// 共享 token 形态下同 URL 不同租户。注入 scope 后 B 租户不得命中 A 的
+// 条目（不得携带 A 的 If-None-Match、不得回放 A 的响应体）。
+func TestETagTenantScopePreventsCrossTenantReplay(t *testing.T) {
+	var total, conditional atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		total.Add(1)
+		tenant := r.Header.Get("X-Tenant")
+		w.Header().Set("ETag", `"v1"`) // 故意让两租户同 ETag（共享 token 的现实形态）
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			conditional.Add(1)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		_, _ = io.WriteString(w, `{"tenant":"`+tenant+`"}`)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, None{}, WithTransport(srv.Client().Transport))
+	c.etag = NewETagCache(0, WithKeyScope(func(r *http.Request) string {
+		return r.Header.Get("X-Tenant")
+	}))
+	hc := &http.Client{Transport: c.RoundTripper()}
+
+	get := func(tenant string) (string, http.Header) {
+		req, err := http.NewRequest(http.MethodGet, srv.URL+"/data", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer shared-token")
+		req.Header.Set("X-Tenant", tenant)
+		resp, err := hc.Do(req)
+		if err != nil {
+			t.Fatalf("GET tenant %s: %v", tenant, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b), resp.Header
+	}
+
+	// A 首读：网络 200 并落缓存。
+	if body, h := get("tenant-a"); body != `{"tenant":"tenant-a"}` || h.Get(cacheHitHeader) == "hit" {
+		t.Fatalf("tenant-a first read: body=%q hit=%v", body, h.Get(cacheHitHeader))
+	}
+	// A 二读：304 回放（scope 不破既有命中）。
+	if body, h := get("tenant-a"); body != `{"tenant":"tenant-a"}` || h.Get(cacheHitHeader) != "hit" {
+		t.Fatalf("tenant-a second read must hit cache: body=%q hit=%v", body, h.Get(cacheHitHeader))
+	}
+	// B 首读：同 URL 同 token 但不同租户——必须走网络拿自己的体，
+	// 绝不能回放 A 的缓存。
+	if body, h := get("tenant-b"); body != `{"tenant":"tenant-b"}` || h.Get(cacheHitHeader) == "hit" {
+		t.Fatalf("tenant-b must not replay tenant-a entry: body=%q hit=%v", body, h.Get(cacheHitHeader))
+	}
+	// B 二读：自己的条目 304 回放。
+	if body, h := get("tenant-b"); body != `{"tenant":"tenant-b"}` || h.Get(cacheHitHeader) != "hit" {
+		t.Fatalf("tenant-b second read must hit its own cache: body=%q hit=%v", body, h.Get(cacheHitHeader))
+	}
+	if got := total.Load(); got != 4 {
+		t.Fatalf("server saw %d requests, want 4", got)
+	}
+	if got := conditional.Load(); got != 2 {
+		t.Fatalf("server saw %d conditional requests, want 2 (one per tenant)", got)
+	}
+}

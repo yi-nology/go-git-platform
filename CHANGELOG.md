@@ -6,6 +6,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [v1.2.0] - 2026-11-19
+
+### Added
+
+- **ETagCache 增 `WithKeyScope` 租户维度注入（issue #172）**——共享 token
+  多租户形态（如单 GitHub App installation 服务多租户）下，Authorization
+  无法分区缓存键，同一 URL 在不同租户语境下的 304 会回放另一租户的缓存体。
+  新增 `ETagCacheOption` 函数选项与 `WithKeyScope(fn func(*http.Request)
+  string)`：`NewETagCache(maxEntries, opts ...ETagCacheOption)` 变参附加，
+  既有单参调用点零改动编译通过。scope 作为 `httpjson.CanonicalETagKey`
+  规范形中的又一段 vary 并入键；`fn == nil` 或返回空串时键与历史形态
+  **逐字节一致**（回归红线，黄金断言钉住）。每租户独立 token 的部署不受
+  影响，无需任何改动。
+
 ## [v1.1.0] - 2026-11-19
 
 ### Added

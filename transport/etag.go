@@ -43,7 +43,9 @@ const cacheHitHeader = "X-Go-Git-Platform-Cache"
 //   - Only GET requests are cached.
 //   - The cache key includes the URL, the Accept header, and the
 //     Authorization header, so token rotation naturally partitions the
-//     cache and Accept variants never cross-contaminate.
+//     cache and Accept variants never cross-contaminate. Shared-token
+//     multi-tenant deployments add a tenant dimension via WithKeyScope
+//     (#172) — Authorization alone cannot separate tenants there.
 //   - Responses carrying Cache-Control: no-store are never cached.
 //   - Entries are bounded by count (LRU) and by body size.
 //   - Vary is not honored beyond Accept; platforms served by this SDK do
@@ -57,6 +59,31 @@ const cacheHitHeader = "X-Go-Git-Platform-Cache"
 type ETagCache struct {
 	entries     *cache.LocalCache[etagEntry]
 	maxBodySize int64
+	// keyScope optionally injects an extra tenant/principal dimension into
+	// the cache key (#172). nil = key composition identical to the default
+	// (method+URL+Accept+Authorization+PRIVATE-TOKEN). Shared-token
+	// deployments (e.g. one GitHub App installation serving multiple
+	// tenants) set this so the same URL under different tenant contexts
+	// never replays another tenant's cached 304 body.
+	keyScope func(*http.Request) string
+}
+
+// ETagCacheOption customizes an ETagCache at construction time.
+type ETagCacheOption func(*ETagCache)
+
+// WithKeyScope injects a request-derived scope value (typically the tenant
+// or principal id) as an additional dimension of the cache key. The
+// function runs on every conditional-request lookup and store; returning
+// the empty string means "no scope" and falls back to the default key
+// byte-for-byte. Nil is a no-op. Safe for concurrent use — fn is called
+// from concurrent request paths and must be race-free.
+//
+// Default (no option) keeps the historical key composition exactly:
+// token rotation already partitions per-tenant tokens; this knob exists
+// for the shared-token multi-tenant form where Authorization cannot
+// separate tenants (issue #172).
+func WithKeyScope(fn func(*http.Request) string) ETagCacheOption {
+	return func(c *ETagCache) { c.keyScope = fn }
 }
 
 type etagEntry struct {
@@ -67,12 +94,13 @@ type etagEntry struct {
 
 // NewETagCache builds a cache holding at most maxEntries responses with
 // bodies up to DefaultMaxCachedBodySize. maxEntries <= 0 uses
-// DefaultETagEntries.
-func NewETagCache(maxEntries int) *ETagCache {
+// DefaultETagEntries. Options are applied after defaults; the zero-option
+// call keeps the historical single-argument behavior byte-for-byte.
+func NewETagCache(maxEntries int, opts ...ETagCacheOption) *ETagCache {
 	if maxEntries <= 0 {
 		maxEntries = DefaultETagEntries
 	}
-	return &ETagCache{
+	c := &ETagCache{
 		entries: cache.NewLocalCache[etagEntry](cache.LocalConfig[etagEntry]{
 			MaxSize:     maxEntries,
 			EvictPolicy: cache.EvictLRU,
@@ -81,6 +109,12 @@ func NewETagCache(maxEntries int) *ETagCache {
 		}),
 		maxBodySize: DefaultMaxCachedBodySize,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
+	return c
 }
 
 // Len reports the number of cached responses (for tests and diagnostics).
@@ -98,6 +132,22 @@ func etagKey(req *http.Request) string {
 		req.Header.Get("PRIVATE-TOKEN"))
 }
 
+// etagKey applies the optional tenant/principal scope on top of the default
+// key (#172). The scope is appended as one more newline-delimited vary
+// value — the same canonical form CanonicalETagKey produces — so a nil
+// keyScope or an empty scope string yields the default key byte-for-byte.
+func (c *ETagCache) etagKey(req *http.Request) string {
+	base := etagKey(req)
+	if c == nil || c.keyScope == nil {
+		return base
+	}
+	scope := strings.TrimSpace(c.keyScope(req))
+	if scope == "" {
+		return base
+	}
+	return base + "\n" + scope
+}
+
 // applyConditional adds If-None-Match to req when a cached validator
 // exists for it. It must run after authentication (Authorization is part
 // of the cache key) and is a no-op when req already carries
@@ -106,7 +156,7 @@ func (c *ETagCache) applyConditional(req *http.Request) {
 	if c == nil || req.Method != http.MethodGet || req.Header.Get("If-None-Match") != "" {
 		return
 	}
-	if e, err := c.entries.Get(context.Background(), etagKey(req)); err == nil && e != nil {
+	if e, err := c.entries.Get(context.Background(), c.etagKey(req)); err == nil && e != nil {
 		req.Header.Set("If-None-Match", e.etag)
 	}
 }
@@ -159,7 +209,7 @@ func (c *ETagCache) store(req *http.Request, resp *http.Response, body []byte) {
 		header: h,
 		body:   append([]byte(nil), body...),
 	}
-	_ = c.entries.Set(context.Background(), etagKey(req), &entry)
+	_ = c.entries.Set(context.Background(), c.etagKey(req), &entry)
 }
 
 // synthesize rebuilds a 200 response for a 304 using the cached entry. The
@@ -202,7 +252,7 @@ func (c *ETagCache) processRT(req *http.Request, resp *http.Response) (*http.Res
 		return resp, nil
 	}
 	if resp.StatusCode == http.StatusNotModified {
-		e, err := c.entries.Get(context.Background(), etagKey(req))
+		e, err := c.entries.Get(context.Background(), c.etagKey(req))
 		if err != nil || e == nil {
 			_ = resp.Body.Close()
 			return nil, fmt.Errorf("transport: conditional request for %s: %w", redactURL(*req.URL), ErrETagEntryGone)
