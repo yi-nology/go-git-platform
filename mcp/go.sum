@@ -94,8 +94,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/yi-nology/go-git-platform v1.0.6 h1:i5b6+minctAEYMeE4Mz+48fEN9DlIi36JdOi3iTcZuM=
 github.com/yi-nology/go-git-platform v1.0.6/go.mod h1:P+FZu3OThDhEO2D/ZOfYxEs+SIMpt7oSo61MLPiCtSo=
-github.com/yi-nology/go-gitcode v0.17.0 h1:2yvR05ubJB6ThVN/wr8lJhq3Onds+KhDcJoi9eWfScs=
-github.com/yi-nology/go-gitcode v0.17.0/go.mod h1:7WUskajsH/fvcIA9wqoQVLeOL+E7pL/8SbBOhDgxFkc=
+github.com/yi-nology/go-gitcode v0.18.0 h1:86tWK79L+lGOoyf1AoKhYouqXeb26SPvcKI3T1gfPBs=
+github.com/yi-nology/go-gitcode v0.18.0/go.mod h1:7WUskajsH/fvcIA9wqoQVLeOL+E7pL/8SbBOhDgxFkc=
 github.com/yi-nology/go-gongfeng v0.5.0 h1:VtyZxPlKakW+46E78NLENJrYZdDOsJ7LXrICmkIhlXE=
 github.com/yi-nology/go-gongfeng v0.5.0/go.mod h1:A6CGH/pgegPNJua2+bY7B9kY4Y3JqOZDGEi4kNSwsYo=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
