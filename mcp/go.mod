@@ -6,7 +6,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/oekit/concurrency v0.39.0
 	github.com/oekit/logx v0.12.0
-	github.com/oekit/pkg v0.54.0
+	github.com/oekit/pkg v0.61.5
 	github.com/yi-nology/go-git-platform v1.0.6
 )
 
@@ -44,7 +44,7 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yi-nology/go-gitcode v0.17.0 // indirect
-	github.com/yi-nology/go-gongfeng v0.5.0 // indirect
+	github.com/yi-nology/go-gongfeng v0.6.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	gitlab.com/gitlab-org/api/client-go/v3 v3.52.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect

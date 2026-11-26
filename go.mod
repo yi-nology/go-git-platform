@@ -10,10 +10,10 @@ require (
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18
 	github.com/oekit/concurrency v0.39.0
 	github.com/oekit/logx v0.12.0
-	github.com/oekit/pkg v0.54.0
+	github.com/oekit/pkg v0.61.5
 	github.com/stretchr/testify v1.12.1
 	github.com/yi-nology/go-gitcode v0.17.0
-	github.com/yi-nology/go-gongfeng v0.5.0
+	github.com/yi-nology/go-gongfeng v0.6.0
 	gitlab.com/gitlab-org/api/client-go/v3 v3.52.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/oauth2 v0.38.0
