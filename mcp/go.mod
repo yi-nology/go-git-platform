@@ -46,7 +46,7 @@ require (
 	github.com/yi-nology/go-gitcode v0.17.0 // indirect
 	github.com/yi-nology/go-gongfeng v0.6.0 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	gitlab.com/gitlab-org/api/client-go/v3 v3.52.0 // indirect
+	gitlab.com/gitlab-org/api/client-go/v3 v3.56.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/net v0.62.0 // indirect
