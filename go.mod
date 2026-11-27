@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0
-	gitea.dev/sdk v1.5.1
+	gitea.dev/sdk v1.5.2
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/google/go-github/v93 v93.0.0
 	github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18

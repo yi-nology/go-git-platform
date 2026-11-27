@@ -12,7 +12,7 @@ require (
 
 require (
 	codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 // indirect
-	gitea.dev/sdk v1.5.1 // indirect
+	gitea.dev/sdk v1.5.2 // indirect
 	github.com/42wim/httpsig v1.3.0 // indirect
 	github.com/davidmz/go-pageant v1.1.0 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
