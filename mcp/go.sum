@@ -1,7 +1,7 @@
 codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0 h1:s2fK+FBwvcYsmKDjNhmoe7B8q9zsgs0UrSlYe9r4XjM=
 codeberg.org/mvdkleijn/forgejo-sdk/forgejo/v3 v3.0.0/go.mod h1:Is2jTpS1dizeXm4skQv/ES3QVqnzcNhn2GzZXpiw9f8=
-gitea.dev/sdk v1.5.1 h1:bMBU3rPoU87a8OOgtfu5w4sZn2x/ydwNAkqFLfIN8c8=
-gitea.dev/sdk v1.5.1/go.mod h1:cM7S3Y9TY3LraJoRHHDLlY3YnVTu4bTc9TEBGuFa2Jw=
+gitea.dev/sdk v1.5.2 h1:QSLGE23EuSLpo3x+OWiWNY17j950eQqEQOl7iO1peXc=
+gitea.dev/sdk v1.5.2/go.mod h1:DGZe3Iha8Mm8ek0WvuBJI+6y6sa+EA2JeGWjTyPPajk=
 github.com/42wim/httpsig v1.3.0 h1:HK2bieeZ99X9IvOoc1ST6yrhLek0f4MqlEGES2JCP3g=
 github.com/42wim/httpsig v1.3.0/go.mod h1:lgC3Yrvp4lxi1odEF1ge3kQBu/VM+SRcZQu5YwiR3dU=
 github.com/davidmz/go-pageant v1.1.0 h1:2uacHz78tESw7JFFF4hn/GWO8rcXiJm202cHFHN710A=
