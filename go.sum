@@ -115,8 +115,8 @@ github.com/mattn/go-isatty v0.0.20 h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWE
 github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D7dTCTo3Y=
 github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18 h1:hMf3u2RMBoIjRCxJiFXMA1N4pB9joRA6fSiQ5WXqfao=
 github.com/next-bin/go-gitee v0.0.0-20260521141902-36ce436eee18/go.mod h1:GvqteloYLLcJ0N3W6n+qNQXV/voE1Vuo3x7o/5H8EqM=
-github.com/oekit/concurrency v0.39.0 h1:Zja2itPooyUflmPj49cD2Qr/ZmMVjKeTs/omOkYfVNA=
-github.com/oekit/concurrency v0.39.0/go.mod h1:7vqYsmVI7sDUFFf+Hf2i6PRJ0MTZENV4iw6ywsGS+tQ=
+github.com/oekit/concurrency v0.40.0 h1:gFwginpsVXdY4R/hzwicyBa2u1WHmCN1h5Bw6ztlpBw=
+github.com/oekit/concurrency v0.40.0/go.mod h1:nnPMxDuUq8H9ZrqhsRpGY2n1FMAL0Jio2MZRPKlPeJo=
 github.com/oekit/logx v0.12.0 h1:N0EEDHK83jw9w9m5C2zQxRVSB2ifvR/nqyrOmcUrX/o=
 github.com/oekit/logx v0.12.0/go.mod h1:aIxiaegg9jzyvXhGXNcjq7ljAdVC2ERUCHqGN+thui0=
 github.com/oekit/pkg v0.61.5 h1:gkHqNb0kSZOEu6CC1cs7iYLFv6kzWWDvNLz/jaI501o=
